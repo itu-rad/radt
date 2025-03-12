@@ -47,7 +47,7 @@ class TOPThread(Process):
                 pass
             else:
                 word_vector = line.strip().split()
-                if (line.startswith("KiB") or line.startswith("MiB")) and len(
+                if (line.startswith("KiB") or line.startswith("MiB") or line.startswith("GiB")) and len(
                     word_vector
                 ) != 0:
                     if word_vector[1] == "Mem":

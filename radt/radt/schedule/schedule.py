@@ -425,6 +425,7 @@ def remove_mps():
 
 def clear_page_cache():
     """Clears OS page cache"""
+    return # TODO: re-enable
     execute_command(['sudo sh -c "/bin/echo 3 > /proc/sys/vm/drop_caches"'], shell=True)
 
 
