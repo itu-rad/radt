@@ -25,6 +25,7 @@ The current release is `0.2.16`. radT has been recently released and is frequent
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
 ### Changelog
+- 0.2.17: Removed sudo requirement for iostat, renamed iostat fields.
 - 0.2.16: Fixed an issue that could lock the process under extreme levels of collocation.
 - 0.2.15: RADT now runs correctly on machines that have a corrupt DCGMI installation.
 - 0.2.14: Automatically disable the DCGMI listener when DCGMI is not found.
