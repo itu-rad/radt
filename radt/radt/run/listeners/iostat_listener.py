@@ -37,11 +37,11 @@ class IOstatThread(Process):
                 mb_read = word_vector[5]        # MB read since last sample
                 mb_written = word_vector[6]     # MB written since last sample
 
-                m[f"{device} - tps"] = float(tps)
-                m[f"{device} - MB read/s"] = float(mb_read_s)
-                m[f"{device} - MB written/s"] = float(mb_written_s)
-                m[f"{device} - MB read"] = float(mb_read)
-                m[f"{device} - MB written"] = float(mb_written)
+                m[f"iostat - {device} - tps"] = float(tps)
+                m[f"iostat - {device} - MB read/s"] = float(mb_read_s)
+                m[f"iostat - {device} - MB written/s"] = float(mb_written_s)
+                m[f"iostat - {device} - MB read"] = float(mb_read)
+                m[f"iostat - {device} - MB written"] = float(mb_written)
 
                 mlflow.log_metrics(m)
 
