@@ -19,11 +19,11 @@ class SMIThread(Process):
             SMI_GPU_ID = os.getenv("SMI_GPU_ID")
 
             print("SMI GPU ID:", SMI_GPU_ID)
-            self.dcgm = subprocess.Popen(
+            self.smi = subprocess.Popen(
                 f"nvidia-smi -i {SMI_GPU_ID} -l 1 --query-gpu=power.draw,timestamp,utilization.gpu,utilization.memory,memory.used,pstate --format=csv,nounits,noheader".split(),
                 stdout=subprocess.PIPE,
             )
-            for line in io.TextIOWrapper(self.dcgm.stdout, encoding="utf-8"):
+            for line in io.TextIOWrapper(self.smi.stdout, encoding="utf-8"):
                 line = line.split(", ")
                 if len(line) > 1 and line[0] != "#":
                     try:

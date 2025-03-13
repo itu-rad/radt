@@ -25,7 +25,7 @@ COMMAND = (
     '-P params="-" '
 )
 
-RUN_LISTENERS = ["ps", "smi", "dcgmi", "top", "iostat"]
+RUN_LISTENERS = ["ps", "smi", "dcgmi", "top", "iostat", "free"]
 
 WORKLOAD_LISTENERS = {
     "nsys": "nsys profile --capture-range nvtx --nvtx-capture profile --cuda-memory-usage=true --capture-range-end repeat -o nsys_{Experiment}_{Workload}_{Letter} -f true -w true -x true -t cuda,nvtx ",
@@ -45,7 +45,7 @@ entry_points:
     parameters:
       letter: { type: string, default: ""}
       workload: { type: string, default: ""}
-      listeners: { type: string, default: "smi+dcgmi+top" }
+      listeners: { type: string, default: "smi+top+dcgmi+iostat+free" }
       params: { type: string, default: "-"}
       file: { type: string, default: "cifar10.py"}
       workload_listener: { type: string, default: ""}
