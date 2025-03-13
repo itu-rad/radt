@@ -10,6 +10,7 @@ class TOPThread(Process):
         run_id,
         process_names=[
             "python",
+            "pt_data_worker",
         ],
         experiment_id=88,
     ):
@@ -73,7 +74,7 @@ class TOPThread(Process):
                             m["TOP - Swap Memory GB"] = float(word_vector[6]) / 1000
 
                     elif len(word_vector) != 0:
-                        if word_vector[11] in self.process_names:
+                        if word_vector[11].strip() in self.process_names:
                             if Flag != pervFlag:
                                 CPU_util += float(word_vector[8])
                                 Mem_util += float(word_vector[9])

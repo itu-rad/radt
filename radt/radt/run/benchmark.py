@@ -5,7 +5,14 @@ from time import time
 from subprocess import PIPE, Popen
 import mlflow
 
-from .listeners import dcgmi_listener, ps_listener, smi_listener, top_listener, iostat_listener
+from .listeners import (
+    dcgmi_listener,
+    ps_listener,
+    smi_listener,
+    top_listener,
+    iostat_listener,
+    free_listener,
+)
 
 
 def dummy(*args, **kwargs):
@@ -108,6 +115,9 @@ class RADTBenchmark:
         if os.getenv("RADT_LISTENER_IOSTAT") == "True":
             os.environ["RADT_LISTENER_IOSTAT"] = "False"
             self.threads.append(iostat_listener.IOstatThread(self.run_id))
+        if os.getenv("RADT_LISTENER_FREE") == "True":
+            os.environ["RADT_LISTENER_FREE"] = "False"
+            self.threads.append(free_listener.FreeThread(self.run_id))
 
         for thread in self.threads:
             thread.start()
