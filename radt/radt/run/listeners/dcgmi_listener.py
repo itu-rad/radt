@@ -88,15 +88,16 @@ class DCGMIThread(Process):
         )
 
     def run(self):
-        with mlflow.start_run(run_id=self.run_id):
-            for idx, _ in enumerate(self.dcgm_fields):
-                self._start_dcgm(idx)
+        mlflow.start_run(run_id=self.run_id).__enter__()  # attach to run
 
-                self.monitor()
+        for idx, _ in enumerate(self.dcgm_fields):
+            self._start_dcgm(idx)
 
-                # If advanced metrics are not available, restart the service with limited collection
-                if "Error setting watches" not in str(self.dcgm.stderr.read()):
-                    return
+            self.monitor()
+
+            # If advanced metrics are not available, restart the service with limited collection
+            if "Error setting watches" not in str(self.dcgm.stderr.read()):
+                return
 
     def monitor(self):
         for line in io.TextIOWrapper(self.dcgm.stdout, encoding="utf-8"):
