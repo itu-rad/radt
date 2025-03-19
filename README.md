@@ -25,6 +25,7 @@ The current release is `0.2.16`. radT has been recently released and is frequent
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
 ### Changelog
+- 0.2.20: Resolve runs being closed when listeners exit.
 - 0.2.19: Add free listener, add pytorch data workers to top.
 - 0.2.18: Resolved issue of listeners duplicating runs under new mlflow versions.
 - 0.2.17: Removed sudo requirement for iostat, renamed iostat fields.
