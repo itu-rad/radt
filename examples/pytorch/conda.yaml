@@ -16,3 +16,4 @@ dependencies:
       - tensorflow
       - tensorboardX
       - psutil
+      - timm
