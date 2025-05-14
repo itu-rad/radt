@@ -442,7 +442,10 @@ def determine_operating_mode(
     Returns:
         pd.DataFrame, pd.Dataframe: Dataframe to run, copy
     """
-    if file.suffix == ".py":
+    if isinstance(file, pd.DataFrame):
+        df_raw = None
+        df = file
+    elif file.suffix == ".py":
         df_raw = None
         df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
 

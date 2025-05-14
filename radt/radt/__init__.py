@@ -2,4 +2,4 @@
 
 __version__ = "0.2.20"
 
-from .radt import cli
+from .radt import cli, schedule_external

@@ -185,3 +185,15 @@ def cli():
         cli_run()
     else:
         cli_schedule()
+
+def schedule_external(args, df):
+    """Schedule a dataframe
+
+    Args:
+        entrypoint (str): Path to the entrypoint
+        run_definitions (list): List of run definitions
+    """
+
+    parsed_args = schedule_parse_arguments(args)
+    args_passthrough = []
+    start_schedule(parsed_args, df, args_passthrough)
