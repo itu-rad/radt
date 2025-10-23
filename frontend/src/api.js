@@ -1,7 +1,7 @@
-const url = process.env.REACT_APP_API_URL;
+// Use local API server mounted under /api. If you use a proxy in development (CRA), set that up in package.json or use relative path.
+const url = '/api/';
 const headers = new Headers();
 headers.append('Content-Type', 'application/json');
-// headers.append('Authorization', 'Bearer ' + process.env.REACT_APP_API_KEY);
 
 const endpoints = {
     experiments: "fe_experiments",

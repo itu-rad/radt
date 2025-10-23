@@ -1,0 +1,4 @@
+dotenv
+ipykernel
+mlflow
+psycopg2-binary
