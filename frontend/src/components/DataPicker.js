@@ -3,6 +3,7 @@ import { HTTP } from '../api';
 import '../styles/DataPicker.css';
 import 'antd/dist/antd.css'; // added
 import { Table, Input } from 'antd'; // added
+import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'; // <-- added icons
 
 const RUNS_COLOR_PALETTE = [
   '#a6630c', // Brown
@@ -358,17 +359,32 @@ function Runs(props) {
 			const q = query.toLowerCase();
 			if (!q) return true;
 			const paramsStr = Object.entries(run.params || {}).map(([k, v]) => `${k}:${v}`).join(' ');
-			return (`${run.name} ${run.letter || ''} ${formatWorkloadLabel(run.workload)} ${paramsStr}`).toLowerCase().includes(q);
+			// include run.run_name (if present) in searchable fields
+			return (`${run.name || ''} ${run.run_name || ''} ${run.letter || ''} ${formatWorkloadLabel(run.workload)} ${paramsStr}`).toLowerCase().includes(q);
 		})
 		.map(run => ({ ...run, key: run.name }));
 
 	const columns = [
 		{
-			title: 'Status',
+			title: '',
 			dataIndex: 'status',
-			key: 'status',
-			width: 60,
-			render: (status) => <span className={checkRunStatus(status)}>•</span>
+			key: 'statusStart',
+			width: 160,
+			render: (_, record) => {
+				const status = record.status;
+				const start = record.startTime;
+				let IconComponent = ClockCircleOutlined;
+				let cls = 'running';
+				if (status === "FINISHED") { IconComponent = CheckCircleOutlined; cls = 'complete'; }
+				else if (status === "FAILED") { IconComponent = CloseCircleOutlined; cls = 'failed'; }
+
+				return (
+					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+						<IconComponent className={cls} style={{ fontSize: 18 }} />
+						<span className="startTime" title={new Date(start).toString()}>{`(${howLongAgo(start)})`}</span>
+					</div>
+				);
+			}
 		},
 		{
 			title: 'Identifier',
@@ -381,12 +397,6 @@ function Runs(props) {
 			dataIndex: 'workload',
 			key: 'workload',
 			render: (workload) => formatWorkloadLabel(workload)
-		},
-		{
-			title: 'Start',
-			dataIndex: 'startTime',
-			key: 'startTime',
-			render: (startTime) => `(${howLongAgo(startTime)})`
 		},
 		{
 			title: 'Duration',
