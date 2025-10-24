@@ -381,19 +381,19 @@ function Runs(props) {
 
 	// Convert grouped runs to data source format for the table
 	const groupedDataSource = Object.entries(groupedRuns).flatMap(([workload, runs]) => [
-		{ key: `group-${workload}`, workload, isGroupHeader: true, runs },
+		{ key: `group-${workload}`, workload: workload.substring(workload.indexOf("-") + 1), isGroupHeader: true, runs },
 		...runs
 	]);
 
 	const columns = [
 		{
-			title: '',
+			title: 'Status',
 			dataIndex: 'status',
 			key: 'statusStart',
 			width: 160,
 			render: (_, record) => {
 				if (record.isGroupHeader) {
-					return null; // No status for group headers
+					return <strong>{record.workload}</strong>; // Display raw workload name in the status column for group headers
 				}
 				const status = record.status;
 				const start = record.startTime;
@@ -408,17 +408,6 @@ function Runs(props) {
 						<span className="startTime" title={new Date(start).toString()}>{`(${howLongAgo(start)})`}</span>
 					</div>
 				);
-			}
-		},
-		{
-			title: 'Workload',
-			dataIndex: 'workload',
-			key: 'workload',
-			render: (workload, record) => {
-				if (record.isGroupHeader) {
-					return <strong>{workload}</strong>; // Only display workload name
-				}
-				return formatWorkloadLabel(workload);
 			}
 		},
 		{

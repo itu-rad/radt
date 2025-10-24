@@ -313,9 +313,9 @@
 }
 
 /* Small adjustments for icons / status bullets */
-#runsWrapper .ant-table-tbody > tr > td .complete { color: #2980b9; font-size: 18px; }
-#runsWrapper .ant-table-tbody > tr > td .running { color: #2980b9; opacity: 0.6; font-size: 16px; }
-#runsWrapper .ant-table-tbody > tr > td .failed { color: #b03030; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .complete { color: #277c43; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .running { color: #000000; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .failed { color: #c82d4c; font-size: 18px; }
 
 /* Group header (for grouped workloads) to match MLflow section headers */
 #runsWrapper .groupHeader td,
