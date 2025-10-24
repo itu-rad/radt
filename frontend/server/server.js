@@ -7,6 +7,21 @@ const port = process.env.PORT || 4000;
 
 app.use(express.json());
 
+// Add CORS headers and handle preflight requests
+app.use((req, res, next) => {
+  const origin = process.env.CORS_ORIGIN || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (process.env.CORS_ALLOW_CREDENTIALS === 'true') {
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Simple health check
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -14,11 +29,13 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/fe_experiments', async (req, res) => {
   try {
     // If a query param is provided, you may handle filtering here. For now return all.
-    const rows = await query(process.env.QUERY_EXPERIMENTS || 'SELECT experiment_id, name FROM fe_experiments LIMIT 100');
+    const rows = await query(process.env.QUERY_EXPERIMENTS || 'SELECT experiment_id, name FROM fe_experiments;');
+    // const rows = await query('SELECT * FROM experiments;', []);
     res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'internal' });
+    // res.status(500).json({ error: 'internal' });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -31,7 +48,7 @@ app.get('/fe_runs', async (req, res) => {
     if (experiment_id) {
       rows = await query(process.env.QUERY_RUNS_BY_EXPERIMENT || 'SELECT * FROM fe_runs WHERE experiment_id = $1', [experiment_id]);
     } else {
-      rows = await query(process.env.QUERY_RUNS || 'SELECT * FROM fe_runs LIMIT 500');
+      rows = await query(process.env.QUERY_RUNS || 'SELECT * FROM fe_runs;');
     }
     res.json(rows);
   } catch (err) {
@@ -50,7 +67,8 @@ app.get('/fe_metrics_available', async (req, res) => {
     }
     // Query unique metric keys for given runs
     const placeholders = runs.map((_, i) => '$' + (i + 1)).join(',');
-    const sql = process.env.QUERY_METRICS_AVAILABLE || `SELECT DISTINCT key FROM fe_metrics_available WHERE run_uuid IN (${placeholders})`;
+    const sql = process.env.QUERY_METRICS_AVAILABLE || `SELECT DISTINCT key FROM latest_metrics WHERE run_uuid IN (${placeholders})`;
+    console.log('SQL:', sql, 'Params:', runs);
     const rows = await query(sql, runs);
     res.json(rows);
   } catch (err) {

@@ -1,5 +1,6 @@
-// Use local API server mounted under /api. If you use a proxy in development (CRA), set that up in package.json or use relative path.
-const url = '/api/';
+const rawUrl = process.env.REACT_APP_API_URL;
+const url = rawUrl.endsWith('/') ? rawUrl : rawUrl + '/';
+
 const headers = new Headers();
 headers.append('Content-Type', 'application/json');
 
@@ -74,6 +75,7 @@ export const HTTP = {
                 param = param + '"' + run.name + '",';
             });
             param = param.substring(0, param.length - 1) + ")";
+            console.log(param);
             return new Promise((resolve) => {
                 HTTP.fetchData(endpoints.metrics, param).then((json) => {
                     let uniqueMetrics = [];

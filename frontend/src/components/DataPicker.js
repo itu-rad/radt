@@ -414,16 +414,27 @@ function Selections(props) {
 }
 
 /* DataPicker helper functions */
+
+//from: https://stackoverflow.com/questions/9763441/milliseconds-to-time-in-javascript
 function milliToMinsSecs(ms) {
-	let label;
-	let numOfDays = Math.trunc(ms / 86400000);
-	if (numOfDays > 0) {
-		label = numOfDays + "d " + new Date(ms).toISOString().slice(11, 19);
-	}
-	else {
-		label = new Date(ms).toISOString().slice(11, 19);
-	}
-	return label;
+  var s = (ms - ms % 1000) / 1000;
+  var secs = s % 60;
+  s = (s - secs) / 60;
+  var mins = s % 60;
+  s = (s - mins) / 60;
+  var hrs = s % 24;
+  var days = (s - hrs) / 24;
+
+  // Pad to 2 or 3 digits, default is 2
+  var pad = (n, z = 2) => ('00' + n).slice(-z);
+
+  if (days === 1) {
+	return days + ' day ' + pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
+  }
+  if (days > 1) {
+	return days + ' days ' + pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
+  }
+  return pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
 }
 function howLongAgo(startTime) {
 
