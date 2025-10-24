@@ -49,18 +49,17 @@ export const HTTP = {
                     if (data["workload"] === null) {
                         data["workload"] = "null";
                     }
-                    let workloadId = data["experiment_id"] + "-" + data["workload"];
+                    let params = data["params"];
+                    let workloadId = data["experiment_id"] + "-" + params["workload"];
                     parsed.push({
                         "name": data["run_uuid"],
                         "experimentId": data["experiment_id"],
-                        "duration": data["duration"],
-                        "startTime": data["start_time"],
-                        "source": data["data"],
-                        "letter": data["letter"],
-                        "model": data["model"],
-                        "params": data["params"],
                         "status": data["status"],
-                        "workload": workloadId
+                        "startTime": data["start_time"],
+                        "duration": data["duration"],
+                        "letter": params["letter"],
+                        "workload": workloadId,
+                        "params": params,
                     })
                 })
                 resolve(parsed);

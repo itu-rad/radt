@@ -329,7 +329,7 @@ function Runs(props) {
 					<span className="letter" title="Identifier">{run.name.substring(0, 6) + " - " + (run.letter === null || run.letter === "0" ? "0" : run.letter)}</span>
 					<span className="startTime" title="Start time">({howLongAgo(run.startTime)})</span>
 					<div className="checkbox">{props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "✔" : " "}</div>
-					<span className="info" title={"𝗠𝗼𝗱𝗲𝗹: " + run.model + "\n𝗦𝗼𝘂𝗿𝗰𝗲: " + run.source + "\n𝗣𝗮𝗿𝗮𝗺𝘀: " + run.params}>i</span>
+					<span className="info" title={Object.entries(run.params).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>
 					<span className={`duration ${run.duration === null ? "noDuration" : ""}`} title="Duration">{milliToMinsSecs(run.duration)}</span>
 				</button>
 			))}
