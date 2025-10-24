@@ -72,6 +72,11 @@ class DataPicker extends React.Component {
 			visibleRuns: [],
 			selectedWorkloads: [],
 			selectedRuns: [],
+			setSelectedRuns: (newSelectedRuns) => {
+				this.setState({ selectedRuns: newSelectedRuns });
+				this.props.pullSelectedRuns(newSelectedRuns);
+				submitToLocalStorage(this.state.selectedWorkloads, newSelectedRuns);
+			}
 		};
 
 		this.bottomOfScrollRef = React.createRef();
@@ -247,6 +252,7 @@ class DataPicker extends React.Component {
 					<Runs
 						data={visibleRuns}
 						selectedRuns={selectedRuns}
+						setSelectedRuns={this.state.setSelectedRuns}
 						onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
 					/>
 					<Selections
@@ -364,6 +370,21 @@ function Runs(props) {
 		})
 		.map(run => ({ ...run, key: run.name }));
 
+	// Group runs by workload
+	const groupedRuns = filteredRuns.reduce((acc, run) => {
+		if (!acc[run.workload]) {
+			acc[run.workload] = [];
+		}
+		acc[run.workload].push(run);
+		return acc;
+	}, {});
+
+	// Convert grouped runs to data source format for the table
+	const groupedDataSource = Object.entries(groupedRuns).flatMap(([workload, runs]) => [
+		{ key: `group-${workload}`, workload, isGroupHeader: true, runs },
+		...runs
+	]);
+
 	const columns = [
 		{
 			title: '',
@@ -371,6 +392,9 @@ function Runs(props) {
 			key: 'statusStart',
 			width: 160,
 			render: (_, record) => {
+				if (record.isGroupHeader) {
+					return null; // No status for group headers
+				}
 				const status = record.status;
 				const start = record.startTime;
 				let IconComponent = ClockCircleOutlined;
@@ -387,41 +411,76 @@ function Runs(props) {
 			}
 		},
 		{
-			title: 'Identifier',
-			dataIndex: 'run_name',
-			key: 'run_name',
-			render: (run_name, record) => (run_name)//.substring(0, 6) + " - " + (record.letter === null || record.letter === "0" ? "0" : record.letter))
-		},
-		{
 			title: 'Workload',
 			dataIndex: 'workload',
 			key: 'workload',
-			render: (workload) => formatWorkloadLabel(workload)
+			render: (workload, record) => {
+				if (record.isGroupHeader) {
+					return <strong>{workload}</strong>; // Only display workload name
+				}
+				return formatWorkloadLabel(workload);
+			}
 		},
 		{
 			title: 'Duration',
 			dataIndex: 'duration',
 			key: 'duration',
-			render: (duration) => <span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>
+			render: (duration, record) => {
+				if (record.isGroupHeader) {
+					return null; // No duration for group headers
+				}
+				return <span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>;
+			}
 		},
 		{
 			title: 'Info',
 			dataIndex: 'params',
 			key: 'params',
-			render: (params) => <span className="info" title={Object.entries(params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>
+			render: (params, record) => {
+				if (record.isGroupHeader) {
+					return null; // No info icon for group headers
+				}
+				return <span className="info" title={Object.entries(params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>;
+			}
 		},
 		{
 			title: 'Select',
 			key: 'select',
 			width: 70,
-			render: (_, record) => (
-				<div
-					className="checkbox"
-					onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(record.workload, record); }}
-				>
-					{props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "✔" : " "}
-				</div>
-			)
+			render: (_, record) => {
+				if (record.isGroupHeader) {
+					const isSelected = record.runs.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+					return (
+						<div
+							className="checkbox"
+							onClick={(e) => {
+								e.stopPropagation();
+								const newSelectedRuns = isSelected
+									? props.selectedRuns.filter(run => !record.runs.some(groupRun => groupRun.name === run.name))
+									: [...props.selectedRuns, ...record.runs.filter(groupRun => props.selectedRuns.findIndex(el => el.name === groupRun.name) === -1)];
+								props.setSelectedRuns(newSelectedRuns);
+							}}
+						>
+							{isSelected ? "✔" : " "}
+						</div>
+					);
+				}
+				return (
+					<div
+						className="checkbox"
+						onClick={(e) => {
+							e.stopPropagation();
+							const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+							const newSelectedRuns = isSelected
+								? props.selectedRuns.filter(run => run.name !== record.name)
+								: [...props.selectedRuns, record];
+							props.setSelectedRuns(newSelectedRuns);
+						}}
+					>
+						{props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "✔" : " "}
+					</div>
+				);
+			}
 		}
 	];
 
@@ -436,11 +495,13 @@ function Runs(props) {
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
 				<Table
 					columns={columns}
-					dataSource={filteredRuns}
+					dataSource={groupedDataSource}
 					pagination={false}
-					// only keep selection class; color applied via inline styles in onRow
-					rowClassName={(record) => (props.selectedRuns.findIndex(el => el.name === (record && record.name)) > -1 ? "highlightSelection" : "")}
+					rowClassName={(record) => record.isGroupHeader ? 'groupHeader' : (props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "highlightSelection" : "")}
 					onRow={(record) => {
+						if (record.isGroupHeader) {
+							return {};
+						}
 						// group rows (if any) don't get color styling
 						if (!record || record.isGroup) {
 							return { onClick: () => props.onClickToggleRunSelection(record.workload, record) };
