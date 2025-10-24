@@ -469,11 +469,11 @@
 /* Selected row accent like MLflow: light background + colored left border */
 #runsWrapper .ant-table-tbody > tr.highlightSelection > td,
 #experimentWrapper .ant-table-tbody > tr.highlightSelection > td {
-  background: #eef9ff !important;
+  background: var(--selected-bg, #eef9ff) !important;
 }
 #runsWrapper .ant-table-tbody > tr.highlightSelection > td:first-child,
 #experimentWrapper .ant-table-tbody > tr.highlightSelection > td:first-child {
-  border-left: 3px solid #0b62a3;
+  border-left: 3px solid var(--selected-border, #0b62a3);
   padding-left: 8px;
 }
 

@@ -448,14 +448,15 @@ function Runs(props) {
 						const selected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
 						const baseColor = getStableColorIndex(record.name);
 
-						// subtle background for non-selected, stronger when selected
-						const backgroundColor = selected ? hexToRgba(baseColor, 0.24) : hexToRgba(baseColor, 0.12);
-						const style = { backgroundColor };
+						// subtle background for non-selected
+						const unselectedBg = hexToRgba(baseColor, 0.12);
+						// stronger background for selected rows (also assigned to CSS var)
+						const selectedBg = hexToRgba(baseColor, 0.24);
 
-						// add left border accent when selected
-						if (selected) {
-							style.borderLeft = `3px solid ${baseColor}`;
-						}
+						// apply CSS variables for selected state, and inline bg for unselected
+						const style = selected
+							? { '--selected-border': baseColor, '--selected-bg': selectedBg }
+							: { backgroundColor: unselectedBg };
 
 						return {
 							onClick: () => props.onClickToggleRunSelection(record.workload, record),
