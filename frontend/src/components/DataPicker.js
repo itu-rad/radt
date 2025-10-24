@@ -547,94 +547,57 @@ function Selections(props) {
 }
 
 /* DataPicker helper functions */
+// unified duration helpers
 
-//from: https://stackoverflow.com/questions/9763441/milliseconds-to-time-in-javascript
-function milliToMinsSecs(ms) {
-  var s = (ms - ms % 1000) / 1000;
-  var secs = s % 60;
-  s = (s - secs) / 60;
-  var mins = s % 60;
-  s = (s - mins) / 60;
-  var hrs = s % 24;
-  var days = (s - hrs) / 24;
-
-  // Pad to 2 or 3 digits, default is 2
-  var pad = (n, z = 2) => ('00' + n).slice(-z);
-
-  if (days === 1) {
-	return days + ' day ' + pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
-  }
-  if (days > 1) {
-	return days + ' days ' + pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
-  }
-  return pad(hrs) + ':' + pad(mins) + ':' + pad(secs);
+function _computeUnits(ms) {
+	if (ms == null || !isFinite(ms)) return null;
+	const secs = ms / 1000;
+	const mins = secs / 60;
+	const hrs = mins / 60;
+	const days = hrs / 24;
+	const months = days / 30; // approximate
+	const years = days / 365; // approximate
+	return { years, months, days, hrs, mins, secs };
 }
+
+function _chooseLargestUnit(ms) {
+	const u = _computeUnits(ms);
+	if (!u) return null;
+	if (u.years >= 1) return { value: u.years, shortUnit: 'yrs', longUnit: 'year' };
+	if (u.months >= 1) return { value: u.months, shortUnit: 'mos', longUnit: 'month' };
+	if (u.days >= 1) return { value: u.days, shortUnit: 'days', longUnit: 'day' };
+	if (u.hrs >= 1) return { value: u.hrs, shortUnit: 'hrs', longUnit: 'hour' };
+	if (u.mins >= 1) return { value: u.mins, shortUnit: 'mins', longUnit: 'minute' };
+	return { value: Math.max(u.secs, 0), shortUnit: 'secs', longUnit: 'second' };
+}
+
+function milliToMinsSecs(ms) {
+	// keep original behavior for invalid values
+	if (ms == null || !isFinite(ms)) return "N/A";
+
+	const unit = _chooseLargestUnit(ms);
+	if (!unit) return "N/A";
+
+	// original displayed fractional values with one decimal
+	return `${unit.value.toFixed(1)} ${unit.shortUnit}`;
+}
+
 function howLongAgo(startTime) {
+	// guard invalid start times
+	if (!startTime || !isFinite(startTime)) return "N/A";
 
-	let howLongAgo;
+	const diffTime = Date.now() - startTime;
+	if (diffTime <= 0) return "N/A";
 
-	let diffTime = Date.now() - startTime;
-	let years = diffTime / (365 * 24 * 60 * 60 * 1000);
-	let months = diffTime / (30 * 24 * 60 * 60 * 1000);
-	let days = diffTime / (24 * 60 * 60 * 1000);
-	let hours = (days % 1) * 24;
-	let minutes = (hours % 1) * 60;
-	let secs = (minutes % 1) * 60;
-	[years, months, days, hours, minutes, secs] = [Math.floor(years), Math.floor(months), Math.floor(days), Math.floor(hours), Math.floor(minutes), Math.floor(secs)];
+	const unit = _chooseLargestUnit(diffTime);
+	if (!unit) return "N/A";
 
-	if (years > 0) {
-		if (years === 1) {
-			howLongAgo = years + " year ago";
-		}
-		else {
-			howLongAgo = years + " years ago";
-		}
-	}
-	else if (months > 0) {
-		if (months === 1) {
-			howLongAgo = months + " month ago";
-		}
-		else {
-			howLongAgo = months + " months ago";
-		}
-	}
-	else if (days > 0) {
-		if (days === 1) {
-			howLongAgo = days + " day ago";
-		}
-		else {
-			howLongAgo = days + " days ago";
-		}
-	}
-	else if (hours > 0) {
-		if (hours === 1) {
-			howLongAgo = hours + " hour ago";
-		}
-		else {
-			howLongAgo = hours + " hours ago";
-		}
-	}
-	else if (minutes > 0) {
-		if (minutes === 1) {
-			howLongAgo = minutes + " minute ago";
-		}
-		else {
-			howLongAgo = minutes + " minutes ago";
-		}
-	}
-	else if (secs > 0) {
-		if (secs === 1) {
-			howLongAgo = secs + " second ago";
-		}
-		else {
-			howLongAgo = secs + " seconds ago";
-		}
-	}
-	else {
-		howLongAgo = "N/A";
-	}
+	// original behavior floored all values and returned N/A for zero
+	const intVal = Math.floor(unit.value);
+	if (intVal <= 0) return "N/A";
 
-	return howLongAgo;
+	const unitLabel = intVal === 1 ? unit.longUnit : unit.longUnit + "s";
+	return `${intVal} ${unitLabel} ago`;
 }
 function submitToLocalStorage(workloadData, runData) {
 
