@@ -57,39 +57,21 @@ class DataPicker extends React.Component {
 		this.setState({ runData: data });
 	};
 
-	// select experiment and render its workloads to the workloads component 
+	// select experiment and render its runs to the runs component 
 	setVisibleWorkloads(experimentId) {
-		const { runData } = this.state;
-		let filteredWorkloads = [];
-		for (let i = 0; i < runData.length; i++) {
-			const run = runData[i];
-			if (run.experimentId === experimentId) {
-				if (filteredWorkloads.indexOf(run.workload) === -1) {
-					filteredWorkloads.push(run.workload);
-				}
-			}
-		}
-		this.setState({
-			visibleWorkloads: filteredWorkloads,
-			visibleRuns: [],
-			activeExperimentId: experimentId,
-			activeWorkload: null
-		});
-	}
-
-	// select workload and render its runs to the runs component 
-	setVisibleRuns(workload) {
 		const { runData } = this.state;
 		let filteredRuns = [];
 		for (let i = 0; i < runData.length; i++) {
 			const run = runData[i];
-			if (run.workload === workload) {
+			if (run.experimentId === experimentId) {
 				filteredRuns.push(run);
 			}
 		}
 		this.setState({
+			visibleWorkloads: [], // removed conceptually
 			visibleRuns: filteredRuns,
-			activeWorkload: workload
+			activeExperimentId: experimentId,
+			activeWorkload: null
 		});
 	}
 
@@ -206,13 +188,6 @@ class DataPicker extends React.Component {
 						activeExperimentId={activeExperimentId}
 						onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
 					/>
-					<Workloads
-						data={visibleWorkloads}
-						activeWorkload={activeWorkload}
-						selectedWorkloads={selectedWorkloads}
-						onClickSetVisibleRuns={this.setVisibleRuns.bind(this)}
-						onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-					/>
 					<Runs
 						data={visibleRuns}
 						selectedRuns={selectedRuns}
@@ -239,67 +214,44 @@ class DataPicker extends React.Component {
 
 /* DataPicker functional components */
 function Experiments(props) {
-	return (
-		<div id="experimentWrapper">
-			{props.data.sort((a, b) => a.id - b.id).map(experiment => (
-				<button
-					key={experiment.id}
-					className={props.activeExperimentId === experiment.id ? "active" : null}
-					onClick={() => props.onClickSetVisibleWorkloads(experiment.id)}
-				>
-					<span className="text">
-						<span>{experiment.id}</span>
-						{experiment.name}
-					</span>
-				</button>
-			))}
-		</div>
-	)
-}
-function Workloads(props) {
+	// simple search state
+	const [query, setQuery] = React.useState('');
 
-	// sort workloads properly
-	function sortWorkloads(a, b) {
-		let x = a.substring(a.indexOf("-") + 1);
-		let y = b.substring(b.indexOf("-") + 1);
-		return x - y;
-	}
-
-	// format workload labels (handles unsorted runs with no workload)
-	function formatWorkloadLabel(workload) {
-		const workloadId = workload.substring(workload.indexOf("-") + 1);
-		if (workloadId === "null") {
-			workload = "Unsorted Runs";
-		}
-		else {
-			workload = "Workload " + workload;
-		}
-		return workload;
-	}
+	const filtered = props.data
+		.filter(e => (`${e.id} ${e.name}`).toLowerCase().includes(query.toLowerCase()))
+		.sort((a, b) => a.id - b.id);
 
 	return (
-		<div id="workloadsWrapper">
-			{props.data.slice().sort((a, b) => sortWorkloads(a, b)).map(workload => (
-				<div
-					key={workload}
-					className={`workload ${props.activeWorkload === workload ? "active" : ""} ${props.selectedWorkloads.includes(workload) ? "highlightSelection" : ""}`}
-					onClick={() => props.onClickSetVisibleRuns(workload)}
-				>
-					<div className="info">
-						{formatWorkloadLabel(workload)}
-					</div>
-					<div
-						className={`checkboxWrapper ${formatWorkloadLabel(workload) === "Unsorted Runs" ? "hide" : null}`}
-					>
-						<div
-							className="checkbox"
-							onClick={() => props.onClickToggleWorkloadSelection(workload)}
-						>
-							{props.selectedWorkloads.includes(workload) ? "✔" : " "}
-						</div>
-					</div>
-				</div>
-			))}
+		<div id="experimentWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+			<input
+				className="searchInput"
+				placeholder="Search experiments..."
+				value={query}
+				onChange={(e) => setQuery(e.target.value)}
+			/>
+			{/* scroll area must allow flex child to shrink: set minHeight:0 */}
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+				<table className="pickerTable" style={{ width: '100%' }}>
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Name</th>
+						</tr>
+					</thead>
+					<tbody>
+						{filtered.map(experiment => (
+							<tr
+								key={experiment.id}
+								className={props.activeExperimentId === experiment.id ? "active" : null}
+								onClick={() => props.onClickSetVisibleWorkloads(experiment.id)}
+							>
+								<td>{experiment.id}</td>
+								<td>{experiment.name}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	)
 }
@@ -317,22 +269,116 @@ function Runs(props) {
 		}
 	}
 
+	// helper to format workload label (same logic previously used)
+	function formatWorkloadLabel(workload) {
+		const workloadId = workload.substring(workload.indexOf("-") + 1);
+		if (workloadId === "null") {
+			return "Unsorted";
+		}
+		return workloadId;
+	}
+
+	// same workload sort used elsewhere
+	function sortWorkloads(a, b) {
+		let x = a.substring(a.indexOf("-") + 1);
+		let y = b.substring(b.indexOf("-") + 1);
+		return x - y;
+	}
+
+	const [query, setQuery] = React.useState('');
+	// first filter and sort runs
+	const filteredRuns = props.data
+		.slice()
+		.sort((a, b) => b.startTime - a.startTime)
+		.filter(run => {
+			const q = query.toLowerCase();
+			if (!q) return true;
+			const paramsStr = Object.entries(run.params || {}).map(([k, v]) => `${k}:${v}`).join(' ');
+			return (`${run.name} ${run.letter || ''} ${formatWorkloadLabel(run.workload)} ${paramsStr}`).toLowerCase().includes(q);
+		});
+
+	// group runs by workload preserving a sorted workload order
+	const groupsMap = new Map();
+	filteredRuns.forEach(run => {
+		if (!groupsMap.has(run.workload)) groupsMap.set(run.workload, []);
+		groupsMap.get(run.workload).push(run);
+	});
+	const groups = Array.from(groupsMap.entries()).sort((a, b) => sortWorkloads(a[0], b[0]));
+
 	return (
-		<div id="runsWrapper">
-			{props.data.slice().sort((a, b) => b.startTime - a.startTime).map(run => (
-				<button
-					key={run.name}
-					onClick={() => props.onClickToggleRunSelection(run.workload, run)}
-					className={props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "highlightSelection" : null}
-				>
-					<span className={checkRunStatus(run.status)} title={run.status.charAt(0) + run.status.substring(1).toLowerCase()}>•</span>
-					<span className="letter" title="Identifier">{run.name.substring(0, 6) + " - " + (run.letter === null || run.letter === "0" ? "0" : run.letter)}</span>
-					<span className="startTime" title="Start time">({howLongAgo(run.startTime)})</span>
-					<div className="checkbox">{props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "✔" : " "}</div>
-					<span className="info" title={Object.entries(run.params).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>
-					<span className={`duration ${run.duration === null ? "noDuration" : ""}`} title="Duration">{milliToMinsSecs(run.duration)}</span>
-				</button>
-			))}
+		<div id="runsWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+			<input
+				className="searchInput"
+				placeholder="Search runs..."
+				value={query}
+				onChange={(e) => setQuery(e.target.value)}
+			/>
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+				<table className="pickerTable" style={{ width: '100%' }}>
+					<thead>
+						<tr>
+							<th>Status</th>
+							<th>Identifier</th>
+							<th>Workload</th>
+							<th>Start</th>
+							<th>Duration</th>
+							<th>Info</th>
+							<th style={{ width: '48px' }}>Select</th>
+						</tr>
+					</thead>
+					<tbody>
+						{groups.map(([workload, runs]) => {
+							// determine if entire group is selected
+							const groupSelected = runs.length > 0 && runs.every(r => props.selectedRuns.findIndex(el => el.name === r.name) > -1);
+							return (
+								<React.Fragment key={workload}>
+									{/* group header row */}
+									<tr className="groupHeader">
+										<td colSpan="7">
+											<div className="groupHeaderInner">
+												<span className="groupLabel">{formatWorkloadLabel(workload) === "Unsorted" ? "Unsorted Runs" : "Workload " + formatWorkloadLabel(workload)}</span>
+												<span
+													className="groupCheckbox"
+													onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(workload); }}
+													title={groupSelected ? "Deselect workload" : "Select workload"}
+												>
+													{groupSelected ? "✔" : " "}
+												</span>
+											</div>
+										</td>
+									</tr>
+
+									{/* runs for this workload */}
+									{runs.map(run => (
+										<tr
+											key={run.name}
+											onClick={() => props.onClickToggleRunSelection(run.workload, run)}
+											className={props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "highlightSelection" : null}
+										>
+											<td title={run.status.charAt(0) + run.status.substring(1).toLowerCase()}>
+												<span className={checkRunStatus(run.status)}>•</span>
+											</td>
+											<td className="letter" title="Identifier">{run.name.substring(0, 6) + " - " + (run.letter === null || run.letter === "0" ? "0" : run.letter)}</td>
+											<td className="workloadId" title="Workload">{formatWorkloadLabel(run.workload)}</td>
+											<td className="startTime" title="Start time">({howLongAgo(run.startTime)})</td>
+											<td className={`duration ${run.duration === null ? "noDuration" : ""}`} title="Duration">{milliToMinsSecs(run.duration)}</td>
+											<td className="info" title={Object.entries(run.params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</td>
+											<td style={{ textAlign: 'center' }}>
+												<div
+													className="checkbox"
+													onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(run.workload, run); }}
+												>
+													{props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "✔" : " "}
+												</div>
+											</td>
+										</tr>
+									))}
+								</React.Fragment>
+							)
+						})}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	)
 }
