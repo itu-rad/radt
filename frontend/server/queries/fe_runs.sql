@@ -1,4 +1,5 @@
 SELECT r.run_uuid,
+       r.name,
        r.experiment_id,
        r.status,
        r.start_time,

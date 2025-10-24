@@ -1,6 +1,61 @@
 import React from 'react'
 import { HTTP } from '../api';
 import '../styles/DataPicker.css';
+import 'antd/dist/antd.css'; // added
+import { Table, Input } from 'antd'; // added
+
+const RUNS_COLOR_PALETTE = [
+  '#a6630c', // Brown
+  '#c83243', // Coral
+  '#b45091', // Pink
+  '#8a63bf', // Purple
+  '#434a93', // Indigo
+  '#137dae', // Turquoise
+  '#04867d', // Teal
+  '#308613', // Lime
+  '#facb66', // Lemon
+
+  // Colors list, intensities 700-400:
+  '#1f272d', // Grey 700
+  '#445461', // Grey 600
+  '#5f7281', // Grey 500
+  '#8396a5', // Grey 400
+
+  '#93320b', // Yellow 700
+  '#be501e', // Yellow 600
+  '#de7921', // Yellow 500
+  '#f2be88', // Yellow 400
+
+  '#115026', // Green 700
+  '#277c43', // Green 600
+  '#3caa60', // Green 500
+  '#8ddda8', // Green 400
+
+  '#9e102c', // Red 700
+  '#c82d4c', // Red 600
+  '#e65b77', // Red 500
+  '#f792a6', // Red 400
+
+  '#0e538b', // Blue 700
+  '#2272b4', // Blue 600
+  '#4299e0', // Blue 500
+  '#8acaff', // Blue 400
+];
+
+// based on: https://github.com/mlflow/mlflow/blob/31bec963dbcc2e164e4614b756e8d0e401548659/mlflow/server/js/src/experiment-tracking/utils/RunNameUtils.ts#L4
+function getStableColorIndex(runUuid) {
+  let a = 0,
+    b = 0;
+
+  // Let's use super simple hashing method
+  for (let i = 0; i < runUuid.length; i++) {
+    a = (a + runUuid.charCodeAt(i)) % 255;
+    b = (b + a) % 255;
+  }
+
+  // eslint-disable-next-line no-bitwise
+  return RUNS_COLOR_PALETTE[(a | (b << 8)) % RUNS_COLOR_PALETTE.length];
+}
 
 class DataPicker extends React.Component {
 
@@ -219,11 +274,17 @@ function Experiments(props) {
 
 	const filtered = props.data
 		.filter(e => (`${e.id} ${e.name}`).toLowerCase().includes(query.toLowerCase()))
-		.sort((a, b) => a.id - b.id);
+		.sort((a, b) => a.id - b.id)
+		.map(e => ({ ...e, key: e.id }));
+
+	const columns = [
+		{ title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
+		{ title: 'Name', dataIndex: 'name', key: 'name' }
+	];
 
 	return (
 		<div id="experimentWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-			<input
+			<Input
 				className="searchInput"
 				placeholder="Search experiments..."
 				value={query}
@@ -231,30 +292,34 @@ function Experiments(props) {
 			/>
 			{/* scroll area must allow flex child to shrink: set minHeight:0 */}
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-				<table className="pickerTable" style={{ width: '100%' }}>
-					<thead>
-						<tr>
-							<th>ID</th>
-							<th>Name</th>
-						</tr>
-					</thead>
-					<tbody>
-						{filtered.map(experiment => (
-							<tr
-								key={experiment.id}
-								className={props.activeExperimentId === experiment.id ? "active" : null}
-								onClick={() => props.onClickSetVisibleWorkloads(experiment.id)}
-							>
-								<td>{experiment.id}</td>
-								<td>{experiment.name}</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
+				<Table
+					columns={columns}
+					dataSource={filtered}
+					pagination={false}
+					rowClassName={(record) => props.activeExperimentId === record.id ? "active" : ""}
+					onRow={(record) => ({
+						onClick: () => props.onClickSetVisibleWorkloads(record.id)
+					})}
+					size="small"
+				/>
 			</div>
 		</div>
 	)
 }
+
+
+// add helper to convert hex color to rgba string with alpha
+function hexToRgba(hex, alpha = 1) {
+	// normalize and parse hex (supports #rgb and #rrggbb)
+	const h = hex.replace('#', '');
+	const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+	const bigint = parseInt(full, 16);
+	const r = (bigint >> 16) & 255;
+	const g = (bigint >> 8) & 255;
+	const b = bigint & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function Runs(props) {
 
 	const checkRunStatus = (status) => {
@@ -269,7 +334,6 @@ function Runs(props) {
 		}
 	}
 
-	// helper to format workload label (same logic previously used)
 	function formatWorkloadLabel(workload) {
 		const workloadId = workload.substring(workload.indexOf("-") + 1);
 		if (workloadId === "null") {
@@ -295,89 +359,101 @@ function Runs(props) {
 			if (!q) return true;
 			const paramsStr = Object.entries(run.params || {}).map(([k, v]) => `${k}:${v}`).join(' ');
 			return (`${run.name} ${run.letter || ''} ${formatWorkloadLabel(run.workload)} ${paramsStr}`).toLowerCase().includes(q);
-		});
+		})
+		.map(run => ({ ...run, key: run.name }));
 
-	// group runs by workload preserving a sorted workload order
-	const groupsMap = new Map();
-	filteredRuns.forEach(run => {
-		if (!groupsMap.has(run.workload)) groupsMap.set(run.workload, []);
-		groupsMap.get(run.workload).push(run);
-	});
-	const groups = Array.from(groupsMap.entries()).sort((a, b) => sortWorkloads(a[0], b[0]));
+	const columns = [
+		{
+			title: 'Status',
+			dataIndex: 'status',
+			key: 'status',
+			width: 60,
+			render: (status) => <span className={checkRunStatus(status)}>•</span>
+		},
+		{
+			title: 'Identifier',
+			dataIndex: 'run_name',
+			key: 'run_name',
+			render: (run_name, record) => (run_name)//.substring(0, 6) + " - " + (record.letter === null || record.letter === "0" ? "0" : record.letter))
+		},
+		{
+			title: 'Workload',
+			dataIndex: 'workload',
+			key: 'workload',
+			render: (workload) => formatWorkloadLabel(workload)
+		},
+		{
+			title: 'Start',
+			dataIndex: 'startTime',
+			key: 'startTime',
+			render: (startTime) => `(${howLongAgo(startTime)})`
+		},
+		{
+			title: 'Duration',
+			dataIndex: 'duration',
+			key: 'duration',
+			render: (duration) => <span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>
+		},
+		{
+			title: 'Info',
+			dataIndex: 'params',
+			key: 'params',
+			render: (params) => <span className="info" title={Object.entries(params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>
+		},
+		{
+			title: 'Select',
+			key: 'select',
+			width: 70,
+			render: (_, record) => (
+				<div
+					className="checkbox"
+					onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(record.workload, record); }}
+				>
+					{props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "✔" : " "}
+				</div>
+			)
+		}
+	];
 
 	return (
 		<div id="runsWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-			<input
+			<Input
 				className="searchInput"
 				placeholder="Search runs..."
 				value={query}
 				onChange={(e) => setQuery(e.target.value)}
 			/>
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-				<table className="pickerTable" style={{ width: '100%' }}>
-					<thead>
-						<tr>
-							<th>Status</th>
-							<th>Identifier</th>
-							<th>Workload</th>
-							<th>Start</th>
-							<th>Duration</th>
-							<th>Info</th>
-							<th style={{ width: '48px' }}>Select</th>
-						</tr>
-					</thead>
-					<tbody>
-						{groups.map(([workload, runs]) => {
-							// determine if entire group is selected
-							const groupSelected = runs.length > 0 && runs.every(r => props.selectedRuns.findIndex(el => el.name === r.name) > -1);
-							return (
-								<React.Fragment key={workload}>
-									{/* group header row */}
-									<tr className="groupHeader">
-										<td colSpan="7">
-											<div className="groupHeaderInner">
-												<span className="groupLabel">{formatWorkloadLabel(workload) === "Unsorted" ? "Unsorted Runs" : "Workload " + formatWorkloadLabel(workload)}</span>
-												<span
-													className="groupCheckbox"
-													onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(workload); }}
-													title={groupSelected ? "Deselect workload" : "Select workload"}
-												>
-													{groupSelected ? "✔" : " "}
-												</span>
-											</div>
-										</td>
-									</tr>
+				<Table
+					columns={columns}
+					dataSource={filteredRuns}
+					pagination={false}
+					// only keep selection class; color applied via inline styles in onRow
+					rowClassName={(record) => (props.selectedRuns.findIndex(el => el.name === (record && record.name)) > -1 ? "highlightSelection" : "")}
+					onRow={(record) => {
+						// group rows (if any) don't get color styling
+						if (!record || record.isGroup) {
+							return { onClick: () => props.onClickToggleRunSelection(record.workload, record) };
+						}
+						const selected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+						const baseColor = getStableColorIndex(record.name);
 
-									{/* runs for this workload */}
-									{runs.map(run => (
-										<tr
-											key={run.name}
-											onClick={() => props.onClickToggleRunSelection(run.workload, run)}
-											className={props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "highlightSelection" : null}
-										>
-											<td title={run.status.charAt(0) + run.status.substring(1).toLowerCase()}>
-												<span className={checkRunStatus(run.status)}>•</span>
-											</td>
-											<td className="letter" title="Identifier">{run.name.substring(0, 6) + " - " + (run.letter === null || run.letter === "0" ? "0" : run.letter)}</td>
-											<td className="workloadId" title="Workload">{formatWorkloadLabel(run.workload)}</td>
-											<td className="startTime" title="Start time">({howLongAgo(run.startTime)})</td>
-											<td className={`duration ${run.duration === null ? "noDuration" : ""}`} title="Duration">{milliToMinsSecs(run.duration)}</td>
-											<td className="info" title={Object.entries(run.params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</td>
-											<td style={{ textAlign: 'center' }}>
-												<div
-													className="checkbox"
-													onClick={(e) => { e.stopPropagation(); props.onClickToggleRunSelection(run.workload, run); }}
-												>
-													{props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "✔" : " "}
-												</div>
-											</td>
-										</tr>
-									))}
-								</React.Fragment>
-							)
-						})}
-					</tbody>
-				</table>
+						// subtle background for non-selected, stronger when selected
+						const backgroundColor = selected ? hexToRgba(baseColor, 0.24) : hexToRgba(baseColor, 0.12);
+						const style = { backgroundColor };
+
+						// add left border accent when selected
+						if (selected) {
+							style.borderLeft = `3px solid ${baseColor}`;
+						}
+
+						return {
+							onClick: () => props.onClickToggleRunSelection(record.workload, record),
+							style
+						};
+					}}
+					size="small"
+				/>
 			</div>
 		</div>
 	)

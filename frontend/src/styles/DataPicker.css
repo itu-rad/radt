@@ -264,3 +264,269 @@
     box-sizing: border-box;
     border: none;
 }
+
+/* MLflow-like table styling (overrides for Antd tables used in DataPicker) */
+
+/* Base table look */
+#experimentWrapper .ant-table,
+#runsWrapper .ant-table {
+  background: #fff;
+  border: 1px solid #e6eaee;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: none;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Header */
+#experimentWrapper .ant-table-thead > tr > th,
+#runsWrapper .ant-table-thead > tr > th {
+  background: #f7f9fb;
+  color: #2f4050;
+  font-weight: 600;
+  border-bottom: 1px solid #e6eaee;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+
+/* Table body rows */
+#experimentWrapper .ant-table-tbody > tr > td,
+#runsWrapper .ant-table-tbody > tr > td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f3f5;
+  font-size: 13px;
+  color: #34495e;
+}
+
+/* Hover and selected row */
+#experimentWrapper .ant-table-tbody > tr:hover > td,
+#runsWrapper .ant-table-tbody > tr:hover > td {
+  background: #fbfdff;
+}
+#experimentWrapper .ant-table-tbody > tr.ant-table-row-selected > td,
+#runsWrapper .ant-table-tbody > tr.ant-table-row-selected > td,
+#experimentWrapper .highlightSelection,
+#runsWrapper .highlightSelection {
+  background: #eaf6ff !important;
+  border-left: 3px solid #115785;
+}
+
+/* Small adjustments for icons / status bullets */
+#runsWrapper .ant-table-tbody > tr > td .complete { color: #2980b9; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .running { color: #2980b9; opacity: 0.6; font-size: 16px; }
+#runsWrapper .ant-table-tbody > tr > td .failed { color: #b03030; font-size: 18px; }
+
+/* Group header (for grouped workloads) to match MLflow section headers */
+#runsWrapper .groupHeader td,
+#runsWrapper .ant-table-tbody > tr.groupHeader > td {
+  background: #eef6fb;
+  border-bottom: 1px solid #d0e7f6;
+  padding: 8px 12px;
+  font-weight: 700;
+  color: #115785;
+}
+
+/* Group header inner layout */
+#runsWrapper .groupHeaderInner,
+#runsWrapper .ant-table-tbody > tr.groupHeader .groupHeaderInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Group checkbox style */
+#runsWrapper .groupCheckbox,
+#runsWrapper .ant-table-tbody .groupCheckbox {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border: 1px solid #d7e6f0;
+  text-align: center;
+  background: white;
+  cursor: pointer;
+  border-radius: 2px;
+}
+#runsWrapper .groupCheckbox:hover { border-color: #115785; background: #f0f8ff; }
+
+/* Selection checkbox (per-row) */
+#runsWrapper .checkbox,
+#experimentWrapper .checkbox {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border: 1px solid #d7dce0;
+  background: #fff;
+  text-align: center;
+  border-radius: 2px;
+  cursor: pointer;
+  font-weight: 600;
+}
+#runsWrapper .checkbox:hover,
+#experimentWrapper .checkbox:hover {
+  border-color: #115785;
+  background: #f0f8ff;
+}
+
+/* Reduce padding for compact look similar to MLflow */
+#experimentWrapper .ant-table-tbody > tr > td:first-child,
+#runsWrapper .ant-table-tbody > tr > td:first-child {
+  padding-left: 12px;
+}
+
+/* Ensure search inputs align with MLflow minimal style */
+#experimentWrapper .searchInput,
+#runsWrapper .searchInput {
+  margin: 8px 12px;
+  padding: 6px 10px;
+  border: 1px solid #dfe7ec;
+  border-radius: 3px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+
+/* MLflow closer theming tweaks for runs/experiments tables */
+
+/* Use MLflow font stack and slightly smaller base size for compactness */
+#dataPickerWrapper, 
+#dataPickerWrapper .ant-table {
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+/* Header: subtle border and uppercase-ish label weight */
+#experimentWrapper .ant-table-thead > tr > th,
+#runsWrapper .ant-table-thead > tr > th {
+  background: #f6f8fa;
+  color: #1f2d3d;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* Compact row paddings like MLflow */
+#experimentWrapper .ant-table-tbody > tr > td,
+#runsWrapper .ant-table-tbody > tr > td {
+  padding: 8px 10px;
+}
+
+/* Run name cell: mimic MLflow RunNameCellRenderer */
+#runsWrapper .ant-table-tbody > tr > td .runName,
+#runsWrapper .ant-table-tbody > tr > td .letter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#runsWrapper .ant-table-tbody > tr > td .runIdCircle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  font-size: 12px;
+  border-radius: 50%;
+  background: #0b5fa5; /* mlflow blue-ish */
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+/* Run name link style */
+#runsWrapper .ant-table-tbody > tr > td .runName a {
+  color: #0b62a3;
+  font-weight: 600;
+  text-decoration: none;
+}
+#runsWrapper .ant-table-tbody > tr > td .runName a:hover {
+  text-decoration: underline;
+}
+
+/* Info chip (i) similar to MLflow */
+#runsWrapper .ant-table-tbody > tr > td .info {
+  display: inline-block;
+  background: #5f6b73;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 12px;
+  margin-left: 8px;
+}
+
+/* Status bullet larger and vertically centered */
+#runsWrapper .ant-table-tbody > tr > td .complete,
+#runsWrapper .ant-table-tbody > tr > td .running,
+#runsWrapper .ant-table-tbody > tr > td .failed {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 6px;
+}
+
+/* Selected row accent like MLflow: light background + colored left border */
+#runsWrapper .ant-table-tbody > tr.highlightSelection > td,
+#experimentWrapper .ant-table-tbody > tr.highlightSelection > td {
+  background: #eef9ff !important;
+}
+#runsWrapper .ant-table-tbody > tr.highlightSelection > td:first-child,
+#experimentWrapper .ant-table-tbody > tr.highlightSelection > td:first-child {
+  border-left: 3px solid #0b62a3;
+  padding-left: 8px;
+}
+
+/* Row hover aligns with MLflow subtle highlight */
+#runsWrapper .ant-table-tbody > tr:hover > td,
+#experimentWrapper .ant-table-tbody > tr:hover > td {
+  background: #fbfdff;
+}
+
+/* Group header polish */
+#runsWrapper .groupHeader td {
+  background: #f0f7fb;
+  color: #0b4f82;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-bottom: 1px solid #dbeffb;
+}
+#runsWrapper .groupHeaderInner .groupLabel {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Checkboxes minimal, matching MLflow small square look */
+#runsWrapper .groupCheckbox,
+#runsWrapper .checkbox,
+#experimentWrapper .checkbox {
+  border-radius: 3px;
+  border: 1px solid #cfdbe6;
+  background: #fff;
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  font-weight: 700;
+  color: #0b62a3;
+}
+
+/* Search input smaller and aligned like MLflow */
+#experimentWrapper .searchInput,
+#runsWrapper .searchInput {
+  height: 32px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+/* Truncate long cells consistently */
+#dataPickerWrapper .ant-table td,
+#dataPickerWrapper .ant-table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Minor spacing for selection column */
+#dataPickerWrapper .ant-table td .checkbox {
+  margin: 0 auto;
+}
