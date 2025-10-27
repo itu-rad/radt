@@ -307,6 +307,9 @@
   border-bottom: 1px solid #f0f3f5;
   font-size: 13px;
   color: #34495e;
+  /* Ensure row height is consistent */
+  height: 44px;
+  box-sizing: border-box;
 }
 
 /* Hover and selected row */
