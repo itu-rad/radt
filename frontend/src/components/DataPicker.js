@@ -457,19 +457,46 @@ function Runs(props) {
 			width: 70,
 			render: (_, record) => {
 				if (record.isParent) {
-					const isSelected = record.childRuns.length > 0 && record.childRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+					const isParentSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+					const allGroupRuns = [record, ...record.childRuns];
+					const isGroupSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+					const noneSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) === -1);
+
+					// 0: none, 1: only parent, 2: all group
+					let state = 0;
+					if (isGroupSelected) state = 2;
+					else if (isParentSelected && !record.childRuns.some(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1)) state = 1;
+
+					let label = " ";
+					if (state === 1) label = "R"; // parent only
+					else if (state === 2) label = "W"; // all group
+					// else blank for none
+
 					return (
 						<div
 							className="checkbox"
+							title={
+								state === 0 ? "Select parent only"
+								: state === 1 ? "Select all runs in group"
+								: "Clear selection"
+							}
 							onClick={e => {
 								e.stopPropagation();
-								const newSelectedRuns = isSelected
-									? props.selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name))
-									: [...props.selectedRuns, ...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)];
+								let newSelectedRuns;
+								if (state === 0) {
+									// select parent only
+									newSelectedRuns = [...props.selectedRuns, record];
+								} else if (state === 1) {
+									// select all group
+									newSelectedRuns = [...props.selectedRuns, ...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)];
+								} else {
+									// clear all group
+									newSelectedRuns = props.selectedRuns.filter(run => !allGroupRuns.some(gr => gr.name === run.name));
+								}
 								props.setSelectedRuns(newSelectedRuns);
 							}}
 						>
-							{isSelected ? "✔" : " "}
+							{label}
 						</div>
 					);
 				}
