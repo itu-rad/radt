@@ -470,25 +470,27 @@ function Runs(props) {
 			render: (_, record) => {
 				if (record.isParent) {
 					const isParentSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+					const childSelectedCount = record.childRuns.filter(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1).length;
 					const allGroupRuns = [record, ...record.childRuns];
 					const isGroupSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
-					const noneSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) === -1);
+					const anyChildSelected = childSelectedCount > 0;
+					const allChildrenSelected = record.childRuns.length > 0 && childSelectedCount === record.childRuns.length;
 
 					// 0: none, 1: only parent, 2: all group
 					let state = 0;
 					if (isGroupSelected) state = 2;
-					else if (isParentSelected && !record.childRuns.some(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1)) state = 1;
+					else if (isParentSelected && !allChildrenSelected) state = 1;
 
-					let label = " ";
-					if (state === 1) label = "R"; // parent only
-					else if (state === 2) label = "W"; // all group
-					// else blank for none
+				 let label = " ";
+				 if (state === 1) label = "R"; // parent only
+				 else if (state === 2) label = "W"; // all group
+				 // else blank for none
 
 					return (
 						<div
 							className="checkbox"
 							title={
-								state === 0 ? "Select parent only"
+								state === 0 ? (anyChildSelected ? "Select all runs in group" : "Select parent only")
 								: state === 1 ? "Select all runs in group"
 								: "Clear selection"
 							}
@@ -496,11 +498,26 @@ function Runs(props) {
 								e.stopPropagation();
 								let newSelectedRuns;
 								if (state === 0) {
-									// select parent only
-									newSelectedRuns = [...props.selectedRuns, record];
+									if (anyChildSelected) {
+										// select all group
+										newSelectedRuns = [
+											...props.selectedRuns,
+											...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1),
+											...(isParentSelected ? [] : [record])
+										];
+									} else {
+										// select parent only
+										newSelectedRuns = [
+											...props.selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name)),
+											record
+										];
+									}
 								} else if (state === 1) {
 									// select all group
-									newSelectedRuns = [...props.selectedRuns, ...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)];
+									newSelectedRuns = [
+										...props.selectedRuns,
+										...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)
+									];
 								} else {
 									// clear all group
 									newSelectedRuns = props.selectedRuns.filter(run => !allGroupRuns.some(gr => gr.name === run.name));
