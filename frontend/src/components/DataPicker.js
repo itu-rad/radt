@@ -329,11 +329,19 @@ function hexToRgba(hex, alpha = 1) {
 
 function Runs(props) {
 	const [query, setQuery] = React.useState('');
+	const [expandedGroups, setExpandedGroups] = React.useState(new Set());
 
-	// Filter runs based on the search query
+	const toggleGroup = (parentId) => {
+		setExpandedGroups(prev => {
+			const newSet = new Set(prev);
+			if (newSet.has(parentId)) newSet.delete(parentId);
+			else newSet.add(parentId);
+			return newSet;
+		});
+	};
+
 	const filteredRuns = props.data
 		.slice()
-		.sort((a, b) => (b.startTime || 0) - (a.startTime || 0))
 		.filter(run => {
 			const q = query.toLowerCase();
 			if (!q) return true;
@@ -341,6 +349,31 @@ function Runs(props) {
 			return (`${run.name || ''} ${run.run_name || ''} ${run.letter || ''} ${run.workload || ''} ${paramsStr}`).toLowerCase().includes(q);
 		})
 		.map(run => ({ ...run, key: run.name }));
+
+	const groupsMap = new Map();
+	filteredRuns.forEach(run => {
+		const parentKey = run.parent || run.name;
+		if (!groupsMap.has(parentKey)) groupsMap.set(parentKey, []);
+		groupsMap.get(parentKey).push(run);
+	});
+
+	const groups = Array.from(groupsMap.entries()).map(([parentKey, runs]) => {
+		const parentRun = runs.find(r => r.name === parentKey);
+		const childRuns = runs.filter(r => r.name !== parentKey);
+		const parent = parentRun || runs[0];
+		const children = parentRun ? childRuns : childRuns.slice(1);
+		return { parentKey, parent, children };
+	});
+
+	groups.sort((a, b) => (b.parent.startTime || 0) - (a.parent.startTime || 0));
+
+	const groupedDataSource = groups.flatMap(group => {
+		const isExpanded = expandedGroups.has(group.parentKey);
+		return [
+			{ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children },
+			...(isExpanded ? group.children : [])
+		];
+	});
 
 	const columns = [
 		{
@@ -360,6 +393,22 @@ function Runs(props) {
 					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 						<IconComponent className={cls} style={{ fontSize: 18 }} />
 						<span className="startTime" title={new Date(start).toString()}>{`(${howLongAgo(start)})`}</span>
+						{record.isParent && record.childRuns.length > 0 && (
+							<button
+								onClick={e => { e.stopPropagation(); toggleGroup(record.groupKey); }}
+								style={{
+									background: 'none',
+									border: 'none',
+									cursor: 'pointer',
+									color: '#115785',
+									fontSize: '14px',
+									marginLeft: 'auto'
+								}}
+								tabIndex={-1}
+							>
+								{expandedGroups.has(record.groupKey) ? '−' : '+'}
+							</button>
+						)}
 					</div>
 				);
 			}
@@ -368,7 +417,8 @@ function Runs(props) {
 			title: 'Identifier',
 			dataIndex: 'run_name',
 			key: 'run_name',
-			render: (run_name, record) => run_name || (record.name ? record.name.substring(0, 6) : '')
+			render: (run_name, record) =>
+				run_name || (record.name ? record.name.substring(0, 6) : '')
 		},
 		{
 			title: 'Workload',
@@ -393,11 +443,28 @@ function Runs(props) {
 			key: 'select',
 			width: 70,
 			render: (_, record) => {
+				if (record.isParent) {
+					const isSelected = record.childRuns.length > 0 && record.childRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+					return (
+						<div
+							className="checkbox"
+							onClick={e => {
+								e.stopPropagation();
+								const newSelectedRuns = isSelected
+									? props.selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name))
+									: [...props.selectedRuns, ...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)];
+								props.setSelectedRuns(newSelectedRuns);
+							}}
+						>
+							{isSelected ? "✔" : " "}
+						</div>
+					);
+				}
 				const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
 				return (
 					<div
 						className="checkbox"
-						onClick={(e) => {
+						onClick={e => {
 							e.stopPropagation();
 							const newSelectedRuns = isSelected
 								? props.selectedRuns.filter(run => run.name !== record.name)
@@ -418,15 +485,19 @@ function Runs(props) {
 				className="searchInput"
 				placeholder="Search runs..."
 				value={query}
-				onChange={(e) => setQuery(e.target.value)}
+				onChange={e => setQuery(e.target.value)}
 			/>
 			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
 				<Table
 					columns={columns}
-					dataSource={filteredRuns}
+					dataSource={groupedDataSource}
 					pagination={false}
-					rowClassName={(record) => props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "highlightSelection" : ""}
-					onRow={(record) => {
+					rowClassName={record =>
+						record.isParent
+							? '' // No special styling for header, same as normal row
+							: (props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "highlightSelection" : "")
+					}
+					onRow={record => {
 						const selected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
 						const baseColor = getStableColorIndex(record.name);
 						const unselectedBg = hexToRgba(baseColor, 0.12);
