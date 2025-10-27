@@ -390,7 +390,12 @@ function Runs(props) {
 				else if (status === "FAILED") { IconComponent = CloseCircleOutlined; cls = 'failed'; }
 
 				return (
-					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+					<div style={{
+						display: 'flex',
+						alignItems: 'center',
+						gap: 8,
+						paddingLeft: record.isParent ? 0 : 24 // indent child rows
+					}}>
 						<IconComponent className={cls} style={{ fontSize: 18 }} />
 						<span className="startTime" title={new Date(start).toString()}>{`(${howLongAgo(start)})`}</span>
 						{record.isParent && record.childRuns.length > 0 && (
@@ -418,19 +423,27 @@ function Runs(props) {
 			dataIndex: 'run_name',
 			key: 'run_name',
 			render: (run_name, record) =>
-				run_name || (record.name ? record.name.substring(0, 6) : '')
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					{run_name || (record.name ? record.name.substring(0, 6) : '')}
+				</div>
 		},
 		{
 			title: 'Workload',
 			dataIndex: 'workload',
 			key: 'workload',
-			render: (workload) => workload || 'N/A'
+			render: (workload, record) =>
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					{workload || 'N/A'}
+				</div>
 		},
 		{
 			title: 'Duration',
 			dataIndex: 'duration',
 			key: 'duration',
-			render: (duration) => <span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>
+			render: (duration, record) =>
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					<span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>
+				</div>
 		},
 		{
 			title: 'Info',
