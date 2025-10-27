@@ -1,4 +1,5 @@
 SELECT r.run_uuid,
+       t.value AS parent_run_uuid,
        r.name,
        r.experiment_id,
        r.status,
@@ -18,4 +19,6 @@ SELECT r.run_uuid,
               WHERE p.run_uuid::text = r.run_uuid::text
        ) AS params
 FROM runs r
+       LEFT JOIN tags t ON t."key" = 'mlflow.parentRunId'
+       AND r.run_uuid = t.run_uuid
 WHERE r.lifecycle_stage::text = 'active'::text;

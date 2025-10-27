@@ -54,6 +54,7 @@ export const HTTP = {
                     parsed.push({
                         "name": data["run_uuid"],
                         "run_name": data["name"],
+                        "parent": data["parent_run_uuid"],
                         "experimentId": data["experiment_id"],
                         "status": data["status"],
                         "startTime": data["start_time"],
