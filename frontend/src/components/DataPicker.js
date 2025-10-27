@@ -369,10 +369,22 @@ function Runs(props) {
 
 	const groupedDataSource = groups.flatMap(group => {
 		const isExpanded = expandedGroups.has(group.parentKey);
-		return [
-			{ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children },
-			...(isExpanded ? group.children : [])
-		];
+		const rows = [];
+		if (isExpanded && group.children.length > 0) {
+			// Mark parent for top outline
+			rows.push({ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children, outlineTop: true });
+			// Children
+			rows.push(...group.children.map((child, idx) => {
+				// Mark last child for bottom outline
+				if (idx === group.children.length - 1) {
+					return { ...child, isChild: true, parentKey: group.parentKey, outlineBottom: true };
+				}
+				return { ...child, isChild: true, parentKey: group.parentKey };
+			}));
+		} else {
+			rows.push({ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children });
+		}
+		return rows;
 	});
 
 	const columns = [
@@ -534,6 +546,12 @@ function Runs(props) {
 					pagination={false}
 					rowClassName={record => {
 						const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+						if (record.outlineTop) {
+							return isSelected ? "highlightSelection groupExpandedOutlineTop" : "groupExpandedOutlineTop";
+						}
+						if (record.outlineBottom) {
+							return isSelected ? "highlightSelection groupExpandedOutlineBottom" : "groupExpandedOutlineBottom";
+						}
 						return isSelected ? "highlightSelection" : "";
 					}}
 					onRow={record => {
@@ -544,7 +562,7 @@ function Runs(props) {
 						const style = isSelected
 							? { '--selected-border': baseColor, '--selected-bg': selectedBg }
 							: { backgroundColor: unselectedBg };
-					 return {
+						return {
 							onClick: () => props.onClickToggleRunSelection(record.workload, record),
 							style
 						};

@@ -184,6 +184,16 @@
 	background-color: #99c8e8;
 }
 
+/* Expanded group row outlines */
+#runsWrapper .groupExpandedOutlineTop td {
+    box-shadow: 0 -4px 0 0 #fff !important;
+    z-index: 2;
+}
+#runsWrapper .groupExpandedOutlineBottom td {
+    box-shadow: 0 4px 0 0 #fff !important;
+    z-index: 2;
+}
+
 /********************************************** SELECTIONS */
 #selectionsWrapper {
     width: 25%;
