@@ -532,20 +532,19 @@ function Runs(props) {
 					columns={columns}
 					dataSource={groupedDataSource}
 					pagination={false}
-					rowClassName={record =>
-						record.isParent
-							? '' // No special styling for header, same as normal row
-							: (props.selectedRuns.findIndex(el => el.name === record.name) > -1 ? "highlightSelection" : "")
-					}
+					rowClassName={record => {
+						const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+						return isSelected ? "highlightSelection" : "";
+					}}
 					onRow={record => {
-						const selected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+						const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
 						const baseColor = getStableColorIndex(record.name);
 						const unselectedBg = hexToRgba(baseColor, 0.12);
 						const selectedBg = hexToRgba(baseColor, 0.24);
-						const style = selected
+						const style = isSelected
 							? { '--selected-border': baseColor, '--selected-bg': selectedBg }
 							: { backgroundColor: unselectedBg };
-						return {
+					 return {
 							onClick: () => props.onClickToggleRunSelection(record.workload, record),
 							style
 						};
