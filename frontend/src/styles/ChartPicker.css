@@ -39,11 +39,11 @@
     background-color: #f4f4f4;
     border-right: 1px solid #ccc;
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-    overflow-y: auto;
+    overflow-y: scroll;
     padding: 10px;
     box-sizing: border-box;
 
-    scrollbar-width: none;  /* Firefox */
+    /* scrollbar-width: none;  Firefox */
     border: 1px solid #34495e;
     box-sizing: border-box;
 
@@ -173,15 +173,18 @@
 }
 #chartsWrapper {
 	position: absolute;
-	top: 0;
+	top: 0px;
 	left: 250px; /* Start right after the metricSidebar */
-	right: 0;
-	bottom: 0;
-	margin: 0;
+	right: 0px;
+	bottom: 0px;
+	margin: 0px;
 	padding: 10px;
 	box-sizing: border-box;
-	overflow-y: auto;
+	overflow-y: scroll;
 	background-color: #ffffff;
+	/* display: flex; */
+	flex-direction: column; /* Stack charts vertically */
+	gap: 15px; /* Add spacing between charts */
 }
 
 /************************************** DATA PICKER */
