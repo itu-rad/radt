@@ -24,47 +24,10 @@
     border: 1px solid #a6a6a6; 
     filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
 }
-.selectionConfirmBtn {
-    position: absolute;
-    display: block;
-    width: 12.5%;
-    height: 50px;
-    bottom: 0;
-    right: 0;
-    background-color: #2f944a;
-    color: white;
-    letter-spacing: 0.5px;
-    font-size: 15px;
-    cursor: pointer;
-    border: none;
-}
-.selectionConfirmBtn:hover { 
-    filter: brightness(1.2);
-}
-.clearBtn {
-    position: absolute;
-    display: block;
-    width: 12.5%;
-    height: 50px;
-    bottom: 0;
-    right: 12.5%;
-    background-color: #e74c3c;
-    color: white;
-    letter-spacing: 0.5px;
-    font-size: 15px;
-    cursor: pointer;
-    border: none;
-}
-.clearBtn:hover { 
-    filter: brightness(1.2);
-}
-.highlightSelection {
-    border: 1px solid #2980b9 !important;
-}
 
 /********************************************** EXPERIMENTS */
 #experimentWrapper {
-    width: 18%; /* Adjusted to 20% of the width */
+    width: 18%;
     height: 100%;
     overflow-x: hidden;
     overflow-y: scroll;
@@ -195,18 +158,30 @@
 }
 
 /********************************************** SELECTIONS */
-#selectionsWrapper {
-    width: 15%; /* Adjusted to 15% of the width */
-    height: calc(100% - 50px);
-    position: relative;
-	display: block;
-	float: left;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none; /* Firefox */
-    box-sizing: border-box;
+#selectionsContainer {
+	position: relative;
+	width: 17%; /* Matches Selections width */
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
 
-    border-left: 1px solid #b8b8b8;
+.selectionsHeader {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px; /* Add spacing between buttons */
+	padding: 0 10px; /* Add padding for alignment */
+}
+
+#selectionsWrapper {
+	flex: 1;
+	margin-top: 0; /* Adjusted to align with the header */
+	overflow-x: hidden;
+	overflow-y: scroll;
+	scrollbar-width: none; /* Firefox */
+	box-sizing: border-box;
+	border-left: 1px solid #b8b8b8;
 }
 #selectionsWrapper::-webkit-scrollbar {
     /* display: none; */
@@ -214,7 +189,7 @@
 #selectionsWrapper .workloadWrapper {
     box-sizing: border-box;
     border: 1px solid black;
-    width: 90%;
+    width: 93%;
     border: none;
     margin: 10px auto 10px auto;
 }
@@ -273,6 +248,37 @@
     margin-right: 5px;
     box-sizing: border-box;
     border: none;
+}
+.toggleSelectionsBtn {
+	width: 48%;
+	height: 40px;
+	background-color: #115785;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSelectionsBtn:hover {
+	background-color: #0b4f6c;
+}
+
+.clearBtn {
+	flex: 1; /* Ensure both buttons take equal space */
+	height: 40px;
+	background-color: #e74c3c;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.clearBtn:hover {
+	filter: brightness(1.2);
 }
 
 /* MLflow-like table styling (overrides for Antd tables used in DataPicker) */
@@ -574,7 +580,7 @@
 #dataPickerHorizontalWrapper {
 	display: flex;
 	flex-direction: row; /* Align wrappers horizontally */
-	height: calc(100% - 60px); /* Account for buttons at the bottom */
+	height: calc(100% - 0px); /* Account for buttons at the bottom */
 }
 
 #experimentWrapper,
@@ -596,12 +602,6 @@
 
 .closeBtn:hover {
 	color: #000;
-}
-
-.slideoutButtons {
-	display: flex;
-	justify-content: space-between;
-	padding: 10px 0;
 }
 
 .selectionConfirmBtn,
@@ -630,4 +630,23 @@
 
 .clearBtn:hover {
 	filter: brightness(1.2);
+}
+
+.toggleDataPickerBtn {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 100px;
+	height: 40px;
+	background-color: #115785;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.toggleDataPickerBtn:hover {
+	background-color: #0b4f6c;
 }

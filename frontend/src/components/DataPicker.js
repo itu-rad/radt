@@ -72,6 +72,7 @@ class DataPicker extends React.Component {
 			visibleRuns: [],
 			selectedWorkloads: [],
 			selectedRuns: [],
+			selectionsVisible: true, // New state to toggle Selections visibility
 			setSelectedRuns: (newSelectedRuns) => {
 				this.setState({ selectedRuns: newSelectedRuns });
 				this.props.pullSelectedRuns(newSelectedRuns);
@@ -229,6 +230,12 @@ class DataPicker extends React.Component {
 		}
 	}
 
+	toggleSelectionsVisibility = () => {
+		this.setState((prevState) => ({
+			selectionsVisible: !prevState.selectionsVisible,
+		}));
+	};
+
 	render() {
 		const {
 			experimentData,
@@ -240,7 +247,6 @@ class DataPicker extends React.Component {
 		return (
 			<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
 				<div id="dataPickerContent">
-					<button className="closeBtn" onClick={() => this.props.toggleDataPicker(false)}>×</button>
 					<div id="dataPickerHorizontalWrapper">
 						<Experiments
 							data={experimentData}
@@ -253,19 +259,27 @@ class DataPicker extends React.Component {
 							setSelectedRuns={this.state.setSelectedRuns}
 							onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
 						/>
-						<Selections
-							selectedRuns={selectedRuns}
-							onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-							bottomOfScrollRef={this.bottomOfScrollRef}
-						/>
-					</div>
-					<div className="slideoutButtons">
-						<button className="clearBtn" onClick={() => this.clearAllSelections()}>
-							Clear All
-						</button>
-						<button className="selectionConfirmBtn" onClick={() => this.props.toggleDataPicker(false)}>
-							Save
-						</button>
+						<div id="selectionsContainer">
+							<div className="selectionsHeader">
+								<button
+									className="toggleSelectionsBtn"
+									onClick={() => this.props.toggleDataPicker(false)}
+								>
+									Slide In
+								</button>
+								<button
+									className="clearBtn"
+									onClick={() => this.clearAllSelections()}
+								>
+									Clear All
+								</button>
+							</div>
+							<Selections
+								selectedRuns={selectedRuns}
+								onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
+								bottomOfScrollRef={this.bottomOfScrollRef}
+							/>
+						</div>
 					</div>
 				</div>
 			</div>

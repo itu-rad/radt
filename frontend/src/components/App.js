@@ -26,7 +26,15 @@ class App extends React.Component {
 	render() {  
 		const { selectedRuns, dataPickerOpen } = this.state;
 		return (   
-			<div id="appWrapper">		
+			<div id="appWrapper">
+				{!dataPickerOpen && (
+					<button 
+						className="toggleDataPickerBtn" 
+						onClick={() => this.toggleDataPicker(true)}
+					>
+						Slide Out
+					</button>
+				)}
 				<DataPicker 
 					toHide={!dataPickerOpen}
 					pullSelectedRuns={this.updateSelectedRuns} 
