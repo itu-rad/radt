@@ -579,8 +579,58 @@ function Runs(props) {
 						const style = isSelected
 							? { '--selected-border': baseColor, '--selected-bg': selectedBg }
 							: { backgroundColor: unselectedBg };
+
+						const handleSelection = () => {
+							let newSelectedRuns;
+							if (record.isParent) {
+								const isParentSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+								const childSelectedCount = record.childRuns.filter(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1).length;
+								const allGroupRuns = [record, ...record.childRuns];
+								const isGroupSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+								const anyChildSelected = childSelectedCount > 0;
+								const allChildrenSelected = record.childRuns.length > 0 && childSelectedCount === record.childRuns.length;
+
+								// 0: none, 1: only parent, 2: all group
+								let state = 0;
+								if (isGroupSelected) state = 2;
+								else if (isParentSelected && !allChildrenSelected) state = 1;
+
+								if (state === 0) {
+									if (anyChildSelected) {
+										// select all group
+										newSelectedRuns = [
+											...props.selectedRuns,
+											...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1),
+											...(isParentSelected ? [] : [record])
+										];
+									} else {
+										// select parent only
+										newSelectedRuns = [
+											...props.selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name)),
+											record
+										];
+									}
+								} else if (state === 1) {
+									// select all group
+									newSelectedRuns = [
+										...props.selectedRuns,
+										...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)
+									];
+								} else {
+									// clear all group
+									newSelectedRuns = props.selectedRuns.filter(run => !allGroupRuns.some(gr => gr.name === run.name));
+								}
+							} else {
+								const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+								newSelectedRuns = isSelected
+									? props.selectedRuns.filter(run => run.name !== record.name)
+									: [...props.selectedRuns, record];
+							}
+							props.setSelectedRuns(newSelectedRuns);
+						};
+
 						return {
-							onClick: () => props.onClickToggleRunSelection(record.workload, record),
+							onClick: handleSelection,
 							style
 						};
 					}}
