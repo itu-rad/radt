@@ -285,7 +285,7 @@ class ChartPicker extends React.Component {
 				</div>
 
 				{/* Charts List */}
-				<div id="chartsWrapper">
+				<div id="chartsWrapper" className={this.props.className}>
 					{charts.sort((a, b) => b.id - a.id).map(chart => (
 						<Chart 
 							key={chart.id} 

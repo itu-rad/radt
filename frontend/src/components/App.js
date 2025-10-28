@@ -36,6 +36,7 @@ class App extends React.Component {
 					toHide={dataPickerOpen}
 					pushSelectedRuns={selectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
+					className={dataPickerOpen ? "blurred" : ""} // Pass blurred class
 				/>
 			</div>
 		);

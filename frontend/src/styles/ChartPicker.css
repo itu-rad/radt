@@ -286,3 +286,8 @@
 	border-bottom: 1px solid #ccc;
 	padding-bottom: 5px;
 }
+
+#chartsWrapper.blurred {
+	filter: blur(5px); /* Apply blur effect */
+	pointer-events: none; /* Prevent interaction with blurred content */
+}
