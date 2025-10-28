@@ -59,17 +59,21 @@ class ChartPicker extends React.Component {
 			this.fetchMetrics(selectedRuns);
 		}
 
-		// if we have pending charts from URL and runs just became available, fetch them
+		// Ensure all charts from the URL are processed
 		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
 			const pending = this._pendingChartsFromUrl;
 			this._pendingChartsFromUrl = null;
 
 			// Track the number of charts being fetched
-			this.setState({ pendingChartRenders: pending.length }, () => {
-				Promise.all(pending.map(metric => this.fetchChartData(metric))).then(() => {
-					// Wait for all charts to finish rendering
-					this.checkAllChartsRendered();
-				});
+			this.setState({ pendingChartRenders: pending.length }, async () => {
+				// Use Promise.all to ensure all fetches complete
+				await Promise.all(
+					pending.map(async (metric) => {
+						await this.fetchChartData(metric);
+					})
+				);
+				// Check if all charts are rendered
+				this.checkAllChartsRendered();
 			});
 		}
 	}
