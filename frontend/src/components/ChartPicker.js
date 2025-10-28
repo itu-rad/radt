@@ -224,7 +224,7 @@ class ChartPicker extends React.Component {
 	}
 
 	render() {
-		const { availableMetrics, showMetrics, charts, loading } = this.state;
+		const { availableMetrics, charts, loading } = this.state;
 		return (
 			<div id="chartPickerWrapper">
 
@@ -252,21 +252,9 @@ class ChartPicker extends React.Component {
 					</button>
 				</div>
 
-				{/*} Pick Chart Button {*/}
-				<button 
-					id="pickChartBtn"
-					onClick={() => this.toggleMetrics()}
-					disabled={loading ? true : ""}
-					title="Choose Metric"
-					//className={availableMetrics.length === 0 ? "hide" : null}
-				>
-					{loading ? <img src={LoadingIcon} className="loadingIcon" alt="Loading..." /> : "+"}
-				</button>
-
 				{/*} Metrics List {*/}
 				<div 
 					id="metricBtnList"
-					className={showMetrics ? null : "hide"}
 				>
 					{availableMetrics.map(metric => (
 						<button

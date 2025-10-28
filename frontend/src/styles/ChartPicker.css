@@ -6,7 +6,7 @@
 }
 #chartPickerWrapper #pickChartBtn {
     position: relative;
-    display: block;
+    display: none; /* Remove pickChartBtn */
     width: 80%;
     max-width: 1500px;
     height: 60px;
@@ -33,14 +33,18 @@
     transform: translate(-50%, -50%);
 }
 #chartPickerWrapper #metricBtnList {
-    display: block;
-    max-height: 500px;
-    width: 80%;
-    max-width: 1500px;
-    margin: auto;
-    text-align: left;;
-    overflow-x: hidden;
-    overflow-y: scroll;
+    position: fixed;
+    bottom: 0; /* Anchor to the bottom */
+    left: 0;
+    width: 250px;
+    height: 94%;
+    background-color: #f4f4f4;
+    border-right: 1px solid #ccc;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    padding: 10px;
+    box-sizing: border-box;
+
     scrollbar-width: none;  /* Firefox */
     border: 1px solid #34495e;
     box-sizing: border-box;
@@ -52,19 +56,20 @@
     /* display: none; */
 }
 #chartPickerWrapper .metricBtn {
-    width: 48%;
-    font-size: 16px;
-    margin: 5px 0.75% 5px 0.75%;
+    display: block;
+    width: 100%;
     padding: 10px;
+    margin-bottom: 5px;
+    background-color: #115785;
+    color: white;
+    border: none;
     cursor: pointer;
     text-align: left;
-    border: none;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-    background-color: white;
+    font-size: 14px;
+    border-radius: 4px;
 }
 #chartPickerWrapper .metricBtn:hover {
-    background-color: #34495e;
-    color: white;
+    background-color: #0b4f6c;
 }
 #noData {
     text-align: center;
