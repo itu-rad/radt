@@ -48,22 +48,3 @@ body::-webkit-scrollbar {
     -webkit-transition: all .5s;
 }
 
-.toggleDataPickerBtn {
-	position: fixed;
-	top: 30px;
-	left: 0;
-	transform: translateY(-50%);
-	width: 100px;
-	height: 40px;
-	background-color: #115785;
-	color: white;
-	border: none;
-	cursor: pointer;
-	font-size: 14px;
-	font-weight: bold;
-	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.toggleDataPickerBtn:hover {
-	background-color: #0b4f6c;
-}

@@ -236,6 +236,17 @@ class ChartPicker extends React.Component {
 						>
 							Data
 						</button>
+						<label className="upload">
+							<input 
+								type="file" 
+								ref={this.inputField} 
+								onChange={() => this.uploadLocalData()} 
+							/>
+							<img src={UploadIcon} className="uploadSVG" alt="Upload Charts" />
+						</label>
+						<button className="download" onClick={() => this.downloadLocalData()}>
+							<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
+						</button>
 					</div>
 					<div id="metricBtnList">
 						{availableMetrics.map(metric => (

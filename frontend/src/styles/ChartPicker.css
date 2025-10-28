@@ -69,35 +69,80 @@
 
 .toggleDataPickerWrapper {
 	height: 60px; /* Enforce fixed height */
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0; /* Prevent shrinking */
-	background-color: #f4f4f4; /* Match sidebar background */
+    display: flex;
+    flex-direction: row;
 	border-bottom: 1px solid #ccc;
+	padding: 10px 10px; /* Add padding for spacing */
 }
 
 .toggleDataPickerBtn {
-	width: 100%;
-	height: 40px;
-	background-color: #115785;
-	color: white;
-	border: none;
-	cursor: pointer;
-	font-size: 14px;
-	font-weight: bold;
-	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    width: 100px;
+    height: 40px;
+    background-color: #115785;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .toggleDataPickerBtn:hover {
-	background-color: #0b4f6c;
+    background-color: #0b4f6c;
 }
 
-#metricBtnList {
-	flex: 1; /* Scale to fill remaining space */
-	overflow-y: auto;
-	padding: 10px;
-	box-sizing: border-box;
+.upload {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	background-color: #3498db;
+	border: none;
+	cursor: pointer;
+	border-radius: 4px;
+	position: relative; /* Ensure proper positioning for the hidden input */
+}
+
+.upload input[type="file"] {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0; /* Hide the file input */
+	cursor: pointer;
+}
+
+.uploadSVG {
+	width: 20px;
+	filter: invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%);
+	pointer-events: none; /* Prevent interaction with the icon */
+}
+
+.upload:hover {
+	background-color: #1f78b4;
+}
+
+.download {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	background-color: #f1c40f;
+	border: none;
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.downloadSVG {
+	width: 20px;
+	filter: invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%);
+}
+
+.download:hover {
+	background-color: #d4ac0d;
 }
 
 #chartPickerWrapper .metricBtn {
@@ -174,7 +219,6 @@
 }
 .uploadSVG {
     position: relative;
-    top: 13px;
     width: 35px;
     filter: invert(89%) sepia(23%) saturate(0%) hue-rotate(76deg) brightness(108%) contrast(103%); /* white */
 }
