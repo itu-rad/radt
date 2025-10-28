@@ -69,26 +69,30 @@
 
 .toggleDataPickerWrapper {
 	height: 60px; /* Enforce fixed height */
-    display: flex;
-    flex-direction: row;
+	display: flex;
+	align-items: center;
+	flex-direction: row; /* Ensure horizontal layout */
+	justify-content: flex-start; /* Align buttons to the left */
+	gap: 10px; /* Add spacing between buttons */
 	border-bottom: 1px solid #ccc;
-	padding: 10px 10px; /* Add padding for spacing */
+	padding: 10px; /* Add padding for spacing */
 }
 
 .toggleDataPickerBtn {
-    width: 100px;
-    height: 40px;
-    background-color: #115785;
-    color: white;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: bold;
-    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+	width: 100px;
+	height: 40px;
+    position: relative;
+	background-color: #115785;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .toggleDataPickerBtn:hover {
-    background-color: #0b4f6c;
+	background-color: #0b4f6c;
 }
 
 .upload {
