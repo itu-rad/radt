@@ -24,7 +24,7 @@ class ChartPicker extends React.Component {
 	}
 
 	componentDidMount() {
-		// fetch available metrics for any selected runs
+		// Fetch available metrics for any selected runs
 		this.fetchMetrics(this.props.pushSelectedRuns);
 
 		// read `charts` param from URL and store for later if present
@@ -59,6 +59,11 @@ class ChartPicker extends React.Component {
 			this.fetchMetrics(selectedRuns);
 		}
 
+		// Fetch metrics if the selected runs have changed
+		if (prevProps.pushSelectedRuns !== this.props.pushSelectedRuns) {
+			this.fetchMetrics(this.props.pushSelectedRuns);
+		}
+
 		// Ensure all charts from the URL are processed
 		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
 			let pending = this._pendingChartsFromUrl;
@@ -70,22 +75,23 @@ class ChartPicker extends React.Component {
 			// Track the number of charts being fetched
 			this.setState({ pendingChartRenders: pending.length }, async () => {
 				// Use Promise.all to ensure all fetches complete
-				await Promise.all(
-					pending.map(async (metric) => {
-						await this.fetchChartData(metric);
-					})
-				);
+				for (const metric of pending) {
+					await this.fetchChartData(metric);
+				}
 				// Check if all charts are rendered
 				this.checkAllChartsRendered();
 			});
 		}
 	}
 
-	// fetch all available metrics for the current selected runs 
-	async fetchMetrics() {
-		const selectedRuns = this.props.pushSelectedRuns;	
-		const data = await HTTP.fetchMetrics(selectedRuns);
-		this.setState({availableMetrics: data});
+	// Fetch all available metrics for the current selected runs
+	async fetchMetrics(selectedRuns) {
+		if (selectedRuns && selectedRuns.length > 0) {
+			const data = await HTTP.fetchMetrics(selectedRuns);
+			this.setState({ availableMetrics: data });
+		} else {
+			this.setState({ availableMetrics: [] });
+		}
 	}
 
 	// toggle metric list visibility 
@@ -161,7 +167,12 @@ class ChartPicker extends React.Component {
 				this.props.updateChartMetrics(metrics);
 			}
 			if (chartRendered) {
-				this.decrementPendingRenders(); // Decrement pending renders if a chart is rendered
+				this.decrementPendingRenders();
+			}
+
+			// Open DataPicker if no charts are loaded
+			if (newChartData.length === 0) {
+				this.props.toggleDataPicker(true);
 			}
 		});
 

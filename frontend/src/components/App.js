@@ -9,10 +9,11 @@ class App extends React.Component {
 		super(props);
 		this.state = {
 			selectedRuns: [],
-			chartMetrics: [], // added: currently selected chart metrics
-			dataPickerOpen: true,
+			chartMetrics: [],
+			dataPickerOpen: false, // Start with DataPicker closed
 			isSyncingFromUrl: true, // Flag to prevent premature URL updates
-			urlSyncInProgress: true // New flag to track URL sync progress
+			urlSyncInProgress: true, // Flag to track URL sync progress
+			isLoading: true // New state to track loading status
 		};
 	}
 
@@ -20,7 +21,6 @@ class App extends React.Component {
 	updateUrlWithSelectedRuns = (selectedRuns, chartMetrics = null) => {
 		if (this.state.urlSyncInProgress) return; // Prevent updates during sync
 		const runIds = (selectedRuns || []).map(run => run.name);
-		// prefer explicit chartMetrics param, otherwise use state
 		const charts = chartMetrics !== null ? chartMetrics : this.state.chartMetrics || [];
 		const jsonRunIds = JSON.stringify(runIds);
 		const jsonChartMetrics = JSON.stringify(charts);
@@ -44,7 +44,11 @@ class App extends React.Component {
 
 	// Mark URL sync as complete
 	markUrlSyncComplete = () => {
-		this.setState({ urlSyncInProgress: false }, () => {
+		this.setState({ urlSyncInProgress: false, isLoading: false }, () => {
+			// Open DataPicker if no charts are visible
+			if (this.state.chartMetrics.length === 0) {
+				this.toggleDataPicker(true);
+			}
 			this.updateUrlWithSelectedRuns(this.state.selectedRuns, this.state.chartMetrics);
 		});
 	}
@@ -55,23 +59,27 @@ class App extends React.Component {
 	}
 
 	render() {  
-		const { selectedRuns, dataPickerOpen } = this.state;
+		const { selectedRuns, dataPickerOpen, isLoading } = this.state;
 		return (   
 			<div id="appWrapper">
+				{isLoading && (
+					<div className="loadingOverlay">
+						<div className="loadingSpinner"></div>
+					</div>
+				)}
 				<DataPicker 
 					toHide={!dataPickerOpen}
 					pullSelectedRuns={this.updateSelectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
 					pushSelectedRuns={selectedRuns}
-					markUrlSyncComplete={this.markUrlSyncComplete} // Ensure this is passed
+					markUrlSyncComplete={this.markUrlSyncComplete}
 				/>
 				<ChartPicker 
 					toHide={dataPickerOpen}
 					pushSelectedRuns={selectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
 					updateChartMetrics={this.updateChartMetrics}
-					markUrlSyncComplete={this.markUrlSyncComplete} // Ensure this is passed
-					className={dataPickerOpen ? "blurred" : ""} // Pass blurred class
+					markUrlSyncComplete={this.markUrlSyncComplete}
 				/>
 			</div>
 		);
