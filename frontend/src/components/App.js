@@ -13,14 +13,42 @@ class App extends React.Component {
 		};
 	}
 
-	// pull data from data picker when it updates
-	updateSelectedRuns = (newSelectedRuns) => {
-		this.setState({selectedRuns: newSelectedRuns});
+	// Update the URL to reflect the selected runs
+	updateUrlWithSelectedRuns = (selectedRuns) => {
+		const runIds = selectedRuns.map(run => run.name);
+		const jsonRunIds = JSON.stringify(runIds); // Properly format as JSON array
+		const newUrl = `${window.location.pathname}?runs=${jsonRunIds}`;
+		window.history.replaceState(null, '', newUrl);
 	}
 
-	// show or hide the data picker
+	// Pull data from data picker when it updates
+	updateSelectedRuns = (newSelectedRuns) => {
+		this.setState({ selectedRuns: newSelectedRuns });
+		this.updateUrlWithSelectedRuns(newSelectedRuns);
+	}
+
+	// Show or hide the data picker
 	toggleDataPicker = (toShow) => {
 		this.setState({ dataPickerOpen: toShow });
+	}
+
+	componentDidMount() {
+		// Check URL for `runs` query parameter and overwrite selected runs
+		const urlParams = new URLSearchParams(window.location.search);
+		const runsParam = urlParams.get('runs');
+		if (runsParam) {
+			try {
+				// Parse the `runs` parameter as a JSON array
+				const runIds = JSON.parse(runsParam); // Ensure proper JSON parsing
+				if (Array.isArray(runIds)) {
+					this.setState({ selectedRuns: runIds.map(id => ({ name: id })) });
+				} else {
+					console.error("Invalid `runs` parameter format. Expected a JSON array.");
+				}
+			} catch (error) {
+				console.error("Failed to parse `runs` parameter:", error);
+			}
+		}
 	}
 
 	render() {  
@@ -42,4 +70,5 @@ class App extends React.Component {
 		);
 	}
 }
+
 export default App;
