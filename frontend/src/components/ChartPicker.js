@@ -16,7 +16,8 @@ class ChartPicker extends React.Component {
 			availableMetrics: [],
 			showMetrics: false,
 			charts: [],
-			pendingChartRenders: 0 // Track pending chart renders
+			pendingChartRenders: 0, // Track pending chart renders
+			showLoadingOverlay: false, // New state to track loading overlay visibility
 		};
 
 		this.inputField = React.createRef();
@@ -102,10 +103,11 @@ class ChartPicker extends React.Component {
 
 	// fetch all data for each run 
 	async fetchChartData(metric) {
-
+		// Show loading overlay
 		this.setState({ 
 			loading: true,
-			showMetrics: false
+			showMetrics: false,
+			showLoadingOverlay: true,
 		});
 
 		// deep clone run selections and fetch chart data for each run
@@ -114,7 +116,10 @@ class ChartPicker extends React.Component {
 
 		// prevent app getting stuck on load if server fails to fetch
 		if (chartData.length === 0) {
-			this.setState({ loading: false });
+			this.setState({ 
+				loading: false,
+				showLoadingOverlay: false,
+			});
 			this.decrementPendingRenders(); // Decrement pending renders even if no data
 			return;
 		}
@@ -152,6 +157,12 @@ class ChartPicker extends React.Component {
 
 		// update chart state with new data
 		this.setCharts(newCharts, true); // Pass `true` to indicate a chart render is complete
+
+		// Hide loading overlay
+		this.setState({ 
+			loading: false,
+			showLoadingOverlay: false,
+		});
 	}
 
 	// add chart data to state for rendering 
@@ -300,7 +311,7 @@ class ChartPicker extends React.Component {
 	}
 
 	render() {
-		const { availableMetrics, charts } = this.state;
+		const { availableMetrics, charts, showLoadingOverlay } = this.state;
 
 		// Group metrics by system name
 		const groupedMetrics = availableMetrics.reduce((groups, metric) => {
@@ -315,6 +326,13 @@ class ChartPicker extends React.Component {
 
 		return (
 			<div id="chartPickerWrapper">
+				{/* Loading Overlay */}
+				{showLoadingOverlay && (
+					<div className="loadingOverlay">
+						<div className="loadingSpinner"></div>
+					</div>
+				)}
+
 				{/* Metric Sidebar */}
 				<div id="metricSidebar">
 					<div className="toggleDataPickerWrapper">
