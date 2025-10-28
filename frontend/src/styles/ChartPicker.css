@@ -172,7 +172,16 @@
     font-style: italic;
 }
 #chartsWrapper {
-    margin: 25px 0 0 0;
+	position: absolute;
+	top: 0;
+	left: 250px; /* Start right after the metricSidebar */
+	right: 0;
+	bottom: 0;
+	margin: 0;
+	padding: 10px;
+	box-sizing: border-box;
+	overflow-y: auto;
+	background-color: #ffffff;
 }
 
 /************************************** DATA PICKER */

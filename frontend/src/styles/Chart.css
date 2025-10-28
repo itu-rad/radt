@@ -1,11 +1,8 @@
 .chartWrapper {
     display: block;
     position: relative;
-    width: 77%;
-    max-width: 1500px;
     margin: auto;
     padding: 10px 10px 10px 0;
-    margin: 30px auto 30px auto;
     background-color: white;
     filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.3));
 }
