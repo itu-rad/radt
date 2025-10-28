@@ -45,8 +45,8 @@ class App extends React.Component {
 	// Mark URL sync as complete
 	markUrlSyncComplete = () => {
 		this.setState({ urlSyncInProgress: false, isLoading: false }, () => {
-			// Open DataPicker if no charts are visible
-			if (this.state.chartMetrics.length === 0) {
+			// Open DataPicker if no charts or runs are visible
+			if (this.state.chartMetrics.length === 0 || this.state.selectedRuns.length === 0) {
 				this.toggleDataPicker(true);
 			}
 			this.updateUrlWithSelectedRuns(this.state.selectedRuns, this.state.chartMetrics);

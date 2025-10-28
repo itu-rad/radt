@@ -120,7 +120,14 @@ class DataPicker extends React.Component {
 					selectedRuns: localRunsAndWorkloadData.runData
 				}, () => {
 					this.props.pullSelectedRuns(this.state.selectedRuns);
+					if (this.state.selectedRuns.length === 0) {
+						// Mark URL sync as complete if no runs are available
+						this.props.markUrlSyncComplete();
+					}
 				});
+			} else {
+				// Mark URL sync as complete if no data is found
+				this.props.markUrlSyncComplete();
 			}
 		}
 	}
