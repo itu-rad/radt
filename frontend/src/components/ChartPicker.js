@@ -397,23 +397,30 @@ class ChartPicker extends React.Component {
 
 				{/* Charts List */}
 				<div id="chartsWrapper" className={this.props.className}>
-					{(charts || []).sort((a, b) => b.id - a.id).map(chart => (
-						// single wrapper per chart — placeholder or chart
-						<div key={chart.id} className="chartWrapper">
-							{chart.loading ? (
-								// inline loading inside this chart's wrapper
-								<div className="loadingOverlay" style={{ position: 'absolute', top:0, left:0, right:0, bottom:0, backgroundColor: 'rgba(255,255,255,0.8)' }}>
-									<div className="loadingSpinner" />
+					{(charts || []).sort((a, b) => b.id - a.id).map(chart => {
+						// Render an inline loading wrapper only for placeholders
+						if (chart.loading) {
+							return (
+								<div key={chart.id} className="chartWrapper">
+									<div
+										className="loadingOverlay"
+										style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)' }}
+									>
+										<div className="loadingSpinner" />
+									</div>
 								</div>
-							) : (
-								<Chart
-									chartData={chart}
-									pullChartExtras={this.syncData.bind(this)}
-									removeChart={this.removeChart.bind(this)}
-								/>
-							)}
-						</div>
-					))}
+							);
+						}
+						// Render the Chart component directly (it provides its own wrapper)
+						return (
+							<Chart
+								key={chart.id}
+								chartData={chart}
+								pullChartExtras={this.syncData.bind(this)}
+								removeChart={this.removeChart.bind(this)}
+							/>
+						);
+					})}
 				</div>		
 			</div>
 		);
