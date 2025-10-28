@@ -264,15 +264,18 @@ class ChartPicker extends React.Component {
 						{Object.entries(groupedMetrics).map(([groupName, metrics]) => (
 							<div key={groupName} className="metricGroup">
 								<h4 className="metricGroupName">{groupName}</h4> {/* Group header */}
-								{metrics.map(metric => (
-									<button
-										key={metric}
-										className="metricBtn"
-										onClick={() => this.fetchChartData(metric)}
-									>
-										{metric}
-									</button>
-								))}
+								{metrics.map(metric => {
+									const displayName = metric.replace(/^system\/([^-]+)-/, ""); // Extract unmatched part
+									return (
+										<button
+											key={metric}
+											className="metricBtn"
+											onClick={() => this.fetchChartData(metric)}
+										>
+											{displayName}
+										</button>
+									);
+								})}
 							</div>
 						))}
 						<div id="noData" className={availableMetrics.length === 0 ? null : "hide"}>
