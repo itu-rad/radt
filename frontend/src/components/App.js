@@ -16,7 +16,7 @@ class App extends React.Component {
 
 	// Update the URL to reflect the selected runs
 	updateUrlWithSelectedRuns = (selectedRuns) => {
-		if (this.state.isSyncingFromUrl) return; // Prevent updating URL during initial sync
+		// if (this.state.isSyncingFromUrl) return; // Prevent updating URL during initial sync
 		const runIds = selectedRuns.map(run => run.name);
 		const jsonRunIds = JSON.stringify(runIds); // Properly format as JSON array
 		const newUrl = `${window.location.pathname}?runs=${jsonRunIds}`;
