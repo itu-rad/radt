@@ -19,18 +19,35 @@ class ChartPicker extends React.Component {
 		};
 
 		this.inputField = React.createRef();
+		this._pendingChartsFromUrl = null; // hold charts from URL until runs available
 	}
 
 	componentDidMount() {
 		// fetch available metrics for any selected runs
 		this.fetchMetrics(this.props.pushSelectedRuns);
 
-		// check localSStorage for pre-existing chart data
+		// read `charts` param from URL and store for later if present
+		const urlParams = new URLSearchParams(window.location.search);
+		const chartsParam = urlParams.get('charts');
+		if (chartsParam) {
+			try {
+				const chartMetrics = JSON.parse(decodeURIComponent(chartsParam));
+				if (Array.isArray(chartMetrics) && chartMetrics.length > 0) {
+					this._pendingChartsFromUrl = chartMetrics;
+				}
+			} catch (e) {
+				console.error("Failed to parse `charts` URL param:", e);
+			}
+		}
+
+		// attempt to load localStorage charts (as fallback)
 		const localCharts = JSON.parse(localStorage.getItem("localCharts"))
 		if (localCharts !== null && localCharts.length !== 0) {
 			this.setCharts(localCharts);
 			this.props.toggleDataPicker(false);
 			console.log("GET: charts loaded from localStorage");
+			// no need to fetch URL charts if localCharts present
+			this._pendingChartsFromUrl = null;
 		}
 	}
 
@@ -39,6 +56,14 @@ class ChartPicker extends React.Component {
 		if (prevProps.toHide !== toHide) {
 			const selectedRuns = this.props.pushSelectedRuns;
 			this.fetchMetrics(selectedRuns);
+		}
+
+		// if we have pending charts from URL and runs just became available, fetch them
+		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
+			const pending = this._pendingChartsFromUrl;
+			this._pendingChartsFromUrl = null;
+			// fetch each metric sequentially (fire-and-forget is fine)
+			pending.forEach(metric => this.fetchChartData(metric));
 		}
 	}
 
@@ -108,12 +133,6 @@ class ChartPicker extends React.Component {
 		this.setCharts(newCharts);
 	}
 
-	// removes chart from state using its id 
-	removeChart(id) {
-		let newCharts = [...this.state.charts].filter(chart => chart.id !== id);
-		this.setCharts(newCharts);
-	}
-
 	// add chart data to state for rendering 
 	setCharts(newChartData) {
 
@@ -121,6 +140,12 @@ class ChartPicker extends React.Component {
 		this.setState({
 			charts: newChartData,
 			loading: false,
+		}, () => {
+			// notify App about the active metrics
+			if (this.props.updateChartMetrics) {
+				const metrics = (newChartData || []).map(c => c.metric);
+				this.props.updateChartMetrics(metrics);
+			}
 		});
 
 		// open data picker if no charts loaded
@@ -135,6 +160,12 @@ class ChartPicker extends React.Component {
 			// save data to local storage to persist through refreshes
 			//storeChartDataInLocalStorage(newChartData);
 		}
+	}
+
+	// removes chart from state using its id 
+	removeChart(id) {
+		let newCharts = [...this.state.charts].filter(chart => chart.id !== id);
+		this.setCharts(newCharts); // setCharts will notify App
 	}
 
 	// update custom chart state for local data download
