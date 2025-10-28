@@ -8,7 +8,6 @@ import DownloadIcon from '../images/download.svg';
 import LoadingIcon from '../images/cogwheel.svg';
 
 class ChartPicker extends React.Component {
-
 	constructor(props) {
 		super(props);
 		this.state = {
@@ -16,12 +15,13 @@ class ChartPicker extends React.Component {
 			availableMetrics: [],
 			showMetrics: false,
 			charts: [],
-			pendingChartRenders: 0, // Track pending chart renders
-			showLoadingOverlay: false, // New state to track loading overlay visibility
+			pendingChartRenders: 0,
+			// keep showLoadingOverlay for backwards compat if other code uses it
+			showLoadingOverlay: false
 		};
 
 		this.inputField = React.createRef();
-		this._pendingChartsFromUrl = null; // hold charts from URL until runs available
+		this._pendingChartsFromUrl = null;
 	}
 
 	componentDidMount() {
@@ -108,66 +108,85 @@ class ChartPicker extends React.Component {
 
 	// fetch all data for each run 
 	async fetchChartData(metric) {
-		// Show loading overlay
-		this.setState({ 
-			loading: true,
-			showMetrics: false,
-			showLoadingOverlay: true,
-		});
+		// Create a numeric placeholder id so sorting behaves the same
+		const placeholderId = Date.now();
 
-		// deep clone run selections and fetch chart data for each run
-		const chartRuns = structuredClone(this.props.pushSelectedRuns);
-		let chartData = await HTTP.fetchChart(chartRuns, metric);
-
-		// prevent app getting stuck on load if server fails to fetch
-		if (chartData.length === 0) {
-			this.setState({ 
-				loading: false,
-				showLoadingOverlay: false,
-			});
-			this.decrementPendingRenders(); // Decrement pending renders even if no data
-			return;
-		}
-
-		// add the run data to the cloned run selections
-		chartData.forEach(data => {	
-			chartRuns.forEach(run => {
-				if (run.name === data.name) {			
-					if (run.data === undefined) {
-						run.data = [];
-					}
-					run.data.push({
-						timestamp: data.timestamp,
-						value: data.value,
-						step: data.step,
-					});
+		// Insert placeholder chart object immediately
+		this.setState(prev => ({
+			charts: [
+				...prev.charts,
+				{
+					id: placeholderId,
+					metric,
+					loading: true // signal placeholder
 				}
-			});
-		});
+			]
+		}));
 
-		// add the new chart data to the state with a unique ID based on unix timestamp
-		let newCharts = [...this.state.charts];
-		const chartId = Date.now();
-		newCharts.push({ 
-			id: chartId,
-			data: chartRuns,
-			metric: metric,
-			context: {
-				smoothing: 0,
-				shownRuns: [],
-				hiddenSeries: [],
-				range: {min: 0, max: 0}
+		try {
+			// deep clone run selections and fetch chart data for each run
+			const chartRuns = structuredClone(this.props.pushSelectedRuns || []);
+			let chartData = await HTTP.fetchChart(chartRuns, metric);
+
+			// handle empty/failed fetch: remove placeholder and decrement pending renders
+			if (!chartData || chartData.length === 0) {
+				this.setState(prev => ({
+					charts: prev.charts.filter(c => c.id !== placeholderId)
+				}));
+				// only decrement if we are in URL sync mode
+				if (this.state.pendingChartRenders > 0) this.decrementPendingRenders();
+				return;
 			}
-		});
 
-		// update chart state with new data
-		this.setCharts(newCharts, true); // Pass `true` to indicate a chart render is complete
+			// add the run data to the cloned run selections (same logic as before)
+			chartData.forEach(data => {
+				chartRuns.forEach(run => {
+					if (run.name === data.name) {
+						if (run.data === undefined) run.data = [];
+						run.data.push({
+							timestamp: data.timestamp,
+							value: data.value,
+							step: data.step
+						});
+					}
+				});
+			});
 
-		// Hide loading overlay
-		this.setState({ 
-			loading: false,
-			showLoadingOverlay: false,
-		});
+			// build the final chart object (keep same id so it replaces placeholder)
+			const finalChart = {
+				id: placeholderId,
+				data: chartRuns,
+				metric: metric,
+				context: {
+					smoothing: 0,
+					shownRuns: [],
+					hiddenSeries: [],
+					range: { min: 0, max: 0 }
+				}
+			};
+
+			// replace placeholder with final chart object in-place
+			this.setState(prev => ({
+				charts: prev.charts.map(c => (c.id === placeholderId ? finalChart : c))
+			}), () => {
+				// After inserting the real chart, decrement pending if we are syncing from URL
+				if (this.state.pendingChartRenders > 0) this.decrementPendingRenders();
+			});
+
+			// notify App about active metrics and pending renders handled by setCharts if used
+			if (this.props.updateChartMetrics) {
+				const metrics = (this.state.charts || []).map(c => c.metric);
+				this.props.updateChartMetrics(metrics);
+			}
+		} catch (err) {
+			// on error remove placeholder and decrement pending renders
+			console.error("fetchChartData error:", err);
+			this.setState(prev => ({
+				charts: prev.charts.filter(c => c.id !== placeholderId)
+			}), () => {
+				if (this.state.pendingChartRenders > 0) this.decrementPendingRenders();
+			});
+		}
 	}
 
 	// add chart data to state for rendering 
@@ -316,7 +335,7 @@ class ChartPicker extends React.Component {
 	}
 
 	render() {
-		const { availableMetrics, charts, showLoadingOverlay } = this.state;
+		const { availableMetrics, charts } = this.state;
 
 		// Group metrics by system name
 		const groupedMetrics = availableMetrics.reduce((groups, metric) => {
@@ -331,13 +350,6 @@ class ChartPicker extends React.Component {
 
 		return (
 			<div id="chartPickerWrapper">
-				{/* Loading Overlay */}
-				{showLoadingOverlay && (
-					<div className="loadingOverlay">
-						<div className="loadingSpinner"></div>
-					</div>
-				)}
-
 				{/* Metric Sidebar */}
 				<div id="metricSidebar">
 					<div className="toggleDataPickerWrapper">
@@ -385,13 +397,22 @@ class ChartPicker extends React.Component {
 
 				{/* Charts List */}
 				<div id="chartsWrapper" className={this.props.className}>
-					{charts.sort((a, b) => b.id - a.id).map(chart => (
-						<Chart 
-							key={chart.id} 
-							chartData={chart}
-							pullChartExtras={this.syncData.bind(this)}
-							removeChart={this.removeChart.bind(this)}
-						/>
+					{(charts || []).sort((a, b) => b.id - a.id).map(chart => (
+						// single wrapper per chart — placeholder or chart
+						<div key={chart.id} className="chartWrapper">
+							{chart.loading ? (
+								// inline loading inside this chart's wrapper
+								<div className="loadingOverlay" style={{ position: 'absolute', top:0, left:0, right:0, bottom:0, backgroundColor: 'rgba(255,255,255,0.8)' }}>
+									<div className="loadingSpinner" />
+								</div>
+							) : (
+								<Chart
+									chartData={chart}
+									pullChartExtras={this.syncData.bind(this)}
+									removeChart={this.removeChart.bind(this)}
+								/>
+							)}
+						</div>
 					))}
 				</div>		
 			</div>
