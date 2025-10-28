@@ -9,12 +9,14 @@ class App extends React.Component {
 		super(props);
 		this.state = {
 			selectedRuns: [],
-			dataPickerOpen: true
+			dataPickerOpen: true,
+			isSyncingFromUrl: true // Flag to prevent premature URL updates
 		};
 	}
 
 	// Update the URL to reflect the selected runs
 	updateUrlWithSelectedRuns = (selectedRuns) => {
+		if (this.state.isSyncingFromUrl) return; // Prevent updating URL during initial sync
 		const runIds = selectedRuns.map(run => run.name);
 		const jsonRunIds = JSON.stringify(runIds); // Properly format as JSON array
 		const newUrl = `${window.location.pathname}?runs=${jsonRunIds}`;
@@ -23,32 +25,15 @@ class App extends React.Component {
 
 	// Pull data from data picker when it updates
 	updateSelectedRuns = (newSelectedRuns) => {
-		this.setState({ selectedRuns: newSelectedRuns });
-		this.updateUrlWithSelectedRuns(newSelectedRuns);
+		this.setState({ selectedRuns: newSelectedRuns }, () => {
+			// Ensure URL is updated after state change
+			this.updateUrlWithSelectedRuns(this.state.selectedRuns);
+		});
 	}
 
 	// Show or hide the data picker
 	toggleDataPicker = (toShow) => {
 		this.setState({ dataPickerOpen: toShow });
-	}
-
-	componentDidMount() {
-		// Check URL for `runs` query parameter and overwrite selected runs
-		const urlParams = new URLSearchParams(window.location.search);
-		const runsParam = urlParams.get('runs');
-		if (runsParam) {
-			try {
-				// Parse the `runs` parameter as a JSON array
-				const runIds = JSON.parse(runsParam); // Ensure proper JSON parsing
-				if (Array.isArray(runIds)) {
-					this.setState({ selectedRuns: runIds.map(id => ({ name: id })) });
-				} else {
-					console.error("Invalid `runs` parameter format. Expected a JSON array.");
-				}
-			} catch (error) {
-				console.error("Failed to parse `runs` parameter:", error);
-			}
-		}
 	}
 
 	render() {  
@@ -57,8 +42,9 @@ class App extends React.Component {
 			<div id="appWrapper">
 				<DataPicker 
 					toHide={!dataPickerOpen}
-					pullSelectedRuns={this.updateSelectedRuns} 
+					pullSelectedRuns={this.updateSelectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
+					pushSelectedRuns={selectedRuns}
 				/>
 				<ChartPicker 
 					toHide={dataPickerOpen}

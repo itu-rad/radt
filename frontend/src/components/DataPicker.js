@@ -84,19 +84,44 @@ class DataPicker extends React.Component {
 	}
 
 	componentDidMount() {
-
-		// fetch data to populate pickers
+		// Fetch data to populate pickers
 		this.fetchExperiments();
 		this.fetchRuns();
 
-		// check if any selected runs are in local storage
-		const localRunsAndWorkloadData = pullFromLocalStorage();
-		if (localRunsAndWorkloadData.runData !== undefined && localRunsAndWorkloadData.workloadData !== undefined) {
-			this.setState({
-				selectedWorkloads: localRunsAndWorkloadData.workloadData,
-				selectedRuns: localRunsAndWorkloadData.runData
-			});
-			this.props.pullSelectedRuns(localRunsAndWorkloadData.runData);
+		// Check if `runs` exists in the URL parameters
+		const urlParams = new URLSearchParams(window.location.search);
+		const runsParam = urlParams.get('runs');
+
+		if (runsParam) {
+			try {
+				// Parse the `runs` parameter as a JSON array
+				const runIds = JSON.parse(runsParam);
+				if (Array.isArray(runIds)) {
+					console.log("Parsed run IDs from URL:", runIds);
+					this.setState({ isFetching: true }); // Indicate fetching state
+					this.fetchRuns().then(() => {
+						const selectedRuns = this.state.runData.filter(run => runIds.includes(run.name));
+						this.setState({ selectedRuns, isFetching: false }, () => {
+							this.props.pullSelectedRuns(this.state.selectedRuns);
+						});
+					});
+				} else {
+					console.error("Invalid `runs` parameter format. Expected a JSON array.");
+				}
+			} catch (error) {
+				console.error("Failed to parse `runs` parameter:", error);
+			}
+		} else {
+			// Only read from local storage if `runs` is not in the URL
+			const localRunsAndWorkloadData = pullFromLocalStorage();
+			if (localRunsAndWorkloadData.runData !== undefined && localRunsAndWorkloadData.workloadData !== undefined) {
+				this.setState({
+					selectedWorkloads: localRunsAndWorkloadData.workloadData,
+					selectedRuns: localRunsAndWorkloadData.runData
+				}, () => {
+					this.props.pullSelectedRuns(this.state.selectedRuns);
+				});
+			}
 		}
 	}
 
@@ -115,8 +140,20 @@ class DataPicker extends React.Component {
 
 	// fetch all runs 
 	async fetchRuns() {
+		this.setState({ isFetching: true }); // Indicate fetching state
 		const data = await HTTP.fetchRuns();
-		this.setState({ runData: data });
+		console.log("Fetched runs:", data);
+		this.setState({ runData: data, isFetching: false }, () => {
+			// Sync selected runs from URL using runData
+			if (this.props.syncRunsFromUrl) {
+				console.log("Syncing selected runs from URL...", this.state.runData);
+				this.props.syncRunsFromUrl(this.state.runData);
+				const selectedRuns = this.props.pushSelectedRuns;
+				this.setState({ selectedRuns: selectedRuns });
+				this.props.pullSelectedRuns(this.state.selectedRuns);
+				submitToLocalStorage(this.state.selectedWorkloads, selectedRuns);
+			}
+		});
 	};
 
 	// select experiment and render its runs to the runs component 
@@ -203,13 +240,11 @@ class DataPicker extends React.Component {
 		this.setState({
 			selectedWorkloads: newSelectedWorkloads,
 			selectedRuns: newSelectedRuns
+		}, () => {
+			// Ensure `pullSelectedRuns` is called after state update
+			this.props.pullSelectedRuns(this.state.selectedRuns);
+			submitToLocalStorage(this.state.selectedWorkloads, this.state.selectedRuns);
 		});
-
-		// pull copy of selected runs up to parent
-		this.props.pullSelectedRuns(newSelectedRuns);
-
-		// add selected runs and workloads to local storage to persist through refresh
-		submitToLocalStorage(newSelectedWorkloads, newSelectedRuns);
 	}
 
 	// clear all selections
