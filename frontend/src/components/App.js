@@ -11,13 +11,14 @@ class App extends React.Component {
 			selectedRuns: [],
 			chartMetrics: [], // added: currently selected chart metrics
 			dataPickerOpen: true,
-			isSyncingFromUrl: true // Flag to prevent premature URL updates
+			isSyncingFromUrl: true, // Flag to prevent premature URL updates
+			urlSyncInProgress: true // New flag to track URL sync progress
 		};
 	}
 
 	// Update the URL to reflect the selected runs and charts
 	updateUrlWithSelectedRuns = (selectedRuns, chartMetrics = null) => {
-		// if (this.state.isSyncingFromUrl) return; // Prevent updating URL during initial sync
+		if (this.state.urlSyncInProgress) return; // Prevent updates during sync
 		const runIds = (selectedRuns || []).map(run => run.name);
 		// prefer explicit chartMetrics param, otherwise use state
 		const charts = chartMetrics !== null ? chartMetrics : this.state.chartMetrics || [];
@@ -30,14 +31,20 @@ class App extends React.Component {
 	// Pull data from data picker when it updates
 	updateSelectedRuns = (newSelectedRuns) => {
 		this.setState({ selectedRuns: newSelectedRuns }, () => {
-			// Ensure URL is updated after state change (preserve current charts)
 			this.updateUrlWithSelectedRuns(this.state.selectedRuns);
 		});
 	}
 
-	// added: update chart metrics and update URL
+	// Update chart metrics and URL
 	updateChartMetrics = (newChartMetrics) => {
 		this.setState({ chartMetrics: newChartMetrics || [] }, () => {
+			this.updateUrlWithSelectedRuns(this.state.selectedRuns, this.state.chartMetrics);
+		});
+	}
+
+	// Mark URL sync as complete
+	markUrlSyncComplete = () => {
+		this.setState({ urlSyncInProgress: false }, () => {
 			this.updateUrlWithSelectedRuns(this.state.selectedRuns, this.state.chartMetrics);
 		});
 	}
@@ -56,12 +63,14 @@ class App extends React.Component {
 					pullSelectedRuns={this.updateSelectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
 					pushSelectedRuns={selectedRuns}
+					markUrlSyncComplete={this.markUrlSyncComplete} // Ensure this is passed
 				/>
 				<ChartPicker 
 					toHide={dataPickerOpen}
 					pushSelectedRuns={selectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
-					updateChartMetrics={this.updateChartMetrics} // new prop
+					updateChartMetrics={this.updateChartMetrics}
+					markUrlSyncComplete={this.markUrlSyncComplete} // Ensure this is passed
 					className={dataPickerOpen ? "blurred" : ""} // Pass blurred class
 				/>
 			</div>

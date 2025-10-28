@@ -62,8 +62,11 @@ class ChartPicker extends React.Component {
 		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
 			const pending = this._pendingChartsFromUrl;
 			this._pendingChartsFromUrl = null;
-			// fetch each metric sequentially (fire-and-forget is fine)
-			pending.forEach(metric => this.fetchChartData(metric));
+			Promise.all(pending.map(metric => this.fetchChartData(metric))).then(() => {
+				if (this.props.markUrlSyncComplete) {
+					this.props.markUrlSyncComplete(); // Notify App that sync is complete
+				}
+			});
 		}
 	}
 
