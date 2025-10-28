@@ -15,7 +15,8 @@ class ChartPicker extends React.Component {
 			loading: false,
 			availableMetrics: [],
 			showMetrics: false,
-			charts: []
+			charts: [],
+			pendingChartRenders: 0 // Track pending chart renders
 		};
 
 		this.inputField = React.createRef();
@@ -62,10 +63,13 @@ class ChartPicker extends React.Component {
 		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
 			const pending = this._pendingChartsFromUrl;
 			this._pendingChartsFromUrl = null;
-			Promise.all(pending.map(metric => this.fetchChartData(metric))).then(() => {
-				if (this.props.markUrlSyncComplete) {
-					this.props.markUrlSyncComplete(); // Notify App that sync is complete
-				}
+
+			// Track the number of charts being fetched
+			this.setState({ pendingChartRenders: pending.length }, () => {
+				Promise.all(pending.map(metric => this.fetchChartData(metric))).then(() => {
+					// Wait for all charts to finish rendering
+					this.checkAllChartsRendered();
+				});
 			});
 		}
 	}
@@ -98,6 +102,7 @@ class ChartPicker extends React.Component {
 		// prevent app getting stuck on load if server fails to fetch
 		if (chartData.length === 0) {
 			this.setState({ loading: false });
+			this.decrementPendingRenders(); // Decrement pending renders even if no data
 			return;
 		}
 
@@ -133,21 +138,23 @@ class ChartPicker extends React.Component {
 		});
 
 		// update chart state with new data
-		this.setCharts(newCharts);
+		this.setCharts(newCharts, true); // Pass `true` to indicate a chart render is complete
 	}
 
 	// add chart data to state for rendering 
-	setCharts(newChartData) {
+	setCharts(newChartData, chartRendered = false) {
 
-		// apply chart data to state
 		this.setState({
 			charts: newChartData,
-			loading: false,
+			loading: false
 		}, () => {
 			// notify App about the active metrics
 			if (this.props.updateChartMetrics) {
 				const metrics = (newChartData || []).map(c => c.metric);
 				this.props.updateChartMetrics(metrics);
+			}
+			if (chartRendered) {
+				this.decrementPendingRenders(); // Decrement pending renders if a chart is rendered
 			}
 		});
 
@@ -162,6 +169,23 @@ class ChartPicker extends React.Component {
 
 			// save data to local storage to persist through refreshes
 			//storeChartDataInLocalStorage(newChartData);
+		}
+	}
+
+	// Decrement the pending chart renders and check if all are done
+	decrementPendingRenders() {
+		this.setState(
+			prevState => ({ pendingChartRenders: prevState.pendingChartRenders - 1 }),
+			() => {
+				this.checkAllChartsRendered();
+			}
+		);
+	}
+
+	// Check if all charts are rendered and call markUrlSyncComplete
+	checkAllChartsRendered() {
+		if (this.state.pendingChartRenders === 0 && this.props.markUrlSyncComplete) {
+			this.props.markUrlSyncComplete(); // Notify App that sync is complete
 		}
 	}
 
