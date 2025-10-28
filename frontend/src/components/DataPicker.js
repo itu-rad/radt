@@ -230,42 +230,43 @@ class DataPicker extends React.Component {
 	}
 
 	render() {
-
 		const {
 			experimentData,
-			visibleWorkloads,
 			visibleRuns,
 			activeExperimentId,
-			activeWorkload,
-			selectedWorkloads,
 			selectedRuns,
 		} = this.state;
 
 		return (
-			<div id="dataPickerWrapperBackground" className={this.props.toHide ? null : "hide"}>
-				<div id="dataPickerWrapper">
-					<Experiments
-						data={experimentData}
-						activeExperimentId={activeExperimentId}
-						onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
-					/>
-					<Runs
-						data={visibleRuns}
-						selectedRuns={selectedRuns}
-						setSelectedRuns={this.state.setSelectedRuns}
-						onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
-					/>
-					<Selections
-						selectedRuns={selectedRuns}
-						onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-						bottomOfScrollRef={this.bottomOfScrollRef}
-					/>
-					<button className="clearBtn" onClick={() => this.clearAllSelections()}>
-						Clear All
-					</button>
-					<button className="selectionConfirmBtn" onClick={() => this.props.toggleDataPicker(false)}>
-						Save
-					</button>
+			<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
+				<div id="dataPickerContent">
+					<button className="closeBtn" onClick={() => this.props.toggleDataPicker(false)}>×</button>
+					<div id="dataPickerHorizontalWrapper">
+						<Experiments
+							data={experimentData}
+							activeExperimentId={activeExperimentId}
+							onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
+						/>
+						<Runs
+							data={visibleRuns}
+							selectedRuns={selectedRuns}
+							setSelectedRuns={this.state.setSelectedRuns}
+							onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
+						/>
+						<Selections
+							selectedRuns={selectedRuns}
+							onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
+							bottomOfScrollRef={this.bottomOfScrollRef}
+						/>
+					</div>
+					<div className="slideoutButtons">
+						<button className="clearBtn" onClick={() => this.clearAllSelections()}>
+							Clear All
+						</button>
+						<button className="selectionConfirmBtn" onClick={() => this.props.toggleDataPicker(false)}>
+							Save
+						</button>
+					</div>
 				</div>
 			</div>
 
@@ -285,7 +286,7 @@ function Experiments(props) {
 		.map(e => ({ ...e, key: e.id }));
 
 	const columns = [
-		{ title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
+		{ title: 'ID', dataIndex: 'id', key: 'id'},
 		{ title: 'Name', dataIndex: 'name', key: 'name' }
 	];
 

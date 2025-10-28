@@ -28,12 +28,12 @@ class App extends React.Component {
 		return (   
 			<div id="appWrapper">		
 				<DataPicker 
-					toHide={dataPickerOpen}
+					toHide={!dataPickerOpen}
 					pullSelectedRuns={this.updateSelectedRuns} 
 					toggleDataPicker={this.toggleDataPicker}
 				/>
 				<ChartPicker 
-					toHide={!dataPickerOpen}
+					toHide={dataPickerOpen}
 					pushSelectedRuns={selectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
 				/>
