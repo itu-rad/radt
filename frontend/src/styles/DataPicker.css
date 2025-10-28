@@ -164,6 +164,7 @@
 	height: 100%;
 	display: flex;
 	flex-direction: column;
+  border-left: 1px solid #b8b8b8;
 }
 
 .selectionsHeader {
@@ -181,11 +182,8 @@
 	overflow-y: scroll;
 	scrollbar-width: none; /* Firefox */
 	box-sizing: border-box;
-	border-left: 1px solid #b8b8b8;
 }
-#selectionsWrapper::-webkit-scrollbar {
-    /* display: none; */
-}
+
 #selectionsWrapper .workloadWrapper {
     box-sizing: border-box;
     border: 1px solid black;

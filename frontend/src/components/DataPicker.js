@@ -262,16 +262,16 @@ class DataPicker extends React.Component {
 						<div id="selectionsContainer">
 							<div className="selectionsHeader">
 								<button
-									className="toggleSelectionsBtn"
-									onClick={() => this.props.toggleDataPicker(false)}
-								>
-									Slide In
-								</button>
-								<button
 									className="clearBtn"
 									onClick={() => this.clearAllSelections()}
 								>
 									Clear All
+								</button>
+								<button
+									className="toggleSelectionsBtn"
+									onClick={() => this.props.toggleDataPicker(false)}
+								>
+									Explore
 								</button>
 							</div>
 							<Selections

@@ -32,7 +32,7 @@ class App extends React.Component {
 						className="toggleDataPickerBtn" 
 						onClick={() => this.toggleDataPicker(true)}
 					>
-						Slide Out
+						Data
 					</button>
 				)}
 				<DataPicker 
