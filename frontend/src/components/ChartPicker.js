@@ -225,6 +225,18 @@ class ChartPicker extends React.Component {
 
 	render() {
 		const { availableMetrics, charts } = this.state;
+
+		// Group metrics by system name
+		const groupedMetrics = availableMetrics.reduce((groups, metric) => {
+			const match = metric.match(/^system\/([^-]+)-/);
+			const groupName = match ? match[1] : "Other";
+			if (!groups[groupName]) {
+				groups[groupName] = [];
+			}
+			groups[groupName].push(metric);
+			return groups;
+		}, {});
+
 		return (
 			<div id="chartPickerWrapper">
 				{/* Metric Sidebar */}
@@ -249,14 +261,19 @@ class ChartPicker extends React.Component {
 						</button>
 					</div>
 					<div id="metricBtnList">
-						{availableMetrics.map(metric => (
-							<button
-								key={metric}
-								className="metricBtn"
-								onClick={() => this.fetchChartData(metric)}
-							>
-								{metric}
-							</button>
+						{Object.entries(groupedMetrics).map(([groupName, metrics]) => (
+							<div key={groupName} className="metricGroup">
+								<h4 className="metricGroupName">{groupName}</h4> {/* Group header */}
+								{metrics.map(metric => (
+									<button
+										key={metric}
+										className="metricBtn"
+										onClick={() => this.fetchChartData(metric)}
+									>
+										{metric}
+									</button>
+								))}
+							</div>
 						))}
 						<div id="noData" className={availableMetrics.length === 0 ? null : "hide"}>
 							No data available for current selection.
