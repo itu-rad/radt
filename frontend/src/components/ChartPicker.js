@@ -61,8 +61,11 @@ class ChartPicker extends React.Component {
 
 		// Ensure all charts from the URL are processed
 		if (this._pendingChartsFromUrl && this.props.pushSelectedRuns && this.props.pushSelectedRuns.length > 0) {
-			const pending = this._pendingChartsFromUrl;
+			let pending = this._pendingChartsFromUrl;
 			this._pendingChartsFromUrl = null;
+
+			// Reverse the order of the charts to render right-to-left
+			pending = pending.reverse();
 
 			// Track the number of charts being fetched
 			this.setState({ pendingChartRenders: pending.length }, async () => {
