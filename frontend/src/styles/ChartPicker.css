@@ -33,8 +33,6 @@
     transform: translate(-50%, -50%);
 }
 #chartPickerWrapper #metricBtnList {
-    position: fixed;
-    bottom: 0; /* Anchor to the bottom */
     left: 0;
     width: 250px;
     height: 94%;
@@ -66,8 +64,17 @@
 	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
 	display: flex;
 	flex-direction: column;
-	padding: 10px;
 	box-sizing: border-box;
+}
+
+.toggleDataPickerWrapper {
+	height: 60px; /* Enforce fixed height */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0; /* Prevent shrinking */
+	background-color: #f4f4f4; /* Match sidebar background */
+	border-bottom: 1px solid #ccc;
 }
 
 .toggleDataPickerBtn {
@@ -80,7 +87,6 @@
 	font-size: 14px;
 	font-weight: bold;
 	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-	margin-bottom: 10px;
 }
 
 .toggleDataPickerBtn:hover {
@@ -88,8 +94,10 @@
 }
 
 #metricBtnList {
-	flex: 1;
+	flex: 1; /* Scale to fill remaining space */
 	overflow-y: auto;
+	padding: 10px;
+	box-sizing: border-box;
 }
 
 #chartPickerWrapper .metricBtn {

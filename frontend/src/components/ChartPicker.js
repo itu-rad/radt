@@ -229,12 +229,14 @@ class ChartPicker extends React.Component {
 			<div id="chartPickerWrapper">
 				{/* Metric Sidebar */}
 				<div id="metricSidebar">
-					<button 
-						className="toggleDataPickerBtn" 
-						onClick={() => this.props.toggleDataPicker(true)}
-					>
-						Data
-					</button>
+					<div className="toggleDataPickerWrapper">
+						<button 
+							className="toggleDataPickerBtn" 
+							onClick={() => this.props.toggleDataPicker(true)}
+						>
+							Data
+						</button>
+					</div>
 					<div id="metricBtnList">
 						{availableMetrics.map(metric => (
 							<button
