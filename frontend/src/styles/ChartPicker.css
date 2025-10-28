@@ -55,21 +55,59 @@
 #chartPickerWrapper #metricBtnList::-webkit-scrollbar {
     /* display: none; */
 }
-#chartPickerWrapper .metricBtn {
-    display: block;
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 5px;
-    background-color: #115785;
-    color: white;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    font-size: 14px;
-    border-radius: 4px;
+#metricSidebar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 250px;
+	height: 100%;
+	background-color: #f4f4f4;
+	border-right: 1px solid #ccc;
+	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+	box-sizing: border-box;
 }
+
+.toggleDataPickerBtn {
+	width: 100%;
+	height: 40px;
+	background-color: #115785;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+	margin-bottom: 10px;
+}
+
+.toggleDataPickerBtn:hover {
+	background-color: #0b4f6c;
+}
+
+#metricBtnList {
+	flex: 1;
+	overflow-y: auto;
+}
+
+#chartPickerWrapper .metricBtn {
+	display: block;
+	width: 100%;
+	padding: 10px;
+	margin-bottom: 5px;
+	background-color: #115785;
+	color: white;
+	border: none;
+	cursor: pointer;
+	text-align: left;
+	font-size: 14px;
+	border-radius: 4px;
+}
+
 #chartPickerWrapper .metricBtn:hover {
-    background-color: #0b4f6c;
+	background-color: #0b4f6c;
 }
 #noData {
     text-align: center;

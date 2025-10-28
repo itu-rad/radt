@@ -224,51 +224,34 @@ class ChartPicker extends React.Component {
 	}
 
 	render() {
-		const { availableMetrics, charts, loading } = this.state;
+		const { availableMetrics, charts } = this.state;
 		return (
 			<div id="chartPickerWrapper">
-
-				{/*} Data Button {*/}
-				<button 
-					id="dataLogo"
-					onClick={() => this.props.toggleDataPicker(true)}
-					className={this.props.toHide ? null : "hide"}
-				>
-					<img src={DataIcon} className="dataSVG" alt="Choose Data" title="Choose Data" />
-				</button>
-
-				{/*} Download & Upload Buttons {*/}
-				<div 
-					id="downloadUploadWrapper"
-					//className={this.props.toHide ? null : "hide"}
-				>			
-					<label className="upload" htmlFor="hiddenUpload">
-						<input id="hiddenUpload" type="file" ref={this.inputField} onChange={this.uploadLocalData.bind(this)} />
-						<img src={UploadIcon} className="uploadSVG" alt="Upload Charts" title="Upload Charts" />
-					</label>
-					
-					<button className="download" onClick={() => this.downloadLocalData()}>
-						<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
+				{/* Metric Sidebar */}
+				<div id="metricSidebar">
+					<button 
+						className="toggleDataPickerBtn" 
+						onClick={() => this.props.toggleDataPicker(true)}
+					>
+						Data
 					</button>
+					<div id="metricBtnList">
+						{availableMetrics.map(metric => (
+							<button
+								key={metric}
+								className="metricBtn"
+								onClick={() => this.fetchChartData(metric)}
+							>
+								{metric}
+							</button>
+						))}
+						<div id="noData" className={availableMetrics.length === 0 ? null : "hide"}>
+							No data available for current selection.
+						</div>
+					</div>
 				</div>
 
-				{/*} Metrics List {*/}
-				<div 
-					id="metricBtnList"
-				>
-					{availableMetrics.map(metric => (
-						<button
-							key={metric}
-							className="metricBtn"
-							onClick={() => this.fetchChartData(metric)}
-						>
-							{metric}
-						</button>
-					))}
-					<div id="noData" className={availableMetrics.length === 0 ? null : "hide"}>No data available for current selection.</div>
-				</div>
-
-				{/*} Charts List {*/}
+				{/* Charts List */}
 				<div id="chartsWrapper">
 					{charts.sort((a, b) => b.id - a.id).map(chart => (
 						<Chart 
