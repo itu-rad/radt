@@ -91,6 +91,7 @@ class DataPicker extends React.Component {
 		// Check if `runs` exists in the URL parameters
 		const urlParams = new URLSearchParams(window.location.search);
 		const runsParam = urlParams.get('runs');
+		const chartsParam = urlParams.get('charts'); // Check for charts in the URL
 
 		if (runsParam) {
 			try {
@@ -103,6 +104,11 @@ class DataPicker extends React.Component {
 						const selectedRuns = this.state.runData.filter(run => runIds.includes(run.name));
 						this.setState({ selectedRuns, isFetching: false }, () => {
 							this.props.pullSelectedRuns(this.state.selectedRuns);
+
+							// Mark URL sync as complete if charts are empty
+							if (!chartsParam || JSON.parse(chartsParam).length === 0) {
+								this.props.markUrlSyncComplete();
+							}
 						});
 					});
 				} else {
@@ -120,8 +126,9 @@ class DataPicker extends React.Component {
 					selectedRuns: localRunsAndWorkloadData.runData
 				}, () => {
 					this.props.pullSelectedRuns(this.state.selectedRuns);
-					if (this.state.selectedRuns.length === 0) {
-						// Mark URL sync as complete if no runs are available
+
+					// Mark URL sync as complete if no runs or charts are available
+					if (this.state.selectedRuns.length === 0 && (!chartsParam || JSON.parse(chartsParam).length === 0)) {
 						this.props.markUrlSyncComplete();
 					}
 				});
