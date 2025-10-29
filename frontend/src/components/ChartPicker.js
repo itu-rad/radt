@@ -401,7 +401,7 @@ class ChartPicker extends React.Component {
 						// Render an inline loading wrapper only for placeholders
 						if (chart.loading) {
 							return (
-								<div key={chart.id} className="chartWrapper">
+								<div key={chart.id} className="chartWrapper" style={{ height: '690px'}}>
 									<div
 										className="loadingOverlay"
 										style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)' }}
