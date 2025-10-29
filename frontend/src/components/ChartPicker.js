@@ -36,10 +36,14 @@ class ChartPicker extends React.Component {
 				const chartMetrics = JSON.parse(decodeURIComponent(chartsParam));
 				if (Array.isArray(chartMetrics) && chartMetrics.length > 0) {
 					this._pendingChartsFromUrl = chartMetrics;
+				}else{
+					this.props.markUrlSyncComplete();
 				}
 			} catch (e) {
 				console.error("Failed to parse `charts` URL param:", e);
 			}
+		}else{
+			this.props.markUrlSyncComplete();
 		}
 
 		// attempt to load localStorage charts (as fallback)
