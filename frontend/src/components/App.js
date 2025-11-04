@@ -26,6 +26,7 @@ class App extends React.Component {
 		const jsonChartMetrics = JSON.stringify(charts);
 		const newUrl = `${window.location.pathname}?runs=${jsonRunIds}&charts=${jsonChartMetrics}`;
 		window.history.replaceState(null, '', newUrl);
+		window.parent.postMessage({ type: 'href', href: newUrl }, '*');
 	}
 
 	// Pull data from data picker when it updates
@@ -58,23 +59,23 @@ class App extends React.Component {
 		this.setState({ dataPickerOpen: toShow });
 	}
 
-	render() {  
+	render() {
 		const { selectedRuns, dataPickerOpen, isLoading } = this.state;
-		return (   
+		return (
 			<div id="appWrapper">
 				{isLoading && (
 					<div className="loadingOverlay">
 						<div className="loadingSpinner"></div>
 					</div>
 				)}
-				<DataPicker 
+				<DataPicker
 					toHide={!dataPickerOpen}
 					pullSelectedRuns={this.updateSelectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
 					pushSelectedRuns={selectedRuns}
 					markUrlSyncComplete={this.markUrlSyncComplete}
 				/>
-				<ChartPicker 
+				<ChartPicker
 					toHide={dataPickerOpen}
 					pushSelectedRuns={selectedRuns}
 					toggleDataPicker={this.toggleDataPicker}
