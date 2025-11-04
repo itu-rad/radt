@@ -28,6 +28,7 @@
 /********************************************** EXPERIMENTS */
 #experimentWrapper {
     width: 18%;
+    min-width: 225px;
     height: 100%;
     overflow-x: hidden;
     overflow-y: scroll;
@@ -82,12 +83,13 @@
 #runsWrapper {
 	display: block;
 	width: 65%; /* Adjusted to 65% of the width */
-    height: 100%;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none; /* Firefox */
-    box-sizing: border-box;
-    text-align: center;
+  min-width: 500px;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
+  box-sizing: border-box;
+  text-align: center;
 }
 #runsWrapper::-webkit-scrollbar {
     /* display: none; */
@@ -161,6 +163,7 @@
 #selectionsContainer {
 	position: relative;
 	width: 17%; /* Matches Selections width */
+  min-width: 200px;
 	height: 100%;
 	display: flex;
 	flex-direction: column;
@@ -551,9 +554,12 @@
 /********************************************** SLIDEOUT DATA PICKER */
 #dataPickerSlideout {
 	position: fixed;
+  display: flex;
+  flex-direction: column;
 	top: 0;
 	left: 0;
-	width: 70%;
+	width: clamp(70%, 80vw, 95%);
+  padding: 10px;
 	height: 100%;
 	background-color: #fafafa;
 	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
@@ -571,7 +577,7 @@
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	padding: 10px;
+	/* padding: 10px; */
 	box-sizing: border-box;
 }
 
