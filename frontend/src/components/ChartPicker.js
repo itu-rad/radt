@@ -17,7 +17,10 @@ class ChartPicker extends React.Component {
 			charts: [],
 			pendingChartRenders: 0,
 			// keep showLoadingOverlay for backwards compat if other code uses it
-			showLoadingOverlay: false
+			showLoadingOverlay: false,
+
+			// NEW: multi-axis single-chart mode
+			multiAxisMode: false
 		};
 
 		this.inputField = React.createRef();
@@ -338,8 +341,21 @@ class ChartPicker extends React.Component {
 		}	
 	}
 
+	// NEW: toggle multi-axis single-chart mode
+	toggleMultiAxis = (toState = null) => {
+		this.setState(prev => ({
+			multiAxisMode: typeof toState === 'boolean' ? toState : !prev.multiAxisMode
+		}), () => {
+			// If leaving multi-axis mode, ensure App gets updated metrics as before
+			if (!this.state.multiAxisMode && this.props.updateChartMetrics) {
+				const metrics = (this.state.charts || []).map(c => c.metric);
+				this.props.updateChartMetrics(metrics);
+			}
+		});
+	}
+
 	render() {
-		const { availableMetrics, charts } = this.state;
+		const { availableMetrics, charts, multiAxisMode } = this.state;
 
 		// Group metrics by system name
 		const groupedMetrics = availableMetrics.reduce((groups, metric) => {
@@ -352,6 +368,43 @@ class ChartPicker extends React.Component {
 			return groups;
 		}, {});
 
+		// NEW: build a combined chart object when multiAxisMode is enabled
+		let combinedChart = null;
+		if (multiAxisMode) {
+			// create a synthetic chart that contains each run+metric as a separate series
+			const combinedSeries = [];
+			(charts || []).forEach(chart => {
+				// chart.data is an array of run objects with their own data arrays
+				(chart.data || []).forEach(run => {
+					combinedSeries.push({
+						// unique name: run + metric so Chart can label series
+						name: `${run.name} :: ${chart.metric}`,
+						// carry basic run metadata through
+						runName: run.name,
+						experimentName: run.experimentName,
+						workload: run.workload,
+						// preserve original metric so Chart can label y-axis
+						metric: chart.metric,
+						// series datapoints as provided by fetchChart (timestamp/step/value)
+						// keep objects (timestamp/value) - Chart will handle transformation
+						data: (run.data || []).slice()
+					});
+				});
+			});
+			combinedChart = {
+				id: 'multi-axis',
+				metric: 'multi-axis',
+				// Chart component expects a `data` field; provide series array
+				data: combinedSeries,
+				context: {
+					smoothing: 0,
+					shownRuns: [],
+					hiddenSeries: [],
+					range: { min: 0, max: 0 }
+				}
+			};
+		}
+
 		return (
 			<div id="chartPickerWrapper">
 				{/* Metric Sidebar */}
@@ -363,6 +416,26 @@ class ChartPicker extends React.Component {
 						>
 							Data
 						</button>
+
+						{/* NEW: Multi-axis toggle */}
+						<button
+							className={`multiAxisBtn ${multiAxisMode ? 'active' : ''}`}
+							title="Toggle multi-axis single chart"
+							onClick={() => this.toggleMultiAxis()}
+							style={{
+								marginLeft: 8,
+								width: 140,
+								height: 36,
+								background: multiAxisMode ? '#115785' : '#fff',
+								color: multiAxisMode ? '#fff' : '#115785',
+								border: '1px solid #115785',
+								cursor: 'pointer',
+								fontWeight: '600'
+							}}
+						>
+							{multiAxisMode ? 'Multi-Axis: ON' : 'Multi-Axis: OFF'}
+						</button>
+
 						<label className="upload">
 							<input 
 								type="file" 
@@ -375,6 +448,7 @@ class ChartPicker extends React.Component {
 							<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
 						</button>
 					</div>
+
 					<div id="metricBtnList">
 						{Object.entries(groupedMetrics).map(([groupName, metrics]) => (
 							<div key={groupName} className="metricGroup">
@@ -401,30 +475,47 @@ class ChartPicker extends React.Component {
 
 				{/* Charts List */}
 				<div id="chartsWrapper" className={this.props.className}>
-					{(charts || []).sort((a, b) => b.id - a.id).map(chart => {
-						// Render an inline loading wrapper only for placeholders
-						if (chart.loading) {
-							return (
-								<div key={chart.id} className="chartWrapper" style={{ height: '690px'}}>
-									<div
-										className="loadingOverlay"
-										style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)' }}
-									>
-										<div className="loadingSpinner" />
-									</div>
-								</div>
-							);
-						}
-						// Render the Chart component directly (it provides its own wrapper)
-						return (
+					{/* NEW: when in multi-axis mode render a single combined chart */}
+					{multiAxisMode ? (
+						combinedChart ? (
 							<Chart
-								key={chart.id}
-								chartData={chart}
+								key={combinedChart.id}
+								chartData={combinedChart}
+								// Combined chart will use syncData/removeChart differently;
+								// removeChart can be a no-op or mapped to clear all.
 								pullChartExtras={this.syncData.bind(this)}
-								removeChart={this.removeChart.bind(this)}
+								removeChart={() => this.setCharts([])}
 							/>
-						);
-					})}
+						) : (
+							<div style={{ padding: 20 }}>No chart data available to combine.</div>
+						)
+					) : (
+						// ...existing behavior: render one Chart per chart item ...
+						(charts || []).sort((a, b) => b.id - a.id).map(chart => {
+							// Render an inline loading wrapper only for placeholders
+							if (chart.loading) {
+								return (
+									<div key={chart.id} className="chartWrapper" style={{ height: '690px'}}>
+										<div
+											className="loadingOverlay"
+											style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)' }}
+										>
+											<div className="loadingSpinner" />
+										</div>
+									</div>
+								);
+							}
+							// Render the Chart component directly (it provides its own wrapper)
+							return (
+								<Chart
+									key={chart.id}
+									chartData={chart}
+									pullChartExtras={this.syncData.bind(this)}
+									removeChart={this.removeChart.bind(this)}
+								/>
+							);
+						})
+					)}
 				</div>		
 			</div>
 		);

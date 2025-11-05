@@ -238,7 +238,191 @@ class Chart extends React.Component {
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
 
-        //console.log("Generating..."); // debugging
+        // NEW: support a combined multi-axis chart created by ChartPicker
+        if (newChartData && newChartData.metric === 'multi-axis') {
+            const combined = newChartData.data || []; // array of run-level objects with .metric, .workload, .data (timestamp/value), etc.
+
+            // Group by metric -> then by workloadId (same grouping logic as single-mode)
+            const metricsMap = new Map(); // metric -> Map(workloadId -> seriesObj)
+
+            combined.forEach(run => {
+                if (!run.data || run.data.length === 0) return;
+                const metric = run.metric || 'unknown';
+
+                // ensure metric entry exists
+                if (!metricsMap.has(metric)) metricsMap.set(metric, new Map());
+                const workloadMap = metricsMap.get(metric);
+
+                // compute workloadId same as single-mode logic (safe guards)
+                const rawWorkload = run.workload || '';
+                let workloadId = rawWorkload;
+
+                // Determine letter/runName with safe fallbacks
+                const letter = (typeof run.letter === 'string' && run.letter.length > 0) ? run.letter : null;
+                const runIdForLabel = run.runName || run.name || '';
+
+                // only attempt the grouping/label tweak if workload contains a '-' as expected
+                const dashPos = rawWorkload.indexOf('-');
+                const tail = dashPos >= 0 ? rawWorkload.substring(dashPos + 1) : '';
+
+                if (tail === "null" || newShownRuns.indexOf(rawWorkload) > -1) {
+                    if (!letter) {
+                        // no letter provided -> fall back to showing run id snippet
+                        if (dashPos >= 0) {
+                            const removeNull = rawWorkload.substring(0, dashPos);
+                            workloadId = removeNull + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                        } else {
+                            workloadId = rawWorkload + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                        }
+                    } else {
+                        // letter present and is a string
+                        if (letter.length > 1) {
+                            workloadId = rawWorkload + " " + letter;
+                        } else {
+                            workloadId = rawWorkload + " " + letter + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                        }
+                    }
+                }
+
+                // find or create series for this metric+workload
+                if (!workloadMap.has(workloadId)) {
+                    workloadMap.set(workloadId, {
+                        id: workloadId,
+                        data: [],
+                        custom: { runs: [] },
+                        metric: metric
+                    });
+                }
+                const seriesObj = workloadMap.get(workloadId);
+
+                // append run-level metadata for tooltip (keep only relevant fields)
+                const metadata = { 
+                    name: run.runName || run.name,
+                    experimentName: run.experimentName,
+                    workload: rawWorkload,
+                    letter: run.letter ?? null,
+                    model: run.model ?? undefined,
+                    source: run.source ?? undefined,
+                    params: run.params ?? undefined
+                };
+                seriesObj.custom.runs.push(metadata);
+
+                // append data points (convert objects -> [timestamp,value])
+                run.data.forEach(pt => {
+                    seriesObj.data.push([pt.timestamp, pt.value]);
+                });
+            });
+
+            // Now build yAxes (one per metric) and allSeries list
+            const yAxes = [];
+            const allSeries = [];
+
+            // MONO/STYLE helpers (use same palette as single-mode)
+            const dashStyles = ["Solid", "Solid", "Solid", "Dot", "LongDash"];
+            const monoColors = ["#000000", "#cccccc", "#7f7f7f", "#999999", "#666666"];
+            let monoSeriesCounter = 0;
+
+            let metricIndex = 0;
+            for (const [metric, workloadMap] of metricsMap.entries()) {
+                const axisId = `metric-axis-${metricIndex}`;
+
+                // create axis for this metric
+                yAxes.push({
+                    id: axisId,
+                    title: { text: metric },
+                    opposite: metricIndex % 2 === 1,
+                    offset: metricIndex * 50,
+                    labels: { enabled: true }
+                });
+
+                // build series for each workload under this metric
+                for (const [workloadId, s] of workloadMap.entries()) {
+                    if (!s.data || s.data.length === 0) continue;
+
+                    // sort and normalize timestamps per series (preserve existing behavior)
+                    s.data.sort((a,b) => a[0] - b[0]);
+                    const earliest = s.data[0][0];
+                    s.data.forEach(pt => { pt[0] = pt[0] - earliest; });
+
+                    // create Highcharts series, assign yAxis by id
+                    const hcSeries = {
+                        name: s.id,
+                        data: s.data,
+                        custom: { runs: s.custom.runs },
+                        visible: true,
+                        yAxis: axisId,
+                        // will set dashStyle/color below
+                    };
+
+                    // honor hiddenSeries flag (names correspond to series.name)
+                    if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
+                        hcSeries.visible = false;
+                    }
+
+                    // apply monochrome or regular styling
+                    if (monoMode) {
+                        hcSeries.dashStyle = dashStyles[monoSeriesCounter % dashStyles.length];
+                        hcSeries.color = monoColors[monoSeriesCounter % monoColors.length];
+                    } else {
+                        hcSeries.dashStyle = "Solid";
+                        hcSeries.color = null;
+                        hcSeries.colorIndex = monoSeriesCounter;
+                    }
+                    monoSeriesCounter++;
+
+                    allSeries.push(hcSeries);
+                }
+
+                metricIndex++;
+            }
+
+            // apply smoothing if requested
+            if (newSmoothing > 0) {
+                allSeries.forEach(series => {
+                    series.data = calcEMA(series.data, newSmoothing);
+                });
+            }
+
+            // title logic
+            const experimentCount = new Set(combined.map(s => s.experimentName)).size;
+            const chartTitle = experimentCount === 1 ? (combined[0] && combined[0].experimentName) : `Multiple Experiments (${experimentCount})`;
+
+            // if range is default, don't pass
+            let minRange = newRange.min; let maxRange = newRange.max;
+            if (minRange < 1) minRange = null;
+            if (maxRange < 1) maxRange = null;
+
+            // navigator: simplified series without yAxis refs
+            const navigatorSeries = allSeries.map(s => ({ name: s.name, data: s.data }));
+
+            // Use component state for detailed tooltip toggle
+            const showDetailedTooltip = this.state.showDetailedTooltip;
+
+            this.setState({
+                id: newChartData.id,
+                data: newChartData.data,
+                options: {
+                    title: { text: chartTitle },
+                    xAxis: { min: minRange, max: maxRange, type: "datetime", ordinal: false, labels: { formatter: function(){ return (milliToMinsSecs(this.value)) } } },
+                    yAxis: yAxes,
+                    series: allSeries,
+                    navigator: { series: navigatorSeries },
+                    tooltip: {
+                        formatter() {
+                            return Chart.formatTooltip(this, showDetailedTooltip);
+                        }
+                    }
+                },
+                shownRuns: newShownRuns,
+                hiddenSeries: newHiddenSeries,
+                smoothing: newSmoothing,
+                monochromeMode: monoMode,
+                loading: false
+            });
+
+            return; // done for multi-axis
+        }
+
         const data = newChartData.data;
 
         // format data into series for highcharts
