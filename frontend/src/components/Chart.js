@@ -381,7 +381,7 @@ class Chart extends React.Component {
 
 
             let metricIndex = 0;
-            var seriesIdx = 0;
+            
             for (const [metric, workloadMap] of metricsMap.entries()) {
                 const axisId = `metric-axis-${metricIndex}`;
 
@@ -394,18 +394,9 @@ class Chart extends React.Component {
                     labels: { enabled: true }
                 });
 
-                // deterministic dash per metric
-                const metricToDash = (m) => {
-                    if (!m) return multiAxisDashStyles[0];
-                    let h = 0;
-                    for (let i = 0; i < m.length; i++) {
-                        h = (h * 31 + m.charCodeAt(i)) >>> 0;
-                    }
-                    return multiAxisDashStyles[h % multiAxisDashStyles.length]; // TODO: change
-                };
-                const assignedDashForMetric = metricToDash(metric);
+                const assignedDashForMetric = multiAxisDashStyles[metricIndex % multiAxisDashStyles.length];
                 
-                
+                var seriesIdx = 0;
                 // build series for each workload under this metric
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
