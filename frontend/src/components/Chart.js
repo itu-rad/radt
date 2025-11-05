@@ -30,7 +30,7 @@ class Chart extends React.Component {
              showDetailedTooltip: false, 
              monochromeMode: false,
              boostMode: true,
-             chartLineWidth: 1.0
+             chartLineWidth: 3.0
 		}; 
 
         this.chartRef = React.createRef();
@@ -233,6 +233,7 @@ class Chart extends React.Component {
                                     showSymbol: false,
                                     lineStyle: { width: this.state.chartLineWidth, type: lineType },
                                     itemStyle: { color },
+                                    sampling: 'lttb',
                                     custom: { runs: [runMeta] }
                                 });
                             }
@@ -252,6 +253,7 @@ class Chart extends React.Component {
                                 showSymbol: false,
                                 lineStyle: { width: this.state.chartLineWidth, type: 'solid' },
                                 itemStyle: { color },
+                                sampling: 'lttb',
                                 custom: s.custom
                             });
                         }
@@ -358,6 +360,7 @@ class Chart extends React.Component {
                 data: points,
                 lineStyle: { width: this.state.chartLineWidth, type: dash },
                 itemStyle: { color },
+                sampling: 'lttb',
                 custom: s.custom
             });
             monoCounter++;
@@ -636,7 +639,7 @@ function LineWidthSlider(props) {
     return (
         <div id="lineWidthWrapper">
             <label htmlFor="lineWidthSetter">Line Width: </label>
-            <input ref={lineWidthSlider} onChange={handleShowLineWidth} value={lineWidth} type="range" name="lineWidthSetter" min="0.1" max="5.0" step="0.1" /> 
+            <input ref={lineWidthSlider} onChange={handleShowLineWidth} value={lineWidth} type="range" name="lineWidthSetter" min="0.5" max="8.0" step="0.1" /> 
             <span>{lineWidth.toString().length === 1 ? lineWidth + ".0" : lineWidth}</span>
         </div>
     );
