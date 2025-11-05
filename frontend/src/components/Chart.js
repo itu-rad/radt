@@ -269,9 +269,34 @@ class Chart extends React.Component {
         
         return tooltipData;
     }
+    
 
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
+
+        // MONO/STYLE helpers (use same palette as single-mode)
+        const monoDashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
+        const monoColors = ["#000000", "#cccccc", "#7f7f7f", "#999999", "#666666"];
+
+        // stable color palette for workload/run coloring
+        // from: https://github.com/Sipondo/plotcolours/blob/main/plotcolours.py
+        const plotColors = [
+            "#0070DE",  // Blue (dark)
+            "#ABD473",  // Green (medium)
+            "#9482C9",  // Violet (medium)
+            "#C41F3B",  // Red (dark)
+            "#00FF96",  // Teal/Green (light)
+            "#A330C9",  // Purple (dark)
+            "#F58CBA",  // Pink (light)
+            "#FF7D0A",  // Orange (medium)
+            "#C79C6E",  // Brown (medium)
+            "#FF4D6B",  // Magenta/Red (bright)
+            "#69CCF0",  // Light blue (light)
+            "#FFD100",  // Yellow (very light)
+        ]
+
+        // dash style override for multiaxis
+        const multiAxisDashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
 
         // NEW: support a combined multi-axis chart created by ChartPicker
         if (newChartData && newChartData.metric === 'multi-axis') {
@@ -354,28 +379,9 @@ class Chart extends React.Component {
             const yAxes = [];
             const allSeries = [];
 
-            // MONO/STYLE helpers (use same palette as single-mode)
-            const dashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
-            const monoColors = ["#000000", "#cccccc", "#7f7f7f", "#999999", "#666666"];
-
-            // stable color palette for workload/run coloring
-            const RUNS_COLOR_PALETTE = [
-                '#a6630c','#c83243','#b45091','#8a63bf','#434a93','#137dae','#04867d','#308613','#facb66',
-                '#1f272d','#445461','#5f7281','#8396a5','#93320b','#be501e','#de7921','#f2be88',
-                '#115026','#277c43','#3caa60','#8ddda8','#9e102c','#c82d4c','#e65b77','#f792a6',
-                '#0e538b','#2272b4','#4299e0','#8acaff'
-            ];
-            function getStableColorIndex(key) {
-                let a = 0, b = 0;
-                const s = String(key || '');
-                for (let i = 0; i < s.length; i++) {
-                    a = (a + s.charCodeAt(i)) % 255;
-                    b = (b + a) % 255;
-                }
-                return RUNS_COLOR_PALETTE[(a | (b << 8)) % RUNS_COLOR_PALETTE.length];
-            }
 
             let metricIndex = 0;
+            var seriesIdx = 0;
             for (const [metric, workloadMap] of metricsMap.entries()) {
                 const axisId = `metric-axis-${metricIndex}`;
 
@@ -390,15 +396,16 @@ class Chart extends React.Component {
 
                 // deterministic dash per metric
                 const metricToDash = (m) => {
-                    if (!m) return dashStyles[0];
+                    if (!m) return multiAxisDashStyles[0];
                     let h = 0;
                     for (let i = 0; i < m.length; i++) {
                         h = (h * 31 + m.charCodeAt(i)) >>> 0;
                     }
-                    return dashStyles[h % dashStyles.length];
+                    return multiAxisDashStyles[h % multiAxisDashStyles.length]; // TODO: change
                 };
                 const assignedDashForMetric = metricToDash(metric);
-
+                
+                
                 // build series for each workload under this metric
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
@@ -423,20 +430,20 @@ class Chart extends React.Component {
                                 yAxis: axisId,
                                 dashStyle: assignedDashForMetric
                             };
-
+                            
                             // color per-run
                             if (monoMode) {
-                                const c = monoColors[runIdx % monoColors.length];
-                                hcSeries.color = c;
+                                hcSeries.color = monoColors[seriesIdx % monoColors.length];
                             } else {
-                                hcSeries.color = getStableColorIndex(runMeta.id || runMeta.name);
+                                hcSeries.color = plotColors[seriesIdx % plotColors.length];
                             }
 
                             // honor hiddenSeries
                             if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
                                 hcSeries.visible = false;
                             }
-
+                            
+                            seriesIdx++;
                             allSeries.push(hcSeries);
                         });
                     } else {
@@ -458,14 +465,14 @@ class Chart extends React.Component {
                         if (monoMode) {
                             hcSeries.color = monoColors[metricIndex % monoColors.length];
                         } else {
-                            hcSeries.color = getStableColorIndex(s.id || s.rawWorkload);
+                            hcSeries.color = plotColors[seriesIdx % plotColors.length];
                         }
 
                         // honor hiddenSeries
                         if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
                             hcSeries.visible = false;
                         }
-
+                        seriesIdx++;
                         allSeries.push(hcSeries);
                     }
                 }
@@ -590,8 +597,6 @@ class Chart extends React.Component {
 
         // styling for monochrome mode
         let monoSeriesCounter = 0;
-        const dashStyles = ["Solid", "Solid", "Solid ", "Dot", "LongDash"];
-        const monoColors = ["#000000", "#cccccc", "#7f7f7f ", "#999999", "#666666"];
 
         allSeries.forEach(series => {
             // subtract earliest time from all timestamps to get ms passed
@@ -617,13 +622,14 @@ class Chart extends React.Component {
 
             // update series styles/colors for for monochrome mode
             if (monoMode) {
-                series.dashStyle = dashStyles[monoSeriesCounter];
+                series.dashStyle = monoDashStyles[monoSeriesCounter];
                 series.color = monoColors[monoSeriesCounter];
             }
             else {
                 series.dashStyle = "solid";
-                series.color = null;
-                series.colorIndex = monoSeriesCounter;
+                // series.color = null;
+                // series.colorIndex = monoSeriesCounter;
+                series.color = plotColors[monoSeriesCounter % plotColors.length];
             }
             monoSeriesCounter++;
 
