@@ -20,7 +20,18 @@ class ChartPicker extends React.Component {
 			showLoadingOverlay: false,
 
 			// NEW: multi-axis single-chart mode
-			multiAxisMode: false
+			multiAxisMode: false,
+
+			// NEW: version to force re-mount / re-render of combined chart
+			combinedVersion: 0,
+
+			// NEW: persisted context for the combined multi-axis chart
+			combinedContext: {
+				smoothing: 0,
+				shownRuns: [],
+				hiddenSeries: [],
+				range: { min: 0, max: 0 }
+			}
 		};
 
 		this.inputField = React.createRef();
@@ -172,15 +183,13 @@ class ChartPicker extends React.Component {
 				}
 			};
 
-			// replace placeholder with final chart object in-place
-			this.setState(prev => ({
-				charts: prev.charts.map(c => (c.id === placeholderId ? finalChart : c))
-			}), () => {
-				// After inserting the real chart, decrement pending if we are syncing from URL
-				if (this.state.pendingChartRenders > 0) this.decrementPendingRenders();
-			});
+			// --- REPLACED: use setCharts to update charts and bump combinedVersion ---
+			// compute newCharts from current state (placeholder present) and replace placeholder with final chart
+			const newCharts = (this.state.charts || []).map(c => (c.id === placeholderId ? finalChart : c));
+			// pass chartRendered = true so setCharts will decrement pending renders for URL sync
+			this.setCharts(newCharts, true);
 
-			// notify App about active metrics and pending renders handled by setCharts if used
+			// notify App about active metrics (setCharts already does this, but keep as-safety)
 			if (this.props.updateChartMetrics) {
 				const metrics = (this.state.charts || []).map(c => c.metric);
 				this.props.updateChartMetrics(metrics);
@@ -199,10 +208,12 @@ class ChartPicker extends React.Component {
 	// add chart data to state for rendering 
 	setCharts(newChartData, chartRendered = false) {
 
-		this.setState({
+		this.setState(prev => ({
 			charts: newChartData,
-			loading: false
-		}, () => {
+			loading: false,
+			// bump combinedVersion so combined (multi-axis) Chart remounts/updates reliably
+			combinedVersion: (prev.combinedVersion || 0) + 1
+		}), () => {
 			// notify App about the active metrics
 			if (this.props.updateChartMetrics) {
 				const metrics = (newChartData || []).map(c => c.metric);
@@ -221,14 +232,10 @@ class ChartPicker extends React.Component {
 		// open data picker if no charts loaded
 		if (newChartData.length === 0) {
 			localStorage.removeItem("localCharts");
-			//this.props.toggleDataPicker(true);	
 		}
 		else {
 			// toggle data picker off if on
 			this.props.toggleDataPicker(false);	
-
-			// save data to local storage to persist through refreshes
-			//storeChartDataInLocalStorage(newChartData);
 		}
 	}
 
@@ -257,6 +264,28 @@ class ChartPicker extends React.Component {
 
 	// update custom chart state for local data download
 	syncData(id, newSmoothing, newShownRuns, newHiddenSeries, newRange) {
+		// NEW: if multi-axis combined chart, persist context to combinedContext state
+		if (id === 'multi-axis') {
+			this.setState(prev => ({
+				combinedContext: {
+					smoothing: newSmoothing,
+					shownRuns: newShownRuns,
+					hiddenSeries: newHiddenSeries,
+					range: newRange
+				},
+				// bump version so combined Chart gets remounted/updated predictably
+				combinedVersion: (prev.combinedVersion || 0) + 1
+			}), () => {
+				// notify App about active metrics if needed (unchanged)
+				if (this.props.updateChartMetrics) {
+					const metrics = (this.state.charts || []).map(c => c.metric);
+					this.props.updateChartMetrics(metrics);
+				}
+			});
+			return;
+		}
+
+		// existing behaviour for single-chart sync
 		const chartData = [...this.state.charts];
 		chartData.forEach(chart => {
 			if (chart.id === id) {
@@ -354,8 +383,39 @@ class ChartPicker extends React.Component {
 		});
 	}
 
+	// NEW: toggle a metric on/off. If present, remove its chart(s); otherwise fetch it.
+	toggleMetric = (metric) => {
+		const { charts, multiAxisMode } = this.state;
+		const existing = (charts || []).filter(c => c.metric === metric);
+
+		if (existing.length > 0) {
+			if (multiAxisMode) {
+				// In multi-axis mode, update charts and bump combinedVersion in one setState
+				this.setState(prev => {
+					const newCharts = (prev.charts || []).filter(c => c.metric !== metric);
+					return {
+						charts: newCharts,
+						combinedVersion: (prev.combinedVersion || 0) + 1
+					};
+				}, () => {
+					// notify App about active metrics after update
+					if (this.props.updateChartMetrics) {
+						const metrics = (this.state.charts || []).map(c => c.metric);
+						this.props.updateChartMetrics(metrics);
+					}
+				});
+			} else {
+				// Normal mode: remove via removeChart to preserve existing behavior
+				existing.forEach(c => this.removeChart(c.id));
+			}
+		} else {
+			// add/fetch chart for this metric
+			this.fetchChartData(metric);
+		}
+	}
+
 	render() {
-		const { availableMetrics, charts, multiAxisMode } = this.state;
+		const { availableMetrics, charts, multiAxisMode, combinedVersion, combinedContext } = this.state;
 
 		// Group metrics by system name
 		const groupedMetrics = availableMetrics.reduce((groups, metric) => {
@@ -396,12 +456,8 @@ class ChartPicker extends React.Component {
 				metric: 'multi-axis',
 				// Chart component expects a `data` field; provide series array
 				data: combinedSeries,
-				context: {
-					smoothing: 0,
-					shownRuns: [],
-					hiddenSeries: [],
-					range: { min: 0, max: 0 }
-				}
+				// USE persisted combinedContext from state so toggles persist and sync works
+				context: combinedContext
 			};
 		}
 
@@ -455,13 +511,16 @@ class ChartPicker extends React.Component {
 								<h4 className="metricGroupName">{groupName}</h4> {/* Group header */}
 								{metrics.map(metric => {
 									const displayName = metric.replace(/^system\/([^-]+)-/, ""); // Extract unmatched part
+									// NEW: determine if this metric is currently selected (has a chart)
+									const isSelected = (charts || []).some(c => c.metric === metric);
 									return (
 										<button
 											key={metric}
-											className="metricBtn"
-											onClick={() => this.fetchChartData(metric)}
+											className={`metricBtn ${isSelected ? 'selected' : ''}`}
+											onClick={() => this.toggleMetric(metric)}
+											title={isSelected ? `Remove ${displayName}` : `Show ${displayName}`}
 										>
-											{displayName}
+											{isSelected ? '✔ ' : ''}{displayName}
 										</button>
 									);
 								})}
@@ -479,12 +538,13 @@ class ChartPicker extends React.Component {
 					{multiAxisMode ? (
 						combinedChart ? (
 							<Chart
-								key={combinedChart.id}
+								// include combinedVersion in key so Chart remounts when charts array or combinedContext changes
+								key={`${combinedChart.id}-${combinedVersion}`}
 								chartData={combinedChart}
-								// Combined chart will use syncData/removeChart differently;
-								// removeChart can be a no-op or mapped to clear all.
 								pullChartExtras={this.syncData.bind(this)}
 								removeChart={() => this.setCharts([])}
+								// NEW: tell Chart to occupy full viewport height in multi-axis mode
+								fullHeight={true}
 							/>
 						) : (
 							<div style={{ padding: 20 }}>No chart data available to combine.</div>

@@ -174,6 +174,9 @@ class Chart extends React.Component {
 
         this.chartRef = React.createRef();
         this.handleShowRunsSwitch = (workloadId) => (event) => this.toggleShownRuns(workloadId, event);
+
+		// NEW: flag to suppress parent-sync calls while reacting to incoming props
+		this._skipPullAfterPropChange = false;
 	}
 
     componentDidMount() {
@@ -195,10 +198,42 @@ class Chart extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (prevState.smoothing !== this.state.smoothing || prevState.shownRuns.length !== this.state.shownRuns.length || prevState.hiddenSeries.length !== this.state.hiddenSeries.length || prevState.range.min !== this.state.range.min || prevState.range.max !== this.state.range.max) {     
-            this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
-        }
-    }
+		// If chartData prop changed (new combined chart or a different single chart), regenerate series
+		if (prevProps.chartData !== this.props.chartData) {
+			// recompute workloads (keep same logic as componentDidMount)
+			const workloads = (this.props.chartData && this.props.chartData.data) ? this.props.chartData.data.map(run => run.workload) : [];
+			const nonUnique = [...new Set(workloads.filter((item,i) => workloads.includes(item, i+1)))];
+
+			// Determine context values from incoming chartData (fallback to defaults)
+			const ctx = this.props.chartData && this.props.chartData.context ? this.props.chartData.context : null;
+			const smoothing = ctx ? ctx.smoothing : 0;
+			const shownRuns = ctx ? ctx.shownRuns : [];
+			const hiddenSeries = ctx ? ctx.hiddenSeries : [];
+			const range = ctx ? ctx.range : { min: 0, max: 0 };
+
+			// Set flag to avoid pushing the (just-applied) state back to parent
+			this._skipPullAfterPropChange = true;
+
+			// Update workloads then regenerate series with preserved monochromeMode
+			this.setState({ workloads: nonUnique }, () => {
+				this.generateSeries(this.props.chartData, smoothing, shownRuns, hiddenSeries, range, this.state.monochromeMode);
+				// Clear the skip flag on the next tick so subsequent user interactions still call pullChartExtras
+				setTimeout(() => { this._skipPullAfterPropChange = false; }, 0);
+			});
+		}
+
+		// Existing behavior: notify parent when chart-level state changes, but only if not suppressing due to prop-driven update
+		if (
+			(prevState.smoothing !== this.state.smoothing ||
+			prevState.shownRuns.length !== this.state.shownRuns.length ||
+			prevState.hiddenSeries.length !== this.state.hiddenSeries.length ||
+			prevState.range.min !== this.state.range.min ||
+			prevState.range.max !== this.state.range.max)
+			&& !this._skipPullAfterPropChange
+		) {
+			this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
+		}
+	}
 
     // format detailed tooltip if it is enabled
     static formatTooltip(tooltip, toShow) {
@@ -288,29 +323,31 @@ class Chart extends React.Component {
                 if (!workloadMap.has(workloadId)) {
                     workloadMap.set(workloadId, {
                         id: workloadId,
-                        data: [],
-                        custom: { runs: [] },
-                        metric: metric
+                        data: [],            // aggregated points across runs for this workload
+                        custom: { runs: [] }, // per-run metadata + per-run points kept here
+                        metric: metric,
+                        rawWorkload: rawWorkload
                     });
                 }
                 const seriesObj = workloadMap.get(workloadId);
 
-                // append run-level metadata for tooltip (keep only relevant fields)
+                // append run-level metadata for tooltip and keep run-level points
+                const perRunData = (run.data || []).map(pt => [pt.timestamp, pt.value]);
                 const metadata = { 
                     name: run.runName || run.name,
+                    id: run.name,
                     experimentName: run.experimentName,
                     workload: rawWorkload,
                     letter: run.letter ?? null,
                     model: run.model ?? undefined,
                     source: run.source ?? undefined,
-                    params: run.params ?? undefined
+                    params: run.params ?? undefined,
+                    data: perRunData
                 };
                 seriesObj.custom.runs.push(metadata);
 
-                // append data points (convert objects -> [timestamp,value])
-                run.data.forEach(pt => {
-                    seriesObj.data.push([pt.timestamp, pt.value]);
-                });
+                // append data points to workload-aggregated series
+                perRunData.forEach(([t, v]) => seriesObj.data.push([t, v]));
             });
 
             // Now build yAxes (one per metric) and allSeries list
@@ -318,9 +355,25 @@ class Chart extends React.Component {
             const allSeries = [];
 
             // MONO/STYLE helpers (use same palette as single-mode)
-            const dashStyles = ["Solid", "Solid", "Solid", "Dot", "LongDash"];
+            const dashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
             const monoColors = ["#000000", "#cccccc", "#7f7f7f", "#999999", "#666666"];
-            let monoSeriesCounter = 0;
+
+            // stable color palette for workload/run coloring
+            const RUNS_COLOR_PALETTE = [
+                '#a6630c','#c83243','#b45091','#8a63bf','#434a93','#137dae','#04867d','#308613','#facb66',
+                '#1f272d','#445461','#5f7281','#8396a5','#93320b','#be501e','#de7921','#f2be88',
+                '#115026','#277c43','#3caa60','#8ddda8','#9e102c','#c82d4c','#e65b77','#f792a6',
+                '#0e538b','#2272b4','#4299e0','#8acaff'
+            ];
+            function getStableColorIndex(key) {
+                let a = 0, b = 0;
+                const s = String(key || '');
+                for (let i = 0; i < s.length; i++) {
+                    a = (a + s.charCodeAt(i)) % 255;
+                    b = (b + a) % 255;
+                }
+                return RUNS_COLOR_PALETTE[(a | (b << 8)) % RUNS_COLOR_PALETTE.length];
+            }
 
             let metricIndex = 0;
             for (const [metric, workloadMap] of metricsMap.entries()) {
@@ -335,42 +388,86 @@ class Chart extends React.Component {
                     labels: { enabled: true }
                 });
 
+                // deterministic dash per metric
+                const metricToDash = (m) => {
+                    if (!m) return dashStyles[0];
+                    let h = 0;
+                    for (let i = 0; i < m.length; i++) {
+                        h = (h * 31 + m.charCodeAt(i)) >>> 0;
+                    }
+                    return dashStyles[h % dashStyles.length];
+                };
+                const assignedDashForMetric = metricToDash(metric);
+
                 // build series for each workload under this metric
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
 
-                    // sort and normalize timestamps per series (preserve existing behavior)
-                    s.data.sort((a,b) => a[0] - b[0]);
-                    const earliest = s.data[0][0];
-                    s.data.forEach(pt => { pt[0] = pt[0] - earliest; });
+                    // if shownRuns contains the raw workload id, produce one series per run
+                    const showRunsIndividually = newShownRuns && newShownRuns.indexOf(s.rawWorkload) > -1;
 
-                    // create Highcharts series, assign yAxis by id
-                    const hcSeries = {
-                        name: s.id,
-                        data: s.data,
-                        custom: { runs: s.custom.runs },
-                        visible: true,
-                        yAxis: axisId,
-                        // will set dashStyle/color below
-                    };
+                    if (showRunsIndividually) {
+                        // create a series per run (use per-run data preserved in custom.runs)
+                        s.custom.runs.forEach((runMeta, runIdx) => {
+                            if (!runMeta.data || runMeta.data.length === 0) return;
+                            // sort and normalize per-run timestamps
+                            runMeta.data.sort((a,b) => a[0] - b[0]);
+                            const earliest = runMeta.data[0][0];
+                            const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
 
-                    // honor hiddenSeries flag (names correspond to series.name)
-                    if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
-                        hcSeries.visible = false;
-                    }
+                            const hcSeries = {
+                                name: `${runMeta.name || runMeta.id}`,
+                                data: points,
+                                custom: { runs: [runMeta] },
+                                visible: true,
+                                yAxis: axisId,
+                                dashStyle: assignedDashForMetric
+                            };
 
-                    // apply monochrome or regular styling
-                    if (monoMode) {
-                        hcSeries.dashStyle = dashStyles[monoSeriesCounter % dashStyles.length];
-                        hcSeries.color = monoColors[monoSeriesCounter % monoColors.length];
+                            // color per-run
+                            if (monoMode) {
+                                const c = monoColors[runIdx % monoColors.length];
+                                hcSeries.color = c;
+                            } else {
+                                hcSeries.color = getStableColorIndex(runMeta.id || runMeta.name);
+                            }
+
+                            // honor hiddenSeries
+                            if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
+                                hcSeries.visible = false;
+                            }
+
+                            allSeries.push(hcSeries);
+                        });
                     } else {
-                        hcSeries.dashStyle = "Solid";
-                        hcSeries.color = null;
-                        hcSeries.colorIndex = monoSeriesCounter;
-                    }
-                    monoSeriesCounter++;
+                        // aggregated workload series (all runs combined into one)
+                        s.data.sort((a,b) => a[0] - b[0]);
+                        const earliest = s.data[0][0];
+                        const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
 
-                    allSeries.push(hcSeries);
+                        const hcSeries = {
+                            name: s.id,
+                            data: points,
+                            custom: { runs: s.custom.runs },
+                            visible: true,
+                            yAxis: axisId,
+                            dashStyle: assignedDashForMetric
+                        };
+
+                        // color per-workload
+                        if (monoMode) {
+                            hcSeries.color = monoColors[metricIndex % monoColors.length];
+                        } else {
+                            hcSeries.color = getStableColorIndex(s.id || s.rawWorkload);
+                        }
+
+                        // honor hiddenSeries
+                        if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
+                            hcSeries.visible = false;
+                        }
+
+                        allSeries.push(hcSeries);
+                    }
                 }
 
                 metricIndex++;
@@ -607,21 +704,25 @@ class Chart extends React.Component {
 
     // controls which workloads show their runs
     toggleShownRuns(workloadId, event) {
-        const toAdd = event.target.checked;
-        const shownRuns = [...this.state.shownRuns];
-        const workloadIdIndex = shownRuns.indexOf(workloadId);
-        if (toAdd) {
-            if (workloadIdIndex === -1) {
-                shownRuns.push(workloadId);
-            }        
-        }
-        else{
-            if (workloadIdIndex > -1) {
-                shownRuns.splice(workloadIdIndex, 1);
-            }
-        }
-        this.generateSeries(this.props.chartData, this.state.smoothing, shownRuns, this.state.hiddenSeries, this.state.range, false);
-    }
+		const toAdd = event.target.checked;
+		this.setState(prev => {
+			const shownRuns = [...prev.shownRuns];
+			const idx = shownRuns.indexOf(workloadId);
+			if (toAdd) {
+				if (idx === -1) shownRuns.push(workloadId);
+			} else {
+				if (idx > -1) shownRuns.splice(idx, 1);
+			}
+			return { shownRuns };
+		}, () => {
+			// regenerate series using the UPDATED state (ensures multi-axis branch sees it)
+			this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, this.state.monochromeMode);
+			// notify parent about the updated chart extras (so ChartPicker can persist if needed)
+			if (this.props.pullChartExtras) {
+				this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
+			}
+		});
+	}
 
     // controls the series visibility after the legend item is clicked
     toggleSeriesVisibility(event) {
@@ -744,22 +845,24 @@ class Chart extends React.Component {
 
     render() {
         const { options, id, workloads, smoothing, shownRuns } = this.state;
+        const fullHeight = !!this.props.fullHeight;
+        const wrapperStyle = fullHeight ? { height: '95vh', boxSizing: 'border-box' } : undefined;
         return (
-            <div className="chartWrapper">
-                <button 
-                    className="removeChartBtn"
-                    onClick={() => this.props.removeChart(id)}
-                >
-                    X
-                </button>
-                <HighchartsReact 
-                    highcharts={Highcharts} 
-                    constructorType="stockChart"
-                    containerProps={{className: "chart"}}
-                    options={options}         
-                    ref={ this.chartRef }
-                    callback={this.afterChartCreated}
-                />          
+            <div className="chartWrapper" style={wrapperStyle}>
+                 <button 
+                     className="removeChartBtn"
+                     onClick={() => this.props.removeChart(id)}
+                 >
+                     X
+                 </button>
+                 <HighchartsReact 
+                     highcharts={Highcharts} 
+                     constructorType="stockChart"
+                     containerProps={{ className: "chart", style: { height: fullHeight ? '90%' : undefined } }}
+                     options={options}         
+                     ref={ this.chartRef }
+                     callback={this.afterChartCreated}
+                 />          
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
                     {workloads.map(workload => (
