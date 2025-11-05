@@ -1,7 +1,7 @@
 import React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import Highcharts from 'highcharts/highstock';
-import HighchartsReact from 'highcharts-react-official';
+import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 import '../styles/Chart.css';
 
 class Chart extends React.Component {
@@ -9,167 +9,28 @@ class Chart extends React.Component {
     constructor(props) {
 		super(props);
 		this.state = {
-            options: {
-                title: {
-                    style: {
-                        fontWeight: 'bold'
-                    }
-                },
-                exporting: {
-                    buttons: {
-                        contextButton: {
-                            align: 'left',
-                            x: 0,
-                            y: -5,
-                            verticalAlign: 'top',
-                            menuItems: ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "separator", "downloadCSV", "downloadXLS"]
-                        }
-                    },
-                    scale: 3,
-                    sourceWidth: 1200,
-                    sourceHeight: 800,
-                    chartOptions: {
-                        navigator: {
-                            enabled: false       
-                        },
-                    },
-                    fallbackToExportServer: false
-                },
-                chart: {
-                    type: "line",
-                    zoomType: 'x',
-                },
-                legend: {
-                    enabled: true
-                },
-                xAxis: {
-                    events: {
-                        setExtremes: function(event) {
-                            if (!this.zoomButton) {
-                                const chart = this.chart;
-                                this.zoomButton = chart.renderer.button('Reset Zoom', null, null, function() {
-                                    chart.xAxis[0].setExtremes(null, null);
-                                }, {
-                                    zIndex: 20
-                                }).attr({
-                                    id: 'resetZoom',
-                                    align: 'left'
-                                }).add().align({
-                                    align: 'left',
-                                    x: 50,
-                                    y: 0
-                                }, false, null);                    
-                            }
-                            if(!event.min && !event.max){
-                                if (this.zoomButton != null) {
-                                    this.zoomButton.destroy();
-                                    this.zoomButton = null;
-                                }                      
-                            }
-                        },
-                        afterSetExtremes: this.handleAfterSetExtremes.bind(this)
-                    },
-                    ordinal: false,
-                    type: "datetime",
-                    title: {
-                        text: "Time Elapsed",
-                        style: {
-                            fontWeight: 'bold'
-                        }
-                    },
-                    labels:{
-                        formatter:function(){
-                            return (milliToMinsSecs(this.value))            
-                        },
-                    },
-                },
-                yAxis: {
-                    opposite: false,
-                    title: {
-                        text: "Value",
-                        style: {
-                            fontWeight: 'bold'
-                        }
-                    },
-                },
-                credits: {
-                    enabled: false
-                },
-                accessibility: {
-                    enabled: false
-                },
-                tooltip: {
-                    crosshairs: {
-                        color: 'black',
-                        dashStyle: '5'
-                    },
-                    shared: false,
-                    split: false
-                },
-                navigator: {
-                    xAxis: {
-                        labels: {
-                            enabled: false
-                        }
-                    },
-                    height: 75,
-                    enabled: true,
-                    boostThreshold: 1,
-                    series: {
-                        dataGrouping: {
-                            enabled: false
-                        }
-                    }        
-                },
-                rangeSelector: {
-                    enabled: false
-                },
-                scrollbar: {
-                    enabled: false
-                },
-                plotOptions: {
-                    series: {
-                        lineWidth: 1,
-                        boostThreshold: 1, 
-                        marker: {
-                            radius: 1
-                        },       
-                        states: {
-                            hover: {
-                                enabled: false,
-                                halo: {
-                                    size: 0
-                                }
-                            },
-                            inactive: {
-                                opacity: 1
-                            }
-                        },
-                        dataGrouping: {
-                            enabled: false,
-                            units: [[
-                                'millisecond', 
-                                [1] 
-                            ]]
-                        },
-                        events: {
-                            legendItemClick: this.toggleSeriesVisibility.bind(this)
-                        }
-                    },
-                },
-            },
-            loading: true,
-            id: null,
-            data: [],
-            workloads: [],
-            shownRuns: [],
-            hiddenSeries: [],
-            smoothing: 0,
-            range: {min: 0, max: 0},
-            showDetailedTooltip: false, 
-            monochromeMode: false,
-            boostMode: true,
-            chartLineWidth: 1.0
+			options: {
+				title: { text: '', left: 'center', textStyle: { fontWeight: 'bold' } },
+				tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+				legend: { data: [] },
+				xAxis: { type: 'time', name: 'Time Elapsed', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+				yAxis: [{ type: 'value', name: 'Value' }],
+				series: [],
+				grid: { left: 60, right: 60, bottom: 60, top: 60 },
+				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }]
+			},
+             loading: true,
+             id: null,
+             data: [],
+             workloads: [],
+             shownRuns: [],
+             hiddenSeries: [],
+             smoothing: 0,
+             range: {min: 0, max: 0},
+             showDetailedTooltip: false, 
+             monochromeMode: false,
+             boostMode: true,
+             chartLineWidth: 1.0
 		}; 
 
         this.chartRef = React.createRef();
@@ -177,7 +38,15 @@ class Chart extends React.Component {
 
 		// NEW: flag to suppress parent-sync calls while reacting to incoming props
 		this._skipPullAfterPropChange = false;
+
+        // reference to echarts instance (set in afterChartCreated)
+        this.ecInstance = null;
 	}
+
+    // called when echarts instance is ready
+    afterChartCreated = (ec) => {
+        this.ecInstance = ec;
+    }
 
     componentDidMount() {
 
@@ -273,92 +142,56 @@ class Chart extends React.Component {
 
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
+        if (!newChartData || !newChartData.data) {
+            this.setState({ loading: false, options: { ...this.state.options, series: [] } });
+            return;
+        }
 
-        // MONO/STYLE helpers (use same palette as single-mode)
-        const monoDashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
-        const monoColors = ["#000000", "#cccccc", "#7f7f7f", "#999999", "#666666"];
+        // palettes and helpers
+        const monoDashStyles = ['solid', 'dashed', 'dotted', 'dashed'];
+        const monoColors = ['#000000', '#cccccc', '#7f7f7f', '#999999', '#666666'];
+        const plotColors = ['#0070DE', '#ABD473', '#9482C9', '#C41F3B', '#00FF96', '#A330C9', '#F58CBA', '#FF7D0A', '#C79C6E', '#FF4D6B', '#69CCF0', '#FFD100'];
 
-        // stable color palette for workload/run coloring
-        // from: https://github.com/Sipondo/plotcolours/blob/main/plotcolours.py
-        const plotColors = [
-            "#0070DE",  // Blue (dark)
-            "#ABD473",  // Green (medium)
-            "#9482C9",  // Violet (medium)
-            "#C41F3B",  // Red (dark)
-            "#00FF96",  // Teal/Green (light)
-            "#A330C9",  // Purple (dark)
-            "#F58CBA",  // Pink (light)
-            "#FF7D0A",  // Orange (medium)
-            "#C79C6E",  // Brown (medium)
-            "#FF4D6B",  // Magenta/Red (bright)
-            "#69CCF0",  // Light blue (light)
-            "#FFD100",  // Yellow (very light)
-        ]
-
-        // dash style override for multiaxis
-        const multiAxisDashStyles = ["Solid", "ShortDash", "Dot", "LongDash", "DashDot"];
-
-        // NEW: support a combined multi-axis chart created by ChartPicker
-        if (newChartData && newChartData.metric === 'multi-axis') {
-            const combined = newChartData.data || []; // array of run-level objects with .metric, .workload, .data (timestamp/value), etc.
-
-            // Group by metric -> then by workloadId (same grouping logic as single-mode)
+        // multi-axis mode detection
+        if (newChartData.metric === 'multi-axis') {
+            // newChartData.data is array of run-level objects with .metric
             const metricsMap = new Map(); // metric -> Map(workloadId -> seriesObj)
-
-            combined.forEach(run => {
+            newChartData.data.forEach(run => {
                 if (!run.data || run.data.length === 0) return;
                 const metric = run.metric || 'unknown';
-
-                // ensure metric entry exists
                 if (!metricsMap.has(metric)) metricsMap.set(metric, new Map());
                 const workloadMap = metricsMap.get(metric);
 
-                // compute workloadId same as single-mode logic (safe guards)
                 const rawWorkload = run.workload || '';
                 let workloadId = rawWorkload;
-
-                // Determine letter/runName with safe fallbacks
                 const letter = (typeof run.letter === 'string' && run.letter.length > 0) ? run.letter : null;
                 const runIdForLabel = run.runName || run.name || '';
-
-                // only attempt the grouping/label tweak if workload contains a '-' as expected
                 const dashPos = rawWorkload.indexOf('-');
                 const tail = dashPos >= 0 ? rawWorkload.substring(dashPos + 1) : '';
 
-                if (tail === "null" || newShownRuns.indexOf(rawWorkload) > -1) {
+                if (tail === 'null' || (newShownRuns && newShownRuns.indexOf(rawWorkload) > -1)) {
                     if (!letter) {
-                        // no letter provided -> fall back to showing run id snippet
                         if (dashPos >= 0) {
                             const removeNull = rawWorkload.substring(0, dashPos);
-                            workloadId = removeNull + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                            workloadId = removeNull + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
                         } else {
-                            workloadId = rawWorkload + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                            workloadId = rawWorkload + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
                         }
                     } else {
-                        // letter present and is a string
                         if (letter.length > 1) {
-                            workloadId = rawWorkload + " " + letter;
+                            workloadId = rawWorkload + ' ' + letter;
                         } else {
-                            workloadId = rawWorkload + " " + letter + " (" + (runIdForLabel ? runIdForLabel.substring(0,5) : '') + ")";
+                            workloadId = rawWorkload + ' ' + letter + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
                         }
                     }
                 }
 
-                // find or create series for this metric+workload
                 if (!workloadMap.has(workloadId)) {
-                    workloadMap.set(workloadId, {
-                        id: workloadId,
-                        data: [],            // aggregated points across runs for this workload
-                        custom: { runs: [] }, // per-run metadata + per-run points kept here
-                        metric: metric,
-                        rawWorkload: rawWorkload
-                    });
+                    workloadMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] }, metric, rawWorkload });
                 }
-                const seriesObj = workloadMap.get(workloadId);
-
-                // append run-level metadata for tooltip and keep run-level points
+                const sObj = workloadMap.get(workloadId);
                 const perRunData = (run.data || []).map(pt => [pt.timestamp, pt.value]);
-                const metadata = { 
+                const metadata = {
                     name: run.runName || run.name,
                     id: run.name,
                     experimentName: run.experimentName,
@@ -369,327 +202,211 @@ class Chart extends React.Component {
                     params: run.params ?? undefined,
                     data: perRunData
                 };
-                seriesObj.custom.runs.push(metadata);
-
-                // append data points to workload-aggregated series
-                perRunData.forEach(([t, v]) => seriesObj.data.push([t, v]));
+                sObj.custom.runs.push(metadata);
+                perRunData.forEach(([t, v]) => sObj.data.push([t, v]));
             });
 
-            // Now build yAxes (one per metric) and allSeries list
-            const yAxes = [];
-            const allSeries = [];
-
-
+            // build echarts yAxis and series
+            const echYAxes = [];
+            const echSeries = [];
             let metricIndex = 0;
-            
             for (const [metric, workloadMap] of metricsMap.entries()) {
-                const axisId = `metric-axis-${metricIndex}`;
-
-                // create axis for this metric
-                yAxes.push({
-                    id: axisId,
-                    title: { text: metric },
-                    opposite: metricIndex % 2 === 1,
-                    offset: metricIndex * 50,
-                    labels: { enabled: true }
-                });
-
-                const assignedDashForMetric = multiAxisDashStyles[metricIndex % multiAxisDashStyles.length];
-                
-                var seriesIdx = 0;
-                // build series for each workload under this metric
+                echYAxes.push({ type: 'value', name: metric, position: metricIndex % 2 === 1 ? 'right' : 'left', offset: metricIndex * 50 });
+                let seriesIdx = 0;
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
-
-                    // if shownRuns contains the raw workload id, produce one series per run
                     const showRunsIndividually = newShownRuns && newShownRuns.indexOf(s.rawWorkload) > -1;
-
                     if (showRunsIndividually) {
-                        // create a series per run (use per-run data preserved in custom.runs)
-                        s.custom.runs.forEach((runMeta, runIdx) => {
+                        s.custom.runs.forEach((runMeta) => {
                             if (!runMeta.data || runMeta.data.length === 0) return;
-                            // sort and normalize per-run timestamps
-                            runMeta.data.sort((a,b) => a[0] - b[0]);
+                            runMeta.data.sort((a, b) => a[0] - b[0]);
                             const earliest = runMeta.data[0][0];
                             const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
-
-                            const hcSeries = {
-                                name: `${runMeta.name || runMeta.id}`,
-                                data: points,
-                                custom: { runs: [runMeta] },
-                                visible: true,
-                                yAxis: axisId,
-                                dashStyle: assignedDashForMetric
-                            };
-                            
-                            // color per-run
-                            if (monoMode) {
-                                hcSeries.color = monoColors[seriesIdx % monoColors.length];
-                            } else {
-                                hcSeries.color = plotColors[seriesIdx % plotColors.length];
+                            const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
+                            const lineType = 'solid';
+                            if (!(newHiddenSeries && newHiddenSeries.indexOf(runMeta.name || runMeta.id) > -1)) {
+                                echSeries.push({
+                                    name: runMeta.name || runMeta.id,
+                                    type: 'line',
+                                    yAxisIndex: metricIndex,
+                                    data: points,
+                                    showSymbol: false,
+                                    lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                                    itemStyle: { color },
+                                    custom: { runs: [runMeta] }
+                                });
                             }
-
-                            // honor hiddenSeries
-                            if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
-                                hcSeries.visible = false;
-                            }
-                            
                             seriesIdx++;
-                            allSeries.push(hcSeries);
                         });
                     } else {
-                        // aggregated workload series (all runs combined into one)
-                        s.data.sort((a,b) => a[0] - b[0]);
+                        s.data.sort((a, b) => a[0] - b[0]);
                         const earliest = s.data[0][0];
                         const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
-
-                        const hcSeries = {
-                            name: s.id,
-                            data: points,
-                            custom: { runs: s.custom.runs },
-                            visible: true,
-                            yAxis: axisId,
-                            dashStyle: assignedDashForMetric
-                        };
-
-                        // color per-workload
-                        if (monoMode) {
-                            hcSeries.color = monoColors[metricIndex % monoColors.length];
-                        } else {
-                            hcSeries.color = plotColors[seriesIdx % plotColors.length];
-                        }
-
-                        // honor hiddenSeries
-                        if (newHiddenSeries && newHiddenSeries.indexOf(hcSeries.name) > -1) {
-                            hcSeries.visible = false;
+                        const color = monoMode ? monoColors[metricIndex % monoColors.length] : plotColors[metricIndex % plotColors.length];
+                        if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
+                            echSeries.push({
+                                name: s.id,
+                                type: 'line',
+                                yAxisIndex: metricIndex,
+                                data: points,
+                                showSymbol: false,
+                                lineStyle: { width: this.state.chartLineWidth, type: 'solid' },
+                                itemStyle: { color },
+                                custom: s.custom
+                            });
                         }
                         seriesIdx++;
-                        allSeries.push(hcSeries);
                     }
                 }
-
                 metricIndex++;
             }
 
-            // apply smoothing if requested
+            // smoothing
             if (newSmoothing > 0) {
-                allSeries.forEach(series => {
-                    series.data = calcEMA(series.data, newSmoothing);
+                echSeries.forEach(series => {
+                    if (series.data && series.data.length > 0) {
+                        series.data = calcEMA(series.data, newSmoothing);
+                    }
                 });
             }
 
-            // title logic
-            const experimentCount = new Set(combined.map(s => s.experimentName)).size;
-            const chartTitle = experimentCount === 1 ? (combined[0] && combined[0].experimentName) : `Multiple Experiments (${experimentCount})`;
+            // build legendSelected map to hide hiddenSeries if present
+            const legendSelected = {};
+            echSeries.forEach(s => {
+                legendSelected[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1);
+            });
 
-            // if range is default, don't pass
-            let minRange = newRange.min; let maxRange = newRange.max;
-            if (minRange < 1) minRange = null;
-            if (maxRange < 1) maxRange = null;
+            const chartTitle = (() => {
+                const experimentCount = new Set((newChartData.data || []).map(s => s.experimentName)).size;
+                return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
+            })();
 
-            // navigator: simplified series without yAxis refs
-            const navigatorSeries = allSeries.map(s => ({ name: s.name, data: s.data }));
-
-            // Use component state for detailed tooltip toggle
-            const showDetailedTooltip = this.state.showDetailedTooltip;
+            const echOptions = {
+                title: { text: chartTitle },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                legend: { data: echSeries.map(s => s.name), selected: legendSelected },
+                xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+                yAxis: echYAxes,
+                series: echSeries,
+                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }],
+                grid: { left: 60, right: 60, bottom: 60, top: 60 }
+            };
 
             this.setState({
                 id: newChartData.id,
                 data: newChartData.data,
-                options: {
-                    title: { text: chartTitle },
-                    xAxis: { min: minRange, max: maxRange, type: "datetime", ordinal: false, labels: { formatter: function(){ return (milliToMinsSecs(this.value)) } } },
-                    yAxis: yAxes,
-                    series: allSeries,
-                    navigator: { series: navigatorSeries },
-                    tooltip: {
-                        formatter() {
-                            return Chart.formatTooltip(this, showDetailedTooltip);
-                        }
-                    }
-                },
+                options: echOptions,
                 shownRuns: newShownRuns,
                 hiddenSeries: newHiddenSeries,
                 smoothing: newSmoothing,
                 monochromeMode: monoMode,
                 loading: false
             });
-
-            return; // done for multi-axis
+            return;
         }
 
-        const data = newChartData.data;
-
-        // format data into series for highcharts
+        // SINGLE-AXIS mode
+        const data = newChartData.data || [];
         const experimentList = new Set();
-        const allSeries = [];
+        const seriesMap = new Map(); // workloadId -> { data: [], custom: { runs: [] } }
+
         data.forEach(run => {
-            if (run.data !== undefined) {      
-
-                // prepare for chart title    
-                experimentList.add(run.experimentName);
-
-                // check for ungrouped workloads or unsorted workloads
-                let workloadId = run.workload;
-                if (workloadId.substring(workloadId.indexOf("-") + 1) === "null" || newShownRuns.indexOf(workloadId) > -1) {
-                    if (run.letter === null) {
-                        const removeNull = workloadId.substring(0, workloadId.indexOf("-"));
-                        workloadId = removeNull + " (" + run.name.substring(0, 5) + ")";
+            if (!run.data) return;
+            experimentList.add(run.experimentName);
+            let workloadId = run.workload || '';
+            if (workloadId.substring(workloadId.indexOf("-") + 1) === "null" || (newShownRuns && newShownRuns.indexOf(workloadId) > -1)) {
+                if (run.letter === null || run.letter === undefined) {
+                    const removeNull = workloadId.substring(0, workloadId.indexOf("-"));
+                    workloadId = removeNull + " (" + (run.name ? run.name.substring(0, 5) : '') + ")";
+                } else {
+                    if (run.letter.length > 1) {
+                        workloadId = workloadId + " " + run.letter;
+                    } else {
+                        workloadId = workloadId + " " + run.letter + " (" + (run.name ? run.name.substring(0, 5) : '') + ")";
                     }
-                    else {
-                        if (run.letter.length > 1) {
-                            workloadId = workloadId + " " + run.letter;
-                        }
-                        else {
-                            workloadId = workloadId + " " + run.letter + " (" + run.name.substring(0, 5) + ")";
-                        }             
-                    }   
-                }
-
-                // add all runs to one series per workload, unless they are unsorted runs
-                const seriesIndex = allSeries.findIndex(series => series.id === workloadId);
-                if (seriesIndex === -1) {      
-
-                    let newSeries = {
-                        id: workloadId,
-                        data: [],
-                        custom: {
-                            runs: []
-                        }
-                    };
-                    
-                    // add series (runs) metadata to HC api for tooltip
-                    const metadata = {...run};
-                    delete metadata.data;
-                    newSeries.custom.runs.push(metadata);
-
-                    run.data.forEach(data => {
-                        newSeries.data.push([data.timestamp, data.value]);
-                    })
-                    allSeries.push(newSeries);
-                }
-                else {
-                    run.data.forEach(data => {
-                        allSeries[seriesIndex].data.push([data.timestamp, data.value]);
-                    })
-
-                    // add series (runs) metadata to HC api for tooltip
-                    const metadata = {...run};
-                    delete metadata.data;
-                    allSeries[seriesIndex].custom.runs.push(metadata);
                 }
             }
-        });
 
-        // sort all series by unix timestamp
-        allSeries.forEach(series => {
-            series.data.sort((a, b) => a[0] - b[0]);
-        });
-
-        // styling for monochrome mode
-        let monoSeriesCounter = 0;
-
-        allSeries.forEach(series => {
-            // subtract earliest time from all timestamps to get ms passed
-            const earliestTime = series.data[0][0];
-            series.data.forEach(timeAndValue => {
-                timeAndValue[0] = timeAndValue[0] - earliestTime;
+            if (!seriesMap.has(workloadId)) {
+                seriesMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] } });
+            }
+            const s = seriesMap.get(workloadId);
+            const metadata = { ...run };
+            delete metadata.data;
+            s.custom.runs.push(metadata);
+            (run.data || []).forEach(d => {
+                s.data.push([d.timestamp, d.value]);
             });
-
-            // add name
-            series.name = series.id;
-
-            // prevent duplicate ids in highcharts api
-            delete series.id;
-
-            // hide any series which are supposed to be invisible
-            series.visible = true;
-
-            newHiddenSeries.forEach(seriesToHide => {
-                if (series.name === seriesToHide) {
-                    series.visible = false;
-                }
-            })
-
-            // update series styles/colors for for monochrome mode
-            if (monoMode) {
-                series.dashStyle = monoDashStyles[monoSeriesCounter];
-                series.color = monoColors[monoSeriesCounter];
-            }
-            else {
-                series.dashStyle = "solid";
-                // series.color = null;
-                // series.colorIndex = monoSeriesCounter;
-                series.color = plotColors[monoSeriesCounter % plotColors.length];
-            }
-            monoSeriesCounter++;
-
         });
 
-        // apply smoothing to each series if over zero
+        // Build echarts series array
+        const echSeriesSingle = [];
+        let monoCounter = 0;
+        for (const [id, s] of seriesMap.entries()) {
+            if (!s.data || s.data.length === 0) continue;
+            s.data.sort((a, b) => a[0] - b[0]);
+            const earliest = s.data[0][0];
+            const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+            const name = s.id;
+            if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
+            const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % plotColors.length];
+            const dash = monoMode ? monoDashStyles[monoCounter % monoDashStyles.length] : 'solid';
+            echSeriesSingle.push({
+                name,
+                type: 'line',
+                showSymbol: false,
+                data: points,
+                lineStyle: { width: this.state.chartLineWidth, type: dash },
+                itemStyle: { color },
+                custom: s.custom
+            });
+            monoCounter++;
+        }
+
+        // apply smoothing
         if (newSmoothing > 0) {
-            allSeries.forEach(series => {
-                series.data = calcEMA(series.data, newSmoothing);
+            echSeriesSingle.forEach(series => {
+                if (series.data && series.data.length > 0) {
+                    series.data = calcEMA(series.data, newSmoothing);
+                }
             });
         }
 
-        // get chart title based on number of experiments
-        let chartTitle = "Loading..."
-        if (experimentList.size === 1) {
-            [chartTitle] = experimentList;
-        }
-        else {
-            chartTitle = "Multiple Experiments (" + experimentList.size + ")";
-        }
+        const chartTitle = (experimentList.size === 1) ? [...experimentList][0] : `Multiple Experiments (${experimentList.size})`;
 
-        // check if should be detailed tooltip
-        const showDetailedTooltip = this.state.showDetailedTooltip;
+        // legend selected map
+        const legendSelectedSingle = {};
+        echSeriesSingle.forEach(s => { legendSelectedSingle[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1); });
 
-        // if range is the deault range, don't specify it for Highcharts API
-        let minRange = newRange.min;
-        let maxRange = newRange.max;
-        if (minRange < 1) {
-            minRange = null;
-        }
-        if (maxRange < 1) {
-            maxRange = null;
-        }
-        
-        // update state which will update render of chart
+        const echOptionsSingle = {
+            title: { text: chartTitle },
+            tooltip: {
+                trigger: 'axis',
+                formatter: (params) => {
+                    const p = Array.isArray(params) ? params[0] : params;
+                    const dt = p && p.value ? p.value[0] : '';
+                    const val = p && p.value ? p.value[1] : '';
+                    return `<b>${p.seriesName}</b><br/><b>Value:</b> ${val}<br/><b>Time:</b> ${milliToMinsSecs(dt)}`;
+                }
+            },
+            legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle },
+            xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+            yAxis: [{ type: 'value', name: newChartData.metric || 'Value' }],
+            series: echSeriesSingle,
+            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }],
+            grid: { left: 60, right: 60, bottom: 60, top: 60 }
+        };
+
         this.setState({
             id: newChartData.id,
             data: newChartData.data,
-            options: { 
-                title: {
-                    text: chartTitle
-                },
-                xAxis: {
-                    min: minRange,
-                    max: maxRange
-                },
-                yAxis: {
-                    title: {
-                        text: newChartData.metric,
-                    },
-                },
-                series: allSeries,
-                navigator: {
-                    series: allSeries,
-                    //enabled: !monoMode,
-                },
-                tooltip: {
-                    formatter() {
-                        return Chart.formatTooltip(this, showDetailedTooltip);
-                    }
-                }
-            },   
+            options: echOptionsSingle,
             shownRuns: newShownRuns,
             hiddenSeries: newHiddenSeries,
             smoothing: newSmoothing,
             monochromeMode: monoMode,
             loading: false
         });
-              
     }
 
     // updates smoothness state 
@@ -750,94 +467,56 @@ class Chart extends React.Component {
 
     // controls the boost setting
     handleBoostSwitch(event) {
-        let forceBoost;
-        let menuItems;
-        if (event.currentTarget.checked) {
-            forceBoost = 1;
-            menuItems = ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "separator", "downloadCSV", "downloadXLS"]
-        }
-        else {
-            forceBoost = 0;
-            menuItems = ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "downloadPDF", "downloadSVG", "separator", "downloadCSV", "downloadXLS"]
-        }
-
+        // ECharts does not have the same boost mode; keep a local toggle only
         this.setState({
-            boostMode: event.currentTarget.checked,
-            options: {
-                navigator: {
-                    boostThreshold: forceBoost,     
-                },
-                plotOptions: {
-                    series: {
-                        boostThreshold: forceBoost,
-                    },
-                },
-                exporting: {
-                    buttons: {
-                        contextButton: {
-                            menuItems: menuItems
-                        }
-                    },
-                },
-            }
+            boostMode: event.currentTarget.checked
         });
     }
 
     // controls the detailed tooltip setting
     handleDetailedTooltipSwitch(event) {
         const setDetailedTooltip = event.currentTarget.checked;
-        this.setState({
-            showDetailedTooltip: setDetailedTooltip,
-            options: {
-                tooltip: {
-                    formatter() {
-                        return Chart.formatTooltip(this, setDetailedTooltip);
-                    }
-                }
-            },
+        this.setState({ showDetailedTooltip: setDetailedTooltip }, () => {
+            // regenerate options so tooltip formatter picks up the new flag
+            this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, this.state.monochromeMode);
         });
     }
 
     // controls the monochrome setting
     handleMonochromeModeSwitch(event) {
-        let setMonochromeMode;
-        if (event.currentTarget.checked) {
-            setMonochromeMode = true;
-        }
-        else {
-            setMonochromeMode = false;
-        }
-        const seriesCount = (this.chartRef.current.chart.series.length - 1) / 2;
+        const setMonochromeMode = !!event.currentTarget.checked;
+        const seriesCount = (this.state.options && this.state.options.series) ? this.state.options.series.length : 0;
         if (seriesCount <= 5) {
             this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, setMonochromeMode);
+        } else {
+            this.setState({ monochromeMode: false });
+            alert("Monochrome mode incompatible with more than 5 series.");
         }
-        else {
-            this.setState({
-                monochromeMode: false
-            })  
-            alert("Monochrome mode incompatible with more than 5 series.")
-        }  
+    }
+
+    // controls the line width setting (updates series lineStyle.width)
+    handleSetLineWidth(newLineWidth) { 
+        newLineWidth = parseFloat(newLineWidth);
+        // update current options.series lineStyle width
+        const opts = { ...this.state.options };
+        if (opts.series && Array.isArray(opts.series)) {
+            opts.series = opts.series.map(s => {
+                return {
+                    ...s,
+                    lineStyle: { ...(s.lineStyle || {}), width: newLineWidth }
+                };
+            });
+        }
+        this.setState({
+            chartLineWidth: newLineWidth,
+            options: opts
+        });
     }
 
     // records the range (zoom) setting so it is saved when you download/upload charts
     handleAfterSetExtremes = (event) => {
         const newRange = {min: event.min, max: event.max}
         this.setState({range: newRange});
-    }
-
-    // controls the line width setting
-    handleSetLineWidth(newLineWidth) { 
-        newLineWidth = parseFloat(newLineWidth);
-        this.setState({
-            lineWidth: newLineWidth,
-            options: {
-                plotOptions: {
-                    series: {
-                        lineWidth: newLineWidth
-                    },
-                },
-            },
-        });
     }
 
     render() {
@@ -852,14 +531,12 @@ class Chart extends React.Component {
                  >
                      X
                  </button>
-                 <HighchartsReact 
-                     highcharts={Highcharts} 
-                     constructorType="stockChart"
-                     containerProps={{ className: "chart", style: { height: fullHeight ? '90%' : undefined } }}
-                     options={options}         
-                     ref={ this.chartRef }
-                     callback={this.afterChartCreated}
-                 />          
+                 <ReactECharts
+                     ref={this.chartRef}
+                     option={options}
+                     style={{ height: fullHeight ? '90%' : '400px', width: '100%' }}
+                     onChartReady={this.afterChartCreated}
+                 />
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
                     {workloads.map(workload => (
@@ -901,7 +578,7 @@ class Chart extends React.Component {
                             <span className="slider round"></span>
                         </label>
                     </div>   
-                    <div title="Disable boost to adjust Line Width and PDF/SVG export (slower)">
+                    <div title="Toggle boost mode (ECharts does not have same boost impl)">
                         Boost Chart: <label className="switch">
                             <input 
                                 type="checkbox" 
@@ -911,29 +588,13 @@ class Chart extends React.Component {
                             <span className="slider round"></span>
                         </label>         
                     </div> 
-                    <div title="Adjust series line width (only compatible with unboosted charts)" className={this.state.boostMode ? "frozen" : null}>
+                    <div title="Adjust series line width (also updates ECharts line width)">
                         <LineWidthSlider 
                             onSetLineWidth={this.handleSetLineWidth.bind(this)}
                             defaultValue={this.state.chartLineWidth}
                         />        
                     </div>
                 </div>           
-                {/* DEBUGGING: }
-                <div id="chartMetadataWrapper">
-                    {data.map(series => (
-                        <div className="seriesMetadata" key={series.name}>
-                            <span className="label" style={{color: "black"}}>Experiment: </span><span className="metadata">{series.experimentName}</span><br />
-                            <span className="label">Workload: </span>{series.workload}<br />
-                            <span className="label">Letter: </span>{series.letter}<br />
-                            <span className="label">ID: </span>{series.name.substring(0, 6)}<br />
-                            <span className="label">Duration: </span>{milliToMinsSecs(series.duration)}<br />
-                            <span className="label">Model: </span>{series.model}<br />
-                            <span className="label">Source: </span>{series.source}<br />
-                            <span className="label">Params: </span>{series.params}<br />
-                        </div>        
-                    ))}
-                </div>
-                {*/}
             </div>
         );
     }
@@ -950,11 +611,9 @@ function SmoothnessSlider(props) {
     }, [props.defaultValue]);
 
     useEffect(() => {
-        smoothSlider.current.addEventListener('change', e => onSetSmoothness(e.target.value));
+        if (smoothSlider.current) smoothSlider.current.addEventListener('change', e => onSetSmoothness(e.target.value));
     }, [onSetSmoothness]);
-    const handleShowSmoothness = e => {
-        setSmoothness(e.target.value);
-    };
+    const handleShowSmoothness = e => setSmoothness(e.target.value);
     return (
         <div id="smootherWrapper">
             <label htmlFor="smoother">Smoothness: </label>
@@ -968,16 +627,11 @@ function LineWidthSlider(props) {
     const { onSetLineWidth } = props;
     const [lineWidth, setLineWidth] = useState(0);
 
+    useEffect(() => setLineWidth(props.defaultValue), [props.defaultValue]);
     useEffect(() => {
-        setLineWidth(props.defaultValue);
-    }, [props.defaultValue]);
-
-    useEffect(() => {
-        lineWidthSlider.current.addEventListener('change', e => onSetLineWidth(e.target.value));
+        if (lineWidthSlider.current) lineWidthSlider.current.addEventListener('change', e => onSetLineWidth(e.target.value));
     }, [onSetLineWidth]);
-    const handleShowLineWidth = e => {
-        setLineWidth(e.target.value);
-    };
+    const handleShowLineWidth = e => setLineWidth(e.target.value);
 
     return (
         <div id="lineWidthWrapper">
