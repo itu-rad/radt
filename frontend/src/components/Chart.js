@@ -582,11 +582,10 @@ class Chart extends React.Component {
     render() {
         const { options, id, workloads, smoothing, shownRuns } = this.state;
         const fullHeight = !!this.props.fullHeight;
-        const responsivePadding = 'min(140px, 7.0vh)'; // ...existing responsive padding logic...
-        // fullHeight should account for chartsWrapper vertical padding (2 * 20px)
+        // When fullHeight, set wrapper height; do NOT set paddingBottom here (CSS gives 10px)
         const wrapperStyle = fullHeight
-            ? { height: 'calc(100vh - 40px)', boxSizing: 'border-box', paddingBottom: responsivePadding }
-            : { boxSizing: 'border-box', paddingBottom: responsivePadding };
+            ? { height: 'calc(100vh - 40px)', boxSizing: 'border-box' }
+            : { height: 'calc(45vh - 20px)', boxSizing: 'border-box' };
         return (
             <div className="chartWrapper" style={wrapperStyle}>
                  <button 
@@ -595,13 +594,15 @@ class Chart extends React.Component {
                  >
                      X
                  </button>
-                 <ReactECharts
-                     ref={this.chartRef}
-                     option={options}
-                     // when fullHeight, let the chart fill the wrapper entirely
-                     style={{ height: fullHeight ? '100%' : '400px', width: '100%' }}
-                     onChartReady={this.afterChartCreated}
-                 />
+                {/* chart area flexes to fill available space; ReactECharts set to 100% height */}
+                <div className="chartArea">
+                    <ReactECharts
+                        ref={this.chartRef}
+                        option={options}
+                        style={{ height: '100%', width: '100%' }}
+                        onChartReady={this.afterChartCreated}
+                    />
+                </div>
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
                     {workloads.map(workload => (

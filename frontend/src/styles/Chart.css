@@ -1,14 +1,20 @@
 .chartWrapper {
-    display: block;
+    display: flex;               /* stack chart and controls vertically */
+    flex-direction: column;
     position: relative;
     margin: 10px;
-    padding: 10px 10px 10px 0;
+    padding: 10px 10px 10px 0;    /* bottom padding remains 10px as requested */
     background-color: white;
     filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.3));
 }
+.chartArea {
+    flex: 1 1 auto;
+    min-height: 0; /* allow proper flex children scrolling/clipping */
+    width: 100%;
+}
 .chart {
     display: block;
-    height: 600px;
+    height: auto;
     width: 100%;
 }
 .highcharts-navigator {
@@ -71,10 +77,17 @@
 
 /************************************** TOGGLE RUNS */
 #workloadGroupingControlsWrapper {
-    width: 90%;
-    margin: auto;
-    padding: 10px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 8px 10px;
     cursor: default;
+    flex: 0 0 48px;    /* fixed height so chart fills remainder */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* center the header and workload items */
+    flex-wrap: wrap;         /* allow items to wrap on narrow screens */
+    gap: 8px;                /* spacing between workload items */
 }
 #workloadGroupingControlsWrapper div {
     display: inline-block;
@@ -142,16 +155,17 @@ input:checked + .slider:before {
 
 /************************************** EXPORT OPTIONS */
 #exportOptionsWrapper {
-    width: 90%;
+    width: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
-    flex-wrap: wrap;
-    padding: 12px;
-    margin: auto;
+    flex-wrap: nowrap;            /* keep controls on single row when possible */
+    padding: 8px 10px;
+    margin: 0 auto;
     gap: 20px;                   /* larger gap so controls don't sit too close */
+    flex: 0 0 56px;              /* fixed height for controls area */
 }
-/* prevent children from shrinking and ensure consistent spacing */
+/* make sure export children remain sized but don't shrink */
 #exportOptionsWrapper > * {
     margin: 0 12px;
     cursor: default;
