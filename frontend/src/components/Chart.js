@@ -151,6 +151,8 @@ class Chart extends React.Component {
         const monoDashStyles = ['solid', 'dashed', 'dotted', 'dashed'];
         const monoColors = ['#000000', '#cccccc', '#7f7f7f', '#999999', '#666666'];
         const plotColors = ['#0070DE', '#ABD473', '#9482C9', '#C41F3B', '#00FF96', '#A330C9', '#F58CBA', '#FF7D0A', '#C79C6E', '#FF4D6B', '#69CCF0', '#FFD100'];
+        // dash styles used to indicate different metrics (dash chosen by metricIndex)
+        const dashTypes = ['solid', 'dashed', 'dotted'];
 
         // multi-axis mode detection
         if (newChartData.metric === 'multi-axis') {
@@ -223,7 +225,8 @@ class Chart extends React.Component {
                             const earliest = runMeta.data[0][0];
                             const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
                             const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
-                            const lineType = 'solid';
+                            // colour is based on the run/series index; dash is based on the metric index
+                            const lineType = dashTypes[metricIndex % dashTypes.length];
                             if (!(newHiddenSeries && newHiddenSeries.indexOf(runMeta.name || runMeta.id) > -1)) {
                                 echSeries.push({
                                     name: runMeta.name || runMeta.id,
@@ -243,7 +246,8 @@ class Chart extends React.Component {
                         s.data.sort((a, b) => a[0] - b[0]);
                         const earliest = s.data[0][0];
                         const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
-                        const color = monoMode ? monoColors[metricIndex % monoColors.length] : plotColors[metricIndex % plotColors.length];
+                        const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
+                        const lineType = dashTypes[metricIndex % dashTypes.length];
                         if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
                             echSeries.push({
                                 name: s.id,
@@ -251,7 +255,7 @@ class Chart extends React.Component {
                                 yAxisIndex: metricIndex,
                                 data: points,
                                 showSymbol: false,
-                                lineStyle: { width: this.state.chartLineWidth, type: 'solid' },
+                                lineStyle: { width: this.state.chartLineWidth, type: lineType },
                                 itemStyle: { color },
                                 sampling: 'lttb',
                                 custom: s.custom
@@ -351,14 +355,15 @@ class Chart extends React.Component {
             const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
             const name = s.id;
             if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
+            // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
             const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % plotColors.length];
-            const dash = monoMode ? monoDashStyles[monoCounter % monoDashStyles.length] : 'solid';
+            const lineType = dashTypes[0]; // single-axis always uses solid lines
             echSeriesSingle.push({
                 name,
                 type: 'line',
                 showSymbol: false,
                 data: points,
-                lineStyle: { width: this.state.chartLineWidth, type: dash },
+                lineStyle: { width: this.state.chartLineWidth, type: lineType },
                 itemStyle: { color },
                 sampling: 'lttb',
                 custom: s.custom
