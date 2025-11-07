@@ -30,7 +30,6 @@ class Chart extends React.Component {
              hiddenSeries: [],
              smoothing: 0,
              range: {min: 0, max: 0},
-             showDetailedTooltip: false, 
              monochromeMode: false,
              boostMode: true,
              chartLineWidth: 3.0
@@ -290,18 +289,54 @@ class Chart extends React.Component {
                 return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
             })();
 
+            // Adjust grid left/right to account for any yAxis offsets so the plot fills the wrapper
+            const baseGrid = { left: 60, right: 60, top: 60, bottom: 96 };
+            const leftOffsets = echYAxes.filter(a => (a.position || 'left') === 'left').map(a => a.offset || 0);
+            const rightOffsets = echYAxes.filter(a => (a.position || 'left') === 'right').map(a => a.offset || 0);
+            const extraLeft = leftOffsets.length ? Math.max(...leftOffsets) : 0;
+            const extraRight = rightOffsets.length ? Math.max(...rightOffsets) : 0;
+            const adjustedGrid = { ...baseGrid, left: baseGrid.left + extraLeft, right: baseGrid.right + extraRight };
+
             const echOptions = {
                 title: { text: chartTitle },
-                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-                // keep legend at bottom and leave room in grid.bottom
-                legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
-                xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
-                yAxis: echYAxes,
-                series: echSeries,
-                // ensure slider sits below the legend
-                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-                grid: { left: 60, right: 60, top: 60, bottom: 96 }
-            };
+                // detailed tooltip formatter (always on)
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    formatter: function(params) {
+                        const ps = Array.isArray(params) ? params : [params];
+                        let html = '';
+                        ps.forEach(p => {
+                            const seriesName = p.seriesName || '';
+                            const dt = p.value ? p.value[0] : '';
+                            const val = p.value ? p.value[1] : '';
+                            html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
+                            html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
+                            const runs = (p.series && p.series.userOptions && p.series.userOptions.custom && p.series.userOptions.custom.runs) ? p.series.userOptions.custom.runs : [];
+                            if (runs && runs.length) {
+                                const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
+                                const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
+                                const paramsSet = [...new Set(runs.map(r=>r.params).filter(Boolean))];
+                                const letters = [...new Set(runs.map(r=>r.letter).filter(Boolean))];
+                                if (models.length) html += `<b>Model(s):</b> ${models.join(', ')}<br/>`;
+                                if (sources.length) html += `<b>Source(s):</b> ${sources.join(', ')}<br/>`;
+                                if (paramsSet.length) html += `<b>Param(s):</b> ${paramsSet.join(', ')}<br/>`;
+                                if (letters.length) html += `<b>Run(s):</b> ${letters.join(', ')}<br/>`;
+                            }
+                            html += '<hr/>';
+                        });
+                        return html;
+                    }
+                },
+                 // keep legend at bottom and leave room in grid.bottom
+                 legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
+                 xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+                 yAxis: echYAxes,
+                 series: echSeries,
+                 // ensure slider sits below the legend
+                 dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+                 grid: adjustedGrid
+             };
 
             this.setState({
                 id: newChartData.id,
@@ -393,24 +428,43 @@ class Chart extends React.Component {
 
         const echOptionsSingle = {
             title: { text: chartTitle },
+            // detailed tooltip formatter (always on)
             tooltip: {
                 trigger: 'axis',
-                formatter: (params) => {
-                    const p = Array.isArray(params) ? params[0] : params;
-                    const dt = p && p.value ? p.value[0] : '';
-                    const val = p && p.value ? p.value[1] : '';
-                    return `<b>${p.seriesName}</b><br/><b>Value:</b> ${val}<br/><b>Time:</b> ${milliToMinsSecs(dt)}`;
+                formatter: function(params) {
+                    const ps = Array.isArray(params) ? params : [params];
+                    let html = '';
+                    ps.forEach(p => {
+                        const seriesName = p.seriesName || '';
+                        const dt = p.value ? p.value[0] : '';
+                        const val = p.value ? p.value[1] : '';
+                        html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
+                        html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
+                        const runs = (p.series && p.series.userOptions && p.series.userOptions.custom && p.series.userOptions.custom.runs) ? p.series.userOptions.custom.runs : [];
+                        if (runs && runs.length) {
+                            const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
+                            const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
+                            const paramsSet = [...new Set(runs.map(r=>r.params).filter(Boolean))];
+                            const letters = [...new Set(runs.map(r=>r.letter).filter(Boolean))];
+                            if (models.length) html += `<b>Model(s):</b> ${models.join(', ')}<br/>`;
+                            if (sources.length) html += `<b>Source(s):</b> ${sources.join(', ')}<br/>`;
+                            if (paramsSet.length) html += `<b>Param(s):</b> ${paramsSet.join(', ')}<br/>`;
+                            if (letters.length) html += `<b>Run(s):</b> ${letters.join(', ')}<br/>`;
+                        }
+                        html += '<hr/>';
+                    });
+                    return html;
                 }
             },
-            // single-axis legend also at bottom
-            legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
-            xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
-            yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
-            series: echSeriesSingle,
-            // ensure slider sits below the legend and reserve bottom space
-            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-            grid: { left: 60, right: 60, top: 60, bottom: 96 }
-        };
+             // single-axis legend also at bottom
+             legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
+             xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+             yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
+             series: echSeriesSingle,
+             // ensure slider sits below the legend and reserve bottom space
+             dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+             grid: { left: 60, right: 60, top: 60, bottom: 96 }
+         };
 
         this.setState({
             id: newChartData.id,
@@ -488,15 +542,6 @@ class Chart extends React.Component {
         });
     }
 
-    // controls the detailed tooltip setting
-    handleDetailedTooltipSwitch(event) {
-        const setDetailedTooltip = event.currentTarget.checked;
-        this.setState({ showDetailedTooltip: setDetailedTooltip }, () => {
-            // regenerate options so tooltip formatter picks up the new flag
-            this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, this.state.monochromeMode);
-        });
-    }
-
     // controls the monochrome setting
     handleMonochromeModeSwitch(event) {
         const setMonochromeMode = !!event.currentTarget.checked;
@@ -537,7 +582,11 @@ class Chart extends React.Component {
     render() {
         const { options, id, workloads, smoothing, shownRuns } = this.state;
         const fullHeight = !!this.props.fullHeight;
-        const wrapperStyle = fullHeight ? { height: '95vh', boxSizing: 'border-box' } : undefined;
+        const responsivePadding = 'min(140px, 7.0vh)'; // ...existing responsive padding logic...
+        // fullHeight should account for chartsWrapper vertical padding (2 * 20px)
+        const wrapperStyle = fullHeight
+            ? { height: 'calc(100vh - 40px)', boxSizing: 'border-box', paddingBottom: responsivePadding }
+            : { boxSizing: 'border-box', paddingBottom: responsivePadding };
         return (
             <div className="chartWrapper" style={wrapperStyle}>
                  <button 
@@ -549,7 +598,8 @@ class Chart extends React.Component {
                  <ReactECharts
                      ref={this.chartRef}
                      option={options}
-                     style={{ height: fullHeight ? '90%' : '400px', width: '100%' }}
+                     // when fullHeight, let the chart fill the wrapper entirely
+                     style={{ height: fullHeight ? '100%' : '400px', width: '100%' }}
                      onChartReady={this.afterChartCreated}
                  />
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
@@ -568,47 +618,38 @@ class Chart extends React.Component {
                         </div>        
                     ))}
                 </div>
-                <SmoothnessSlider 
-                    onSetSmoothness={this.handleSetSmoothness.bind(this)}
-                    defaultValue={smoothing}
-                />
                 <div id="exportOptionsWrapper">
-                    <div title="Enable to see more metadata when hovering (slower)">
-                        Detailed Tooltip: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleDetailedTooltipSwitch.bind(this)} 
-                                checked={this.state.showDetailedTooltip}
-                            />
-                            <span className="slider round"></span>
-                        </label>
-                    </div>
-                    <div title="Convert chart to black and white (only supports 5 series)">
-                        Monochrome Mode: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleMonochromeModeSwitch.bind(this)} 
-                                checked={this.state.monochromeMode}
-                            />
-                            <span className="slider round"></span>
-                        </label>
-                    </div>   
-                    <div title="Toggle boost mode (ECharts does not have same boost impl)">
-                        Boost Chart: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleBoostSwitch.bind(this)} 
-                                checked={this.state.boostMode}
-                            />
-                            <span className="slider round"></span>
-                        </label>         
-                    </div> 
-                    <div title="Adjust series line width (also updates ECharts line width)">
-                        <LineWidthSlider 
-                            onSetLineWidth={this.handleSetLineWidth.bind(this)}
-                            defaultValue={this.state.chartLineWidth}
-                        />        
-                    </div>
+                    <SmoothnessSlider 
+                        onSetSmoothness={this.handleSetSmoothness.bind(this)}
+                        defaultValue={smoothing}
+                    />
+                 {/* export controls follow */}
+                     <div title="Convert chart to black and white (only supports 5 series)">
+                         Monochrome Mode: <label className="switch">
+                             <input 
+                                 type="checkbox" 
+                                 onChange={this.handleMonochromeModeSwitch.bind(this)} 
+                                 checked={this.state.monochromeMode}
+                             />
+                             <span className="slider round"></span>
+                         </label>
+                     </div>   
+                     <div title="Toggle boost mode (ECharts does not have same boost impl)">
+                         Boost Chart: <label className="switch">
+                             <input 
+                                 type="checkbox" 
+                                 onChange={this.handleBoostSwitch.bind(this)} 
+                                 checked={this.state.boostMode}
+                             />
+                             <span className="slider round"></span>
+                         </label>         
+                     </div> 
+                     <div title="Adjust series line width (also updates ECharts line width)">
+                         <LineWidthSlider 
+                             onSetLineWidth={this.handleSetLineWidth.bind(this)}
+                             defaultValue={this.state.chartLineWidth}
+                         />        
+                     </div>
                 </div>           
             </div>
         );

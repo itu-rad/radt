@@ -47,17 +47,26 @@
 
 /************************************** SMOOTH SLIDER */
 #smootherWrapper {
-    display: flex;
+    display: inline-flex;
     flex-flow: row;
     align-items: center;
     justify-content: center;
     text-align: center;
-    height: 40px;
-    width: 300px;
-    margin: auto;
+    height: 28px;
+    width: 180px; /* a bit wider to avoid overlap */
+    margin: 0 8px 0 0; /* small right margin */
 }
-#smootherWrapper input {
-    cursor: pointer;
+#smootherWrapper label {
+    margin-right: 6px;
+    font-size: 13px;
+    white-space: nowrap; /* prevent label from wrapping */
+    /* ensure smoother label matches the others */
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 400;
+    color: #222;
+}
+#smootherWrapper input[type="range"] {
+    width: 120px; /* wider range control */
 }
 
 /************************************** TOGGLE RUNS */
@@ -70,9 +79,15 @@
 #workloadGroupingControlsWrapper div {
     display: inline-block;
     margin: 5px 15px 5px 15px;
+    /* make the workload text match other control labels */
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: #222;
 }
 #workloadGroupingControlsWrapper label {
     margin: 0 0 0 5px;
+    white-space: nowrap;
 }
 .switch {
     position: relative;
@@ -130,12 +145,25 @@ input:checked + .slider:before {
     width: 90%;
     display: flex;
     justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
     padding: 12px;
     margin: auto;
+    gap: 20px;                   /* larger gap so controls don't sit too close */
 }
-#exportOptionsWrapper div {
-    margin: 0 15px 0 15px;
+/* prevent children from shrinking and ensure consistent spacing */
+#exportOptionsWrapper > * {
+    margin: 0 12px;
     cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;              /* do not shrink; keep intrinsic width */
+    /* enforce consistent label font across export controls */
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: #222;
 }
 #exportOptionsWrapper input:checked + .slider {
     background-color: #6e6e6e;
@@ -145,22 +173,26 @@ input:checked + .slider:before {
 }
 #lineWidthWrapper {
     margin: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 #lineWidthWrapper label {
-    position: relative;
-    top: -3px;
+    margin: 0;
+    font-size: 13px;
+    white-space: nowrap;
+    /* ensure line width label matches the others */
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 400;
+    color: #222;
 }
 #lineWidthWrapper input {
     width: 75px;
-    position: relative;
-    top: -1px;
     cursor: pointer;
 }
 #lineWidthWrapper span {
-    width: 75px;
-    position: relative;
-    top: -3px;
-    left: 3px;
+    margin-left: 4px;
+    white-space: nowrap;
 }
 .frozen {
     pointer-events: none !important;
