@@ -16,8 +16,9 @@ class Chart extends React.Component {
 				xAxis: { type: 'time', name: 'Time Elapsed', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
 				yAxis: [{ type: 'value', name: 'Value' }],
 				series: [],
-				grid: { left: 60, right: 60, bottom: 60, top: 60 },
-				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }]
+				// grid: { left: 60, right: 60, bottom: 60, top: 60 },
+				// add bottom offset to the slider so it doesn't overlap the x-axis
+				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}]
 			},
              loading: true,
              id: null,
@@ -213,7 +214,7 @@ class Chart extends React.Component {
             const echSeries = [];
             let metricIndex = 0;
             for (const [metric, workloadMap] of metricsMap.entries()) {
-                echYAxes.push({ type: 'value', name: metric, position: metricIndex % 2 === 1 ? 'right' : 'left', offset: metricIndex * 50 });
+                echYAxes.push({ type: 'value', name: metric, position: metricIndex % 2 === 1 ? 'right' : 'left', offset: metricIndex * 50 , nameLocation: 'middle', nameGap: 50});
                 let seriesIdx = 0;
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
@@ -294,8 +295,9 @@ class Chart extends React.Component {
                 xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
                 yAxis: echYAxes,
                 series: echSeries,
-                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }],
-                grid: { left: 60, right: 60, bottom: 60, top: 60 }
+                // ensure slider is slightly lower so it doesn't clip with the x-axis
+                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}],
+                grid: { left: 60, right: 60, top: 60 }
             };
 
             this.setState({
@@ -401,8 +403,9 @@ class Chart extends React.Component {
             xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
             yAxis: [{ type: 'value', name: newChartData.metric || 'Value' }],
             series: echSeriesSingle,
-            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0] }],
-            grid: { left: 60, right: 60, bottom: 60, top: 60 }
+            // move slider down a bit to avoid clipping with axis labels
+            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}],
+            // grid: { left: 60, right: 60, bottom: 60, top: 60 }
         };
 
         this.setState({
