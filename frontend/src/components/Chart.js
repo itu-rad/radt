@@ -291,8 +291,11 @@ class Chart extends React.Component {
                             // keep points compact: simple [time-offset, value] arrays
                             const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
                             const seriesName = runMeta.name || runMeta.id;
-                            // populate lookup once per series
-                            seriesMetaLookup[seriesName] = [runMeta];
+                            // populate lookup once per series and record workload on meta
+                            seriesMetaLookup[seriesName] = seriesMetaLookup[seriesName] || { runs: [], metric, workload: runMeta.workload || s.rawWorkload };
+                            seriesMetaLookup[seriesName].runs.push(runMeta);
+                            seriesMetaLookup[seriesName].metric = metric;
+                            seriesMetaLookup[seriesName].workload = runMeta.workload || s.rawWorkload;
                             const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
                             // colour is based on the run/series index; dash is based on the metric index
                             const lineType = dashTypes[metricIndex % dashTypes.length];
@@ -307,7 +310,7 @@ class Chart extends React.Component {
                                      lineStyle: { width: this.state.chartLineWidth, type: lineType },
                                      itemStyle: { color },
                                      sampling: 'lttb',
-                                     meta: { runs: [runMeta], metric }
+                                     meta: { runs: [runMeta], metric, workload: runMeta.workload || s.rawWorkload }
                                      // metadata is attached to each point in "data"; no series-level custom relied upon
                                  });
                              }
@@ -319,9 +322,11 @@ class Chart extends React.Component {
                          // keep points compact and store runs/metric in lookup
                          const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
                          const seriesName = s.id;
-                         // accumulate runs per series id (do not overwrite if already present)
-                         if (!seriesMetaLookup[seriesName]) seriesMetaLookup[seriesName] = [];
-                         seriesMetaLookup[seriesName].push(...(s.custom.runs || []));
+                        // accumulate runs per series id (store runs, metric and workload)
+                        if (!seriesMetaLookup[seriesName]) seriesMetaLookup[seriesName] = { runs: [], metric, workload: s.rawWorkload };
+                        seriesMetaLookup[seriesName].runs.push(...(s.custom.runs || []));
+                        seriesMetaLookup[seriesName].metric = metric;
+                        seriesMetaLookup[seriesName].workload = s.rawWorkload;
                          const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % monoColors.length];
                          const lineType = dashTypes[metricIndex % dashTypes.length];
                          if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
@@ -335,7 +340,7 @@ class Chart extends React.Component {
                                  lineStyle: { width: this.state.chartLineWidth, type: lineType },
                                  itemStyle: { color },
                                  sampling: 'lttb',
-                                 meta: { runs: s.custom.runs, metric }
+                                 meta: { runs: s.custom.runs, metric, workload: s.rawWorkload }
                                  // metadata lives on each point (runs, metric)
                              });
                          }
@@ -382,31 +387,48 @@ class Chart extends React.Component {
                      // formatter closes over seriesMetaLookup to avoid per-point metadata
                      formatter: function(params) {
                         const ps = Array.isArray(params) ? params : [params];
-                        let html = '';
-                        var index = 0;
+                        // group series entries by workload
+                        const grouped = {};
                         ps.forEach(p => {
                             const seriesName = p.seriesName || '';
-                            // prefer series-level meta (attached to series option); fall back to seriesMetaLookup
                             const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
-                            const runs = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookup[seriesName] || [] );
-                            const metricName = runs[index].metric || '';
-                            const dt = p.value ? p.value[0] : '';
-                            const val = p.value ? p.value[1] : '';
-                            html += `<div style="font-weight:bold">${metricName}</div>`;
-                            html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
-                            html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
-                            if (runs && runs.length) {
-                                const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
-                                const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
-                                const paramsSet = [...new Set(runs.map(r=>r.params).filter(Boolean))];
-                                const letters = [...new Set(runs.map(r=>r.letter).filter(Boolean))];
-                                if (models.length) html += `<b>Model(s):</b> ${models.join(', ')}<br/>`;
-                                if (sources.length) html += `<b>Source(s):</b> ${sources.join(', ')}<br/>`;
-                                if (paramsSet.length) html += `<b>Param(s):</b> ${paramsSet.join(', ')}<br/>`;
-                                if (letters.length) html += `<b>Run(s):</b> ${letters.join(', ')}<br/>`;
-                            }
-                            html += '<hr/>';
-                            index += 1;
+                            // prefer the exact series option by index (avoids name collisions), then series.userOptions.meta, then lookup
+                            const seriesOption = (typeof p.seriesIndex === 'number' && echSeries[p.seriesIndex]) ? echSeries[p.seriesIndex] : null;
+                            const meta = (seriesOption && seriesOption.meta) ? seriesOption.meta
+                                        : (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta
+                                        : (seriesMetaLookup[seriesName] || { runs: [], metric: '', workload: seriesName });
+                            const workload = meta.workload || seriesName;
+                            const entry = {
+                                seriesName,
+                                metric: meta.metric || '',
+                                value: p.value ? p.value[1] : '',
+                                dt: p.value ? p.value[0] : '',
+                                color: p.color,
+                                runs: meta.runs || []
+                            };
+                            if (!grouped[workload]) grouped[workload] = [];
+                            grouped[workload].push(entry);
+                        });
+
+                        // render HTML grouped by workload, showing metric before value for each series
+                        let html = '';
+                        Object.keys(grouped).forEach(workload => {
+                            html += `<div style="font-weight:bold; margin-bottom:6px;">${workload}</div>`;
+                            grouped[workload].forEach(e => {
+                                html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
+                                html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
+                                if (e.runs && e.runs.length) {
+                                    const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
+                                    const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
+                                    const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
+                                    const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
+                                    if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
+                                    if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
+                                    if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
+                                    if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
+                                }
+                                html += '<hr/>';
+                            });
                         });
                         return html;
                      }
@@ -489,31 +511,31 @@ class Chart extends React.Component {
         const seriesMetaLookupSingle = {};
         let monoCounter = 0;
         for (const [id, s] of seriesMap.entries()) {
-            if (!s.data || s.data.length === 0) continue;
-            s.data.sort((a, b) => a[0] - b[0]);
-            const earliest = s.data[0][0];
-            const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
-            // accumulate runs per series id (do not overwrite if already present)
-            if (!seriesMetaLookupSingle[s.id]) seriesMetaLookupSingle[s.id] = { runs: [], metric: newChartData.metric || '' };
+             if (!s.data || s.data.length === 0) continue;
+             s.data.sort((a, b) => a[0] - b[0]);
+             const earliest = s.data[0][0];
+             const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+            // accumulate runs per series id (store runs, metric, workload)
+            if (!seriesMetaLookupSingle[s.id]) seriesMetaLookupSingle[s.id] = { runs: [], metric: newChartData.metric || '', workload: (s.custom.runs && s.custom.runs[0] && s.custom.runs[0].workload) || s.id };
             seriesMetaLookupSingle[s.id].runs.push(...(s.custom.runs || []));
-            const name = s.id;
-            if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
-            // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
-            const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % plotColors.length];
-            const lineType = dashTypes[0]; // single-axis always uses solid lines
-            echSeriesSingle.push({
-                name,
-                type: 'line',
-                showSymbol: false,
-                data: points,
-                lineStyle: { width: this.state.chartLineWidth, type: lineType },
-                itemStyle: { color },
-                sampling: 'lttb',
-                // metadata attached to each point; no reliance on series.custom
-            });
-            monoCounter++;
-        }
-
+             const name = s.id;
+             if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
+             // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
+             const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % plotColors.length];
+             const lineType = dashTypes[0]; // single-axis always uses solid lines
+             echSeriesSingle.push({
+                 name,
+                 type: 'line',
+                 showSymbol: false,
+                 data: points,
+                 lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                 itemStyle: { color },
+                 sampling: 'lttb',
+                 // metadata attached to each point; no reliance on series.custom
+             });
+             monoCounter++;
+         }
+ 
         // apply smoothing
         if (newSmoothing > 0) {
             echSeriesSingle.forEach(series => {
@@ -537,32 +559,48 @@ class Chart extends React.Component {
                 // use the per-render lookup for single-axis series
                 formatter: function(params) {
                     const ps = Array.isArray(params) ? params : [params];
-                    let html = '';
+                    // group entries by workload similar to multi-axis
+                    const grouped = {};
                     ps.forEach(p => {
                         const seriesName = p.seriesName || '';
-                        // prefer series-level meta (attached to series option); fall back to seriesMetaLookup
                         const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
-                        const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '' });
-                        const dt = p.value ? p.value[0] : '';
-                        const val = p.value ? p.value[1] : '';
-                        html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
-                        html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
-                        const runs = meta.runs || [];
-                        if (runs && runs.length) {
-                            const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
-                            const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
-                            const paramsSet = [...new Set(runs.map(r=>r.params).filter(Boolean))];
-                            const letters = [...new Set(runs.map(r=>r.letter).filter(Boolean))];
-                            if (models.length) html += `<b>Model(s):</b> ${models.join(', ')}<br/>`;
-                            if (sources.length) html += `<b>Source(s):</b> ${sources.join(', ')}<br/>`;
-                            if (paramsSet.length) html += `<b>Param(s):</b> ${paramsSet.join(', ')}<br/>`;
-                            if (letters.length) html += `<b>Run(s):</b> ${letters.join(', ')}<br/>`;
-                        }
-                        html += '<hr/>';
+                        // prefer the exact series option by index (echSeriesSingle is out of scope here),
+                        // so check p.series.userOptions.meta first then fall back to lookup
+                        const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '', workload: seriesName });
+                        const workload = meta.workload || seriesName;
+                        const entry = {
+                            seriesName,
+                            metric: meta.metric || '',
+                            value: p.value ? p.value[1] : '',
+                            dt: p.value ? p.value[0] : '',
+                            color: p.color,
+                            runs: meta.runs || []
+                        };
+                        if (!grouped[workload]) grouped[workload] = [];
+                        grouped[workload].push(entry);
+                    });
+                    let html = '';
+                    Object.keys(grouped).forEach(w => {
+                        html += `<div style="font-weight:bold; margin-bottom:6px;">${w}</div>`;
+                        grouped[w].forEach(e => {
+                            html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
+                            html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
+                            if (e.runs && e.runs.length) {
+                                const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
+                                const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
+                                const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
+                                const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
+                                if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
+                                if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
+                                if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
+                                if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
+                            }
+                            html += '<hr/>';
+                        });
                     });
                     return html;
                 }
-            },
+             },
              // single-axis legend also at bottom
              legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
              xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
@@ -571,7 +609,7 @@ class Chart extends React.Component {
              // ensure slider sits below the legend and reserve bottom space
              dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
              grid: { left: 60, right: 60, top: 60, bottom: 96 }
-         };
+        };
 
         if (this.ecInstance) {
             try { this.ecInstance.setOption(echOptionsSingle, true); } catch (e) {}
