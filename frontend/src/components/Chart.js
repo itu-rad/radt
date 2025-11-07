@@ -249,10 +249,12 @@ class Chart extends React.Component {
                 }
 
                 if (!workloadMap.has(workloadId)) {
+                    // keep runs metadata on the "custom" holder (used to populate point-level runs below)
                     workloadMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] }, metric, rawWorkload });
                 }
                 const sObj = workloadMap.get(workloadId);
                 const perRunData = (run.data || []).map(pt => [pt.timestamp, pt.value]);
+                // include metric on run metadata as well so it is available when attached to points
                 const metadata = {
                     name: run.runName || run.name,
                     id: run.name,
@@ -262,15 +264,18 @@ class Chart extends React.Component {
                     model: run.model ?? undefined,
                     source: run.source ?? undefined,
                     params: run.params ?? undefined,
+                    metric: metric,
                     data: perRunData
                 };
                 sObj.custom.runs.push(metadata);
-                perRunData.forEach(([t, v]) => sObj.data.push([t, v]));
+                perRunData.forEach(([t, v]) => sObj.data.push([t, v])); // keep flat numeric storage for now
             });
 
             // build echarts yAxis and series
             const echYAxes = [];
             const echSeries = [];
+            // lightweight lookup mapping seriesName -> { runs: [...], metric: '...' }
+            const seriesMetaLookup = {};
             let metricIndex = 0;
             for (const [metric, workloadMap] of metricsMap.entries()) {
                 echYAxes.push({ type: 'value', name: metric, position: metricIndex % 2 === 1 ? 'right' : 'left', offset: metricIndex * 50, nameLocation: 'middle', nameGap: 50});
@@ -283,94 +288,113 @@ class Chart extends React.Component {
                             if (!runMeta.data || runMeta.data.length === 0) return;
                             runMeta.data.sort((a, b) => a[0] - b[0]);
                             const earliest = runMeta.data[0][0];
+                            // keep points compact: simple [time-offset, value] arrays
                             const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
+                            const seriesName = runMeta.name || runMeta.id;
+                            // populate lookup once per series
+                            seriesMetaLookup[seriesName] = [runMeta];
                             const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
                             // colour is based on the run/series index; dash is based on the metric index
                             const lineType = dashTypes[metricIndex % dashTypes.length];
                             if (!(newHiddenSeries && newHiddenSeries.indexOf(runMeta.name || runMeta.id) > -1)) {
+                                // include metric/name metadata on the series option (preferred lookup in formatter)
                                 echSeries.push({
-                                    name: runMeta.name || runMeta.id,
-                                    type: 'line',
-                                    yAxisIndex: metricIndex,
-                                    data: points,
-                                    showSymbol: false,
-                                    lineStyle: { width: this.state.chartLineWidth, type: lineType },
-                                    itemStyle: { color },
-                                    sampling: 'lttb',
-                                    custom: { runs: [runMeta] }
-                                });
-                            }
-                            seriesIdx++;
-                        });
-                    } else {
-                        s.data.sort((a, b) => a[0] - b[0]);
-                        const earliest = s.data[0][0];
-                        const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
-                        const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
-                        const lineType = dashTypes[metricIndex % dashTypes.length];
-                        if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
-                            echSeries.push({
-                                name: s.id,
-                                type: 'line',
-                                yAxisIndex: metricIndex,
-                                data: points,
-                                showSymbol: false,
-                                lineStyle: { width: this.state.chartLineWidth, type: lineType },
-                                itemStyle: { color },
-                                sampling: 'lttb',
-                                custom: s.custom
-                            });
-                        }
-                        seriesIdx++;
-                    }
-                }
-                metricIndex++;
-            }
+                                    name: seriesName,
+                                     type: 'line',
+                                     yAxisIndex: metricIndex,
+                                     data: points,
+                                     showSymbol: false,
+                                     lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                                     itemStyle: { color },
+                                     sampling: 'lttb',
+                                     meta: { runs: [runMeta], metric }
+                                     // metadata is attached to each point in "data"; no series-level custom relied upon
+                                 });
+                             }
+                             seriesIdx++;
+                         });
+                     } else {
+                         s.data.sort((a, b) => a[0] - b[0]);
+                         const earliest = s.data[0][0];
+                         // keep points compact and store runs/metric in lookup
+                         const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+                         const seriesName = s.id;
+                         // accumulate runs per series id (do not overwrite if already present)
+                         if (!seriesMetaLookup[seriesName]) seriesMetaLookup[seriesName] = [];
+                         seriesMetaLookup[seriesName].push(...(s.custom.runs || []));
+                         const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % monoColors.length];
+                         const lineType = dashTypes[metricIndex % dashTypes.length];
+                         if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
+                             // attach metric into custom payload for aggregated series too
+                             echSeries.push({
+                                name: seriesName,
+                                 type: 'line',
+                                 yAxisIndex: metricIndex,
+                                 data: points,
+                                 showSymbol: false,
+                                 lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                                 itemStyle: { color },
+                                 sampling: 'lttb',
+                                 meta: { runs: s.custom.runs, metric }
+                                 // metadata lives on each point (runs, metric)
+                             });
+                         }
+                         seriesIdx++;
+                     }
+                 }
+                 metricIndex++;
+             }
 
-            // smoothing
-            if (newSmoothing > 0) {
-                echSeries.forEach(series => {
-                    if (series.data && series.data.length > 0) {
-                        series.data = calcEMA(series.data, newSmoothing);
-                    }
-                });
-            }
+             // smoothing
+             if (newSmoothing > 0) {
+                 echSeries.forEach(series => {
+                     if (series.data && series.data.length > 0) {
+                         series.data = calcEMA(series.data, newSmoothing);
+                     }
+                 });
+             }
 
-            // build legendSelected map to hide hiddenSeries if present
-            const legendSelected = {};
-            echSeries.forEach(s => {
-                legendSelected[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1);
-            });
+             // build legendSelected map to hide hiddenSeries if present
+             const legendSelected = {};
+             echSeries.forEach(s => {
+                 legendSelected[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1);
+             });
 
-            const chartTitle = (() => {
-                const experimentCount = new Set((newChartData.data || []).map(s => s.experimentName)).size;
-                return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
-            })();
+             const chartTitle = (() => {
+                 const experimentCount = new Set((newChartData.data || []).map(s => s.experimentName)).size;
+                 return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
+             })();
 
-            // Adjust grid left/right to account for any yAxis offsets so the plot fills the wrapper
-            const baseGrid = { left: 60, right: 60, top: 60, bottom: 96 };
-            const leftOffsets = echYAxes.filter(a => (a.position || 'left') === 'left').map(a => a.offset || 0);
-            const rightOffsets = echYAxes.filter(a => (a.position || 'left') === 'right').map(a => a.offset || 0);
-            const extraLeft = leftOffsets.length ? Math.max(...leftOffsets) : 0;
-            const extraRight = rightOffsets.length ? Math.max(...rightOffsets) : 0;
-            const adjustedGrid = { ...baseGrid, left: baseGrid.left + extraLeft, right: baseGrid.right + extraRight };
+             // Adjust grid left/right to account for any yAxis offsets so the plot fills the wrapper
+             const baseGrid = { left: 60, right: 60, top: 60, bottom: 96 };
+             const leftOffsets = echYAxes.filter(a => (a.position || 'left') === 'left').map(a => a.offset || 0);
+             const rightOffsets = echYAxes.filter(a => (a.position || 'left') === 'right').map(a => a.offset || 0);
+             const extraLeft = leftOffsets.length ? Math.max(...leftOffsets) : 0;
+             const extraRight = rightOffsets.length ? Math.max(...rightOffsets) : 0;
+             const adjustedGrid = { ...baseGrid, left: baseGrid.left + extraLeft, right: baseGrid.right + extraRight };
 
-            const echOptions = {
-                title: { text: chartTitle },
-                // detailed tooltip formatter (always on)
-                tooltip: {
-                    trigger: 'axis',
-                    axisPointer: { type: 'cross' },
-                    formatter: function(params) {
+             const echOptions = {
+                 title: { text: chartTitle },
+                 // detailed tooltip formatter (always on) - show metric name above value when present
+                 tooltip: {
+                     trigger: 'axis',
+                     axisPointer: { type: 'cross' },
+                     // formatter closes over seriesMetaLookup to avoid per-point metadata
+                     formatter: function(params) {
                         const ps = Array.isArray(params) ? params : [params];
                         let html = '';
+                        var index = 0;
                         ps.forEach(p => {
                             const seriesName = p.seriesName || '';
+                            // prefer series-level meta (attached to series option); fall back to seriesMetaLookup
+                            const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
+                            const runs = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookup[seriesName] || [] );
+                            const metricName = runs[index].metric || '';
                             const dt = p.value ? p.value[0] : '';
                             const val = p.value ? p.value[1] : '';
+                            html += `<div style="font-weight:bold">${metricName}</div>`;
                             html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
                             html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
-                            const runs = (p.series && p.series.userOptions && p.series.userOptions.custom && p.series.userOptions.custom.runs) ? p.series.userOptions.custom.runs : [];
                             if (runs && runs.length) {
                                 const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
                                 const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
@@ -382,18 +406,19 @@ class Chart extends React.Component {
                                 if (letters.length) html += `<b>Run(s):</b> ${letters.join(', ')}<br/>`;
                             }
                             html += '<hr/>';
+                            index += 1;
                         });
                         return html;
-                    }
-                },
-                 // keep legend at bottom and leave room in grid.bottom
-                 legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
-                 xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
-                 yAxis: echYAxes,
-                 series: echSeries,
-                 // ensure slider sits below the legend
-                 dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-                 grid: adjustedGrid
+                     }
+                 },
+                  // keep legend at bottom and leave room in grid.bottom
+                  legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
+                  xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+                  yAxis: echYAxes,
+                  series: echSeries,
+                  // ensure slider sits below the legend
+                  dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+                  grid: adjustedGrid
              };
 
             if (this.ecInstance) {
@@ -461,12 +486,16 @@ class Chart extends React.Component {
 
         // Build echarts series array
         const echSeriesSingle = [];
+        const seriesMetaLookupSingle = {};
         let monoCounter = 0;
         for (const [id, s] of seriesMap.entries()) {
             if (!s.data || s.data.length === 0) continue;
             s.data.sort((a, b) => a[0] - b[0]);
             const earliest = s.data[0][0];
             const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+            // accumulate runs per series id (do not overwrite if already present)
+            if (!seriesMetaLookupSingle[s.id]) seriesMetaLookupSingle[s.id] = { runs: [], metric: newChartData.metric || '' };
+            seriesMetaLookupSingle[s.id].runs.push(...(s.custom.runs || []));
             const name = s.id;
             if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
             // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
@@ -480,7 +509,7 @@ class Chart extends React.Component {
                 lineStyle: { width: this.state.chartLineWidth, type: lineType },
                 itemStyle: { color },
                 sampling: 'lttb',
-                custom: s.custom
+                // metadata attached to each point; no reliance on series.custom
             });
             monoCounter++;
         }
@@ -505,16 +534,20 @@ class Chart extends React.Component {
             // detailed tooltip formatter (always on)
             tooltip: {
                 trigger: 'axis',
+                // use the per-render lookup for single-axis series
                 formatter: function(params) {
                     const ps = Array.isArray(params) ? params : [params];
                     let html = '';
                     ps.forEach(p => {
                         const seriesName = p.seriesName || '';
+                        // prefer series-level meta (attached to series option); fall back to seriesMetaLookup
+                        const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
+                        const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '' });
                         const dt = p.value ? p.value[0] : '';
                         const val = p.value ? p.value[1] : '';
                         html += `<div style="color:${p.color}"><b>${seriesName}</b></div>`;
                         html += `<b>Value:</b> ${val} <br/><b>Time:</b> ${milliToMinsSecs(dt)}<br/>`;
-                        const runs = (p.series && p.series.userOptions && p.series.userOptions.custom && p.series.userOptions.custom.runs) ? p.series.userOptions.custom.runs : [];
+                        const runs = meta.runs || [];
                         if (runs && runs.length) {
                             const models = [...new Set(runs.map(r=>r.model).filter(Boolean))];
                             const sources = [...new Set(runs.map(r=>r.source).filter(Boolean))];
@@ -807,9 +840,10 @@ function calcEMA(series, smoothingWeight) {
     // calculate smoothness using the smoothingWeight divided by the max smoothness
     const smoothness = smoothingWeight / 100;
 
-    // separate data from timestamps
-    let time = series.map(a => a[0]); 
-    let data = series.map(a => a[1]);  
+    if (!series || series.length === 0) return series;
+    // separate data from timestamps; support series entries that are either arrays [t,v] or objects { value: [t,v], ...meta}
+    let time = series.map(a => Array.isArray(a) ? a[0] : (a && a.value ? a.value[0] : undefined));
+    let data = series.map(a => Array.isArray(a) ? a[1] : (a && a.value ? a.value[1] : undefined));
 
     // first item is just first data item
     let emaData = [data[0]]; 
@@ -822,8 +856,18 @@ function calcEMA(series, smoothingWeight) {
 
     // recombine the new EMA array with the timestamp array
     let emaSeries = [];
-    for (let i = 0; i < emaData.length; i++) {           
-        emaSeries.push([time[i], emaData[i]]);
+    for (let i = 0; i < emaData.length; i++) {
+        // preserve input shape: if original was array, output array; if object, output object preserving meta fields
+        const original = series[i];
+        if (Array.isArray(original)) {
+            emaSeries.push([time[i], emaData[i]]);
+        } else if (original && original.value) {
+            // copy meta fields except overwrite value
+            const copy = { ...original, value: [time[i], emaData[i]] };
+            emaSeries.push(copy);
+        } else {
+            emaSeries.push([time[i], emaData[i]]);
+        }
     }
 
     // return final series for highcharts API
