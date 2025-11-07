@@ -20,7 +20,7 @@ class ChartPicker extends React.Component {
 			showLoadingOverlay: false,
 
 			// NEW: multi-axis single-chart mode
-			multiAxisMode: false,
+			multiAxisMode: true,
 
 			// NEW: version to force re-mount / re-render of combined chart
 			combinedVersion: 0,
@@ -430,12 +430,31 @@ class ChartPicker extends React.Component {
 
 		// NEW: build a combined chart object when multiAxisMode is enabled
 		let combinedChart = null;
-		if (multiAxisMode) {
+		// Only build combinedChart when multiAxisMode is enabled AND there are charts to combine
+		if (multiAxisMode && (charts || []).length > 0) {
 			// create a synthetic chart that contains each run+metric as a separate series
 			const combinedSeries = [];
 			(charts || []).forEach(chart => {
 				// chart.data is an array of run objects with their own data arrays
 				(chart.data || []).forEach(run => {
+					// Normalize and validate datapoints; skip series with no valid points
+					const pts = (run.data || [])
+						.map(p => {
+							// tolerate both {timestamp, value} and [t, v] shapes; coerce to numbers
+							if (Array.isArray(p) && p.length >= 2) {
+								return { timestamp: Number(p[0]), value: Number(p[1]) };
+							}
+							if (p && (p.timestamp !== undefined || p.time !== undefined)) {
+								return { timestamp: Number(p.timestamp ?? p.time), value: Number(p.value) };
+							}
+							// invalid point -> drop
+							return null;
+						})
+						.filter(Boolean)
+						.filter(pt => Number.isFinite(pt.timestamp) && Number.isFinite(pt.value));
+
+					if (pts.length === 0) return; // skip empty series
+
 					combinedSeries.push({
 						// unique name: run + metric so Chart can label series
 						name: `${run.name} :: ${chart.metric}`,
@@ -445,20 +464,22 @@ class ChartPicker extends React.Component {
 						workload: run.workload,
 						// preserve original metric so Chart can label y-axis
 						metric: chart.metric,
-						// series datapoints as provided by fetchChart (timestamp/step/value)
-						// keep objects (timestamp/value) - Chart will handle transformation
-						data: (run.data || []).slice()
+						// normalized datapoints
+						data: pts
 					});
 				});
 			});
-			combinedChart = {
-				id: 'multi-axis',
-				metric: 'multi-axis',
-				// Chart component expects a `data` field; provide series array
-				data: combinedSeries,
-				// USE persisted combinedContext from state so toggles persist and sync works
-				context: combinedContext
-			};
+			// only expose combinedChart if we actually have series to show
+			if (combinedSeries.length > 0) {
+				combinedChart = {
+					id: 'multi-axis',
+					metric: 'multi-axis',
+					// Chart component expects a `data` field; provide series array
+					data: combinedSeries,
+					// USE persisted combinedContext from state so toggles persist and sync works
+					context: combinedContext
+				};
+			}
 		}
 
 		return (
