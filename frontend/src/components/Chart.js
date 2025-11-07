@@ -32,12 +32,14 @@ class Chart extends React.Component {
              range: {min: 0, max: 0},
              monochromeMode: false,
              boostMode: true,
-             chartLineWidth: 3.0
+             chartLineWidth: 3.0,
+             wrapperReady: false, // wait until wrapper has layout before rendering chart
 		}; 
 
         this.chartRef = React.createRef();
+        this.wrapperRef = React.createRef();
         this.handleShowRunsSwitch = (workloadId) => (event) => this.toggleShownRuns(workloadId, event);
-
+        this._resizeObserver = null;
 		// NEW: flag to suppress parent-sync calls while reacting to incoming props
 		this._skipPullAfterPropChange = false;
 
@@ -48,10 +50,17 @@ class Chart extends React.Component {
     // called when echarts instance is ready
     afterChartCreated = (ec) => {
         this.ecInstance = ec;
+        // If we already have options in state (initial mount), apply them directly to the instance
+        try {
+            if (this.state && this.state.options) {
+                ec.setOption(this.state.options, true);
+            }
+            // force a resize on next tick so echarts calculates correct size
+            setTimeout(() => { try { ec.resize(); } catch (e) {} }, 0);
+        } catch (e) {}
     }
 
     componentDidMount() {
-
         // only show workload ID's which contain more than 1 run in Toggle Run section
         const workloads = this.props.chartData.data.map(run => run.workload);
         const nonUnique = [...new Set(workloads.filter((item,i) => workloads.includes(item, i+1)))];
@@ -66,8 +75,48 @@ class Chart extends React.Component {
             // with default settings (e.g. no smoothing and combined as workloads)
             this.generateSeries(this.props.chartData, 0, [], [], {min: 0, max: 0}, false); 
         }
+
+        // Defer mounting the chart until the wrapper is laid out to avoid wrong initial render.
+        const el = this.wrapperRef.current;
+        if (el) {
+            if (typeof ResizeObserver !== 'undefined') {
+                this._resizeObserver = new ResizeObserver(entries => {
+                    for (const entry of entries) {
+                        const { width, height } = entry.contentRect || {};
+                        if (width > 0 && height > 0) {
+                            this.setState({ wrapperReady: true }, () => {
+                                if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+                            });
+                            return;
+                        }
+                    }
+                });
+                this._resizeObserver.observe(el);
+            } else {
+                // fallback: poll until sized
+                const checkSize = () => {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                        this.setState({ wrapperReady: true });
+                    } else {
+                        requestAnimationFrame(checkSize);
+                    }
+                };
+                requestAnimationFrame(checkSize);
+            }
+        } else {
+            // if no ref (unlikely), allow chart to render
+            this.setState({ wrapperReady: true });
+        }
     }
 
+    componentWillUnmount() {
+        if (this._resizeObserver) {
+            try { this._resizeObserver.disconnect(); } catch (e) {}
+            this._resizeObserver = null;
+        }
+    }
+ 
     componentDidUpdate(prevProps, prevState) {
 		// If chartData prop changed (new combined chart or a different single chart), regenerate series
 		if (prevProps.chartData !== this.props.chartData) {
@@ -145,8 +194,17 @@ class Chart extends React.Component {
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
         if (!newChartData || !newChartData.data) {
-            this.setState({ loading: false, options: { ...this.state.options, series: [] } });
-            return;
+            const newOpts = { ...this.state.options, series: [] };
+            if (this.ecInstance) {
+                try { this.ecInstance.setOption(newOpts, true); } catch (e) {}
+                setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+                // update non-options state only
+                this.setState({ loading: false });
+            } else {
+                // echarts instance not ready -> set options in state so ReactECharts mounts with them
+                this.setState({ loading: false, options: newOpts });
+            }
+             return;
         }
 
         // palettes and helpers
@@ -338,16 +396,32 @@ class Chart extends React.Component {
                  grid: adjustedGrid
              };
 
-            this.setState({
-                id: newChartData.id,
-                data: newChartData.data,
-                options: echOptions,
-                shownRuns: newShownRuns,
-                hiddenSeries: newHiddenSeries,
-                smoothing: newSmoothing,
-                monochromeMode: monoMode,
-                loading: false
-            });
+            if (this.ecInstance) {
+                try { this.ecInstance.setOption(echOptions, true); } catch (e) {}
+                setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+                // update state fields except options to avoid triggering ReactECharts full update
+                this.setState({
+                    id: newChartData.id,
+                    data: newChartData.data,
+                    shownRuns: newShownRuns,
+                    hiddenSeries: newHiddenSeries,
+                    smoothing: newSmoothing,
+                    monochromeMode: monoMode,
+                    loading: false
+                });
+            } else {
+                // echarts not ready yet — set options in state so ReactECharts mounts with them
+                this.setState({
+                    id: newChartData.id,
+                    data: newChartData.data,
+                    options: echOptions,
+                    shownRuns: newShownRuns,
+                    hiddenSeries: newHiddenSeries,
+                    smoothing: newSmoothing,
+                    monochromeMode: monoMode,
+                    loading: false
+                });
+            }
             return;
         }
 
@@ -466,16 +540,30 @@ class Chart extends React.Component {
              grid: { left: 60, right: 60, top: 60, bottom: 96 }
          };
 
-        this.setState({
-            id: newChartData.id,
-            data: newChartData.data,
-            options: echOptionsSingle,
-            shownRuns: newShownRuns,
-            hiddenSeries: newHiddenSeries,
-            smoothing: newSmoothing,
-            monochromeMode: monoMode,
-            loading: false
-        });
+        if (this.ecInstance) {
+            try { this.ecInstance.setOption(echOptionsSingle, true); } catch (e) {}
+            setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+            this.setState({
+                id: newChartData.id,
+                data: newChartData.data,
+                shownRuns: newShownRuns,
+                hiddenSeries: newHiddenSeries,
+                smoothing: newSmoothing,
+                monochromeMode: monoMode,
+                loading: false
+            });
+        } else {
+            this.setState({
+                id: newChartData.id,
+                data: newChartData.data,
+                options: echOptionsSingle,
+                shownRuns: newShownRuns,
+                hiddenSeries: newHiddenSeries,
+                smoothing: newSmoothing,
+                monochromeMode: monoMode,
+                loading: false
+            });
+        }
     }
 
     // updates smoothness state 
@@ -587,21 +675,23 @@ class Chart extends React.Component {
             ? { height: 'calc(100vh - 40px)', boxSizing: 'border-box' }
             : { height: 'calc(45vh - 20px)', boxSizing: 'border-box' };
         return (
-            <div className="chartWrapper" style={wrapperStyle}>
+            <div ref={this.wrapperRef} className="chartWrapper" style={wrapperStyle}>
                  <button 
                      className="removeChartBtn"
                      onClick={() => this.props.removeChart(id)}
                  >
                      X
                  </button>
-                {/* chart area flexes to fill available space; ReactECharts set to 100% height */}
+                {/* chart area flexes to fill available space; only mount chart when wrapperReady */}
                 <div className="chartArea">
-                    <ReactECharts
-                        ref={this.chartRef}
-                        option={options}
-                        style={{ height: '100%', width: '100%' }}
-                        onChartReady={this.afterChartCreated}
-                    />
+                    {this.state.wrapperReady ? (
+                        <ReactECharts
+                            ref={this.chartRef}
+                            option={options}
+                            style={{ height: '100%', width: '100%' }}
+                            onChartReady={this.afterChartCreated}
+                        />
+                    ) : null}
                 </div>
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
