@@ -206,8 +206,10 @@ class ChartPicker extends React.Component {
 	}
 
 	// add chart data to state for rendering 
-	setCharts(newChartData, chartRendered = false) {
-
+	setCharts(newChartData, chartRendered = false, options = {}) {
+		// option: openDataPickerIfEmpty (default true)
+		const openIfEmpty = options.openDataPickerIfEmpty !== false;
+ 
 		this.setState(prev => ({
 			charts: newChartData,
 			loading: false,
@@ -222,13 +224,13 @@ class ChartPicker extends React.Component {
 			if (chartRendered) {
 				this.decrementPendingRenders();
 			}
-
+ 
 			// Open DataPicker if no charts are loaded
-			if (newChartData.length === 0) {
+			if (newChartData.length === 0 && openIfEmpty) {
 				this.props.toggleDataPicker(true);
 			}
 		});
-
+ 
 		// open data picker if no charts loaded
 		if (newChartData.length === 0) {
 			localStorage.removeItem("localCharts");
@@ -259,9 +261,10 @@ class ChartPicker extends React.Component {
 	// removes chart from state using its id 
 	removeChart(id) {
 		let newCharts = [...this.state.charts].filter(chart => chart.id !== id);
-		this.setCharts(newCharts); // setCharts will notify App
+		// do NOT auto-open DataPicker when user explicitly removes a chart
+		this.setCharts(newCharts, false, { openDataPickerIfEmpty: false }); // setCharts will notify App
 	}
-
+	
 	// update custom chart state for local data download
 	syncData(id, newSmoothing, newShownRuns, newHiddenSeries, newRange) {
 		// NEW: if multi-axis combined chart, persist context to combinedContext state
@@ -562,7 +565,8 @@ class ChartPicker extends React.Component {
 								key={`${combinedChart.id}-${combinedVersion}`}
 								chartData={combinedChart}
 								pullChartExtras={this.syncData.bind(this)}
-								removeChart={() => this.setCharts([])}
+								// when user removes the combined chart, do not auto-open DataPicker
+								removeChart={() => this.setCharts([], false, { openDataPickerIfEmpty: false })}
 								// NEW: tell Chart to occupy full viewport height in multi-axis mode
 								fullHeight={true}
 							/>

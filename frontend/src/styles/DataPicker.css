@@ -558,7 +558,7 @@
   flex-direction: column;
 	top: 0;
 	left: 0;
-	width: clamp(70%, 80vw, 95%);
+	width: clamp(70%, 90vw, 95%);
   padding: 10px;
 	height: 100%;
 	background-color: #fafafa;
@@ -651,4 +651,12 @@
 
 .toggleDataPickerBtn:hover {
 	background-color: #0b4f6c;
+}
+
+/* Blur ChartPicker when DataPicker is open */
+body.dataPickerOpen #chartPickerWrapper {
+    filter: blur(6px);
+    transition: filter 180ms ease;
+    pointer-events: none; /* disable interactions while picker is open */
+    user-select: none;
 }
