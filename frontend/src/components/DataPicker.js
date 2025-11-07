@@ -762,7 +762,7 @@ function Selections(props) {
 						{ /* render all runs */}
 						{visibleWorkload.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
 							<li key={visibleRun.name}>
-								{visibleRun.name.substring(0, 6) + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								{visibleRun.run_name || visibleRun.name.substring(0, 6) + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
 
 								<button
 									className="removeBtn"

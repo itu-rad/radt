@@ -440,7 +440,7 @@ class ChartPicker extends React.Component {
 						// unique name: run + metric so Chart can label series
 						name: `${run.name} :: ${chart.metric}`,
 						// carry basic run metadata through
-						runName: run.name,
+						runName: run.run_name,
 						experimentName: run.experimentName,
 						workload: run.workload,
 						// preserve original metric so Chart can label y-axis
@@ -473,7 +473,6 @@ class ChartPicker extends React.Component {
 							Data
 						</button>
 
-						{/* NEW: Multi-axis toggle */}
 						<button
 							className={`multiAxisBtn ${multiAxisMode ? 'active' : ''}`}
 							title="Toggle multi-axis single chart"
@@ -481,7 +480,7 @@ class ChartPicker extends React.Component {
 							style={{
 								marginLeft: 8,
 								width: 140,
-								height: 36,
+								height: 40,
 								background: multiAxisMode ? '#115785' : '#fff',
 								color: multiAxisMode ? '#fff' : '#115785',
 								border: '1px solid #115785',
@@ -492,17 +491,17 @@ class ChartPicker extends React.Component {
 							{multiAxisMode ? 'Multi-Axis: ON' : 'Multi-Axis: OFF'}
 						</button>
 
-						<label className="upload">
-							<input 
-								type="file" 
-								ref={this.inputField} 
-								onChange={() => this.uploadLocalData()} 
-							/>
-							<img src={UploadIcon} className="uploadSVG" alt="Upload Charts" />
-						</label>
-						<button className="download" onClick={() => this.downloadLocalData()}>
-							<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
-						</button>
+							{/* <label className="upload">
+								<input 
+									type="file" 
+									ref={this.inputField} 
+									onChange={() => this.uploadLocalData()} 
+								/>
+								<img src={UploadIcon} className="uploadSVG" alt="Upload Charts" />
+							</label>
+							<button className="download" onClick={() => this.downloadLocalData()}>
+								<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
+							</button> */}
 					</div>
 
 					<div id="metricBtnList">

@@ -484,12 +484,12 @@ class Chart extends React.Component {
             if (workloadId.substring(workloadId.indexOf("-") + 1) === "null" || (newShownRuns && newShownRuns.indexOf(workloadId) > -1)) {
                 if (run.letter === null || run.letter === undefined) {
                     const removeNull = workloadId.substring(0, workloadId.indexOf("-"));
-                    workloadId = removeNull + " (" + (run.name ? run.name.substring(0, 5) : '') + ")";
+                    workloadId = run.run_name ? run.run_name : (removeNull + " (" + run.name.substring(0, 5) + ")");
                 } else {
                     if (run.letter.length > 1) {
                         workloadId = workloadId + " " + run.letter;
                     } else {
-                        workloadId = workloadId + " " + run.letter + " (" + (run.name ? run.name.substring(0, 5) : '') + ")";
+                        workloadId = run.run_name ? run.run_name : (" (" + run.name.substring(0, 5) + ")");
                     }
                 }
             }
