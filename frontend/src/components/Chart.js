@@ -12,13 +12,15 @@ class Chart extends React.Component {
 			options: {
 				title: { text: '', left: 'center', textStyle: { fontWeight: 'bold' } },
 				tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-				legend: { data: [] },
+				// place legend at bottom (px) so it anchors consistently across resolutions
+				legend: { data: [], bottom: 48 },
 				xAxis: { type: 'time', name: 'Time Elapsed', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
 				yAxis: [{ type: 'value', name: 'Value', nameLocation: 'middle', nameGap: 50 }],
 				series: [],
-				grid: { left: 60, right: 60, top: 60 },
-				// add bottom offset to the slider so it doesn't overlap the x-axis
-				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}]
+				// reserve bottom space for legend + slider and keep slider below legend
+				grid: { left: 60, right: 60, top: 60, bottom: 96 },
+				// slider bottom should be less than legend.bottom so it sits below it
+				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }]
 			},
              loading: true,
              id: null,
@@ -291,13 +293,14 @@ class Chart extends React.Component {
             const echOptions = {
                 title: { text: chartTitle },
                 tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-                legend: { data: echSeries.map(s => s.name), selected: legendSelected },
+                // keep legend at bottom and leave room in grid.bottom
+                legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
                 xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
                 yAxis: echYAxes,
                 series: echSeries,
-                // ensure slider is slightly lower so it doesn't clip with the x-axis
-                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}],
-                grid: { left: 60, right: 60, top: 60 }
+                // ensure slider sits below the legend
+                dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+                grid: { left: 60, right: 60, top: 60, bottom: 96 }
             };
 
             this.setState({
@@ -399,13 +402,14 @@ class Chart extends React.Component {
                     return `<b>${p.seriesName}</b><br/><b>Value:</b> ${val}<br/><b>Time:</b> ${milliToMinsSecs(dt)}`;
                 }
             },
-            legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle },
+            // single-axis legend also at bottom
+            legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
             xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
             yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
             series: echSeriesSingle,
-            // move slider down a bit to avoid clipping with axis labels
-            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0]}],
-            grid: { left: 60, right: 60, top: 60 }
+            // ensure slider sits below the legend and reserve bottom space
+            dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+            grid: { left: 60, right: 60, top: 60, bottom: 96 }
         };
 
         this.setState({
