@@ -363,7 +363,7 @@ def make_dcgm_groups(dev_table: pd.DataFrame):
                 raise ValueError("DCGMI group could not be created.")
             group_id = int(result.split("group id of ")[1].split()[0])
 
-            gpu_ids = ",".join(list(s))
+            gpu_ids = ",".join(str(int(float(x))) for x in s)
 
             # Add the gpu ids to the new group
             result = "".join(
