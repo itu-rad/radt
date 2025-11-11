@@ -7,7 +7,6 @@ import '../styles/Chart.css';
 const COMMON_TOOLBOX = {
     show: true,
     feature: {
-        brush: { show: true },
         dataZoom: { show: true},
         magicType: { show: true, type: ['line', 'bar', 'stack'] },
         restore: { show: true },
