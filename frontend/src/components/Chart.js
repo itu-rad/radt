@@ -19,16 +19,6 @@ const COMMON_TOOLBOX = {
             onclick: () => {}
         },
         magicType: { show: true, type: ['line', 'bar', 'stack'] },
-        saveAsImage: { show: true, pixelRatio: 10},
-        myDataDownload: {
-            show: true,
-            title: 'Download CSV',
-            // simple download icon (arrow down)
-            icon: 'path://M12 2 L12 16 M6 10 L12 16 L18 10 M4 20 L20 20',
-            // default no-op; per-chart handler is injected in generateSeries
-            onclick: () => {}
-        },
-        // custom dummy feature inserted BEFORE myRemove
         myDummy2: {
             show: true,
             title: '',
@@ -38,7 +28,28 @@ const COMMON_TOOLBOX = {
             emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
             onclick: () => {}
         },
-        // custom remove feature (icon/title defined here; onclick attached per-chart below)
+        saveAsImage: {
+            show: true,
+            pixelRatio: 10,
+            icon: 'path://M 864 248 H 728 l -32.4 -90.8 a 32.07 32.07 0 0 0 -30.2 -21.2 H 358.6 c -13.5 0 -25.6 8.5 -30.1 21.2 L 296 248 H 160 c -44.2 0 -80 35.8 -80 80 v 456 c 0 44.2 35.8 80 80 80 h 704 c 44.2 0 80 -35.8 80 -80 V 328 c 0 -44.2 -35.8 -80 -80 -80 Z Z M 512 384 c -88.4 0 -160 71.6 -160 160 s 71.6 160 160 160 s 160 -71.6 160 -160 s -71.6 -160 -160 -160 Z Z'
+        },
+        myDataDownload: {
+            show: true,
+            title: 'Download CSV',
+            // simple download arrow path
+            icon: 'path://M12 2 L12 16 M5 9 L12 16 L19 9 M4 20 H20',
+            // default no-op; per-chart handler is injected in generateSeries
+            onclick: () => {}
+        },
+        myDummy3: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
         myRemove: {
             show: true,
             title: 'Remove Chart',
