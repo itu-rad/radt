@@ -8,7 +8,7 @@
     background-color: rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(3px);
     box-sizing: border-box;
-    z-index: 99;
+    z-index: 390; /* raised above charts (100) and sidebar (200) */
 }
 #dataPickerWrapper {
     display: flex;
@@ -170,85 +170,129 @@
   border-left: 1px solid #b8b8b8;
 }
 
+/* Reworked Selections header: MLflow-like, sticky, compact controls */
 .selectionsHeader {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 10px; /* Add spacing between buttons */
-	padding: 0 10px; /* Add padding for alignment */
-}
-
-#selectionsWrapper {
-	flex: 1;
-	margin-top: 0; /* Adjusted to align with the header */
-	overflow-x: hidden;
-	overflow-y: scroll;
-	scrollbar-width: none; /* Firefox */
-	box-sizing: border-box;
-}
-
-#selectionsWrapper .workloadWrapper {
-    box-sizing: border-box;
-    border: 1px solid black;
-    width: 93%;
-    border: none;
-    margin: 10px auto 10px auto;
-}
-#selectionsWrapper .workloadWrapper .workload {
-    height: 40px;
     display: flex;
-    align-items: center; 
-    justify-content: left;
-    padding-left: 20px;
-    background-color: #2980b9;
-    color: white;
-    font-size: 15px;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-}
-#selectionsWrapper .removeWorkloadBtn {
-    width: 22px;
-    height: 22px;
-    border-radius: 22px;
-    background-color: #e74c3c;
-    border: none;
-    filter: drop-shadow(1px 1px 2px rgba(255,255,255,0.2));
-    color: white;
-    margin-right: 10px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 11px;
-}
-#selectionsWrapper .removeBtn {
-    width: 20px;
-    height: 20px;
-    border-radius: 20px;
-    background-color: #e74c3c;
-    border: none;
-    color: white;
-    margin-left: 10px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 10px;
-}
-#selectionsWrapper button:hover {
-    filter: brightness(1.2);
-}
-#selectionsWrapper .workloadWrapper ul {
-    padding: 5px 0 5px 0;
-    margin: 0;
-    list-style-type: none;
-
-    border: 1px solid #2980b9;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px;
+    background: linear-gradient(180deg, #ffffff, #fbfcfd);
+    border-bottom: 1px solid var(--ml-border, #e6e8eb);
     box-sizing: border-box;
-    background-color: white;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    /* subtle elevation similar to sidebar controls */
+    box-shadow: 0 2px 6px rgba(43,123,185,0.03);
+}
+
+/* Make the action buttons compact MLflow-style pills */
+.selectionsHeader .clearBtn,
+.selectionsHeader .toggleSelectionsBtn {
+    height: 36px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+.selectionsHeader .clearBtn {
+    background: #fff5f5;
+    color: #b4342f;
+    border-color: rgba(196, 67, 59, 0.12);
+}
+.selectionsHeader .clearBtn:hover { filter: brightness(0.98); }
+.selectionsHeader .toggleSelectionsBtn {
+    background: var(--ml-primary, #115785);
+    color: #fff;
+    border-color: rgba(17,87,133,0.12);
+}
+.selectionsHeader .toggleSelectionsBtn:hover { background: #0b4f6c; }
+
+/* Reworked selections list: fills remaining space, scrolls, MLflow card-like items */
+#selectionsWrapper {
+     flex: 1 1 auto;   /* grow to take remaining vertical space */
+     min-height: 0;    /* required so flex child can shrink and scroll properly */
+     overflow-y: auto;
+     overflow-x: hidden;
+     padding: 12px;
+     box-sizing: border-box;
+     background: transparent;
+     -webkit-overflow-scrolling: touch;
+     gap: 8px;
+     display: flex;
+     flex-direction: column;
+}
+
+/* Workload cards inside selections: subtle card, rounded, consistent spacing */
+#selectionsWrapper .workloadWrapper {
+     width: 100%;
+     max-width: 100%;
+     margin: 6px 0;
+     border-radius: 8px;
+     background: #ffffff;
+     border: 1px solid rgba(15, 89, 133, 0.06);
+     box-shadow: 0 4px 12px rgba(17,87,133,0.04);
+     overflow: hidden;
+     box-sizing: border-box;
+}
+
+/* Workload header area: compact, MLflow-like accent */
+#selectionsWrapper .workloadWrapper .workload {
+     height: 40px;
+     display: flex;
+     align-items: center;
+     gap: 10px;
+     padding: 0 12px;
+     background: linear-gradient(180deg, #115785, #0f4f73);
+     color: #fff;
+     font-size: 13px;
+     font-weight: 600;
+}
+
+/* Remove buttons refined */
+#selectionsWrapper .removeWorkloadBtn,
+#selectionsWrapper .removeBtn {
+     background-color: #e74c3c;
+     border: none;
+     color: #fff;
+     width: 24px;
+     height: 24px;
+     border-radius: 16px;
+     font-weight: 700;
+     font-size: 12px;
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     cursor: pointer;
+}
+#selectionsWrapper .removeWorkloadBtn:hover,
+#selectionsWrapper .removeBtn:hover {
+     filter: brightness(1.05);
+}
+
+/* Run list inside card: white surface with subtle divider */
+#selectionsWrapper .workloadWrapper ul {
+     margin: 0;
+     padding: 8px 12px;
+     list-style: none;
+     background: #fff;
+     border-top: 1px solid rgba(15,89,133,0.04);
 }
 #selectionsWrapper .workloadWrapper ul li {
-    text-align: right;
-    padding: 5px;
-    margin-right: 5px;
-    box-sizing: border-box;
-    border: none;
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     padding: 6px 0;
+     font-size: 13px;
+     color: #23313a;
 }
 .toggleSelectionsBtn {
 	width: 48%;
@@ -563,7 +607,7 @@
 	height: 100%;
 	background-color: #fafafa;
 	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-	z-index: 100;
+	z-index: 400; /* increased so the picker and its controls are on top of everything */
 	overflow-y: auto;
 	transition: transform 0.3s ease;
 	transform: translateX(0); /* Default visible */
@@ -651,12 +695,4 @@
 
 .toggleDataPickerBtn:hover {
 	background-color: #0b4f6c;
-}
-
-/* Blur ChartPicker when DataPicker is open */
-body.dataPickerOpen #chartPickerWrapper {
-    filter: blur(6px);
-    transition: filter 180ms ease;
-    pointer-events: none; /* disable interactions while picker is open */
-    user-select: none;
 }

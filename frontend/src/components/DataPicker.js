@@ -159,6 +159,11 @@ class DataPicker extends React.Component {
 		}
 	}
 
+	// Clean up body class when DataPicker unmounts
+	componentWillUnmount() {
+		document.body.classList.remove('dataPickerOpen');
+	}
+
 	// fetch all experiemnts 
 	async fetchExperiments() {
 		const data = await HTTP.fetchExperiments();
@@ -307,45 +312,55 @@ class DataPicker extends React.Component {
 		} = this.state;
 
 		return (
-			<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
-				<div id="dataPickerContent">
-					<div id="dataPickerHorizontalWrapper">
-						<Experiments
-							data={experimentData}
-							activeExperimentId={activeExperimentId}
-							onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
-						/>
-						<Runs
-							data={visibleRuns}
-							selectedRuns={selectedRuns}
-							setSelectedRuns={this.state.setSelectedRuns}
-							onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
-						/>
-						<div id="selectionsContainer">
-							<div className="selectionsHeader">
-								<button
-									className="clearBtn"
-									onClick={() => this.clearAllSelections()}
-								>
-									Clear All
-								</button>
-								<button
-									className="toggleSelectionsBtn"
-									onClick={() => this.props.toggleDataPicker(false)}
-								>
-									Explore
-								</button>
-							</div>
-							<Selections
-								selectedRuns={selectedRuns}
-								onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-								bottomOfScrollRef={this.bottomOfScrollRef}
+			<>
+				{/* render overlay background when picker is visible so underlying UI is visible + blurred */}
+				{!this.props.toHide && (
+					<div
+						id="dataPickerWrapperBackground"
+						onClick={() => this.props.toggleDataPicker(false)}
+						aria-hidden="true"
+					/>
+				)}
+
+				<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
+					<div id="dataPickerContent">
+						<div id="dataPickerHorizontalWrapper">
+							<Experiments
+								data={experimentData}
+								activeExperimentId={activeExperimentId}
+								onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
 							/>
+							<Runs
+								data={visibleRuns}
+								selectedRuns={selectedRuns}
+								setSelectedRuns={this.state.setSelectedRuns}
+								onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
+							/>
+							<div id="selectionsContainer">
+								<div className="selectionsHeader">
+									<button
+										className="clearBtn"
+										onClick={() => this.clearAllSelections()}
+									>
+										Clear All
+									</button>
+									<button
+										className="toggleSelectionsBtn"
+										onClick={() => this.props.toggleDataPicker(false)}
+									>
+										Explore
+									</button>
+								</div>
+								<Selections
+									selectedRuns={selectedRuns}
+									onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
+									bottomOfScrollRef={this.bottomOfScrollRef}
+								/>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
-
+			</>
 		);
 
 	}

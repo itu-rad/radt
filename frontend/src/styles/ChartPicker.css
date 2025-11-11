@@ -279,10 +279,6 @@
 	padding-bottom: 5px;
 }
 
-#chartsWrapper.blurred {
-	filter: blur(5px); /* Apply blur effect */
-	pointer-events: none; /* Prevent interaction with blurred content */
-}
 
 .loadingOverlay {
 	position: fixed;
@@ -309,16 +305,4 @@
 @keyframes spin {
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
-}
-
-/* When DataPicker is open, hide the metric sidebar and expand charts area */
-body.dataPickerOpen #metricSidebar {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
-/* Shift charts to occupy full width when sidebar is hidden */
-body.dataPickerOpen #chartsWrapper {
-    left: 0 !important;
 }
