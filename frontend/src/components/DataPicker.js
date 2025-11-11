@@ -660,6 +660,8 @@ function Runs(props) {
 			key: 'select',
 			width: 70,
 			render: (_, record) => {
+				let label = " ";
+				
 				if (record.isParent) {
 					const isParentSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
 					const childSelectedCount = record.childRuns.filter(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1).length;
@@ -673,7 +675,6 @@ function Runs(props) {
 					if (isGroupSelected) state = 2;
 					else if (isParentSelected && !allChildrenSelected) state = 1;
 
-				 let label = " ";
 				 if (state === 1) label = "R"; // parent only
 				 else if (state === 2) label = "W"; // all group
 				 // else blank for none
@@ -721,7 +722,9 @@ function Runs(props) {
 						</div>
 					);
 				}
+				console.log("select", props.selectedRuns, record);
 				const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+				if (isSelected) {label = "X";}
 				return (
 					<div
 						className="checkbox"
@@ -733,6 +736,7 @@ function Runs(props) {
 							props.setSelectedRuns(newSelectedRuns);
 						}}
 					>
+						{label}
 					</div>
 				);
 			}
