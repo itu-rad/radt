@@ -20,6 +20,14 @@ const COMMON_TOOLBOX = {
         },
         magicType: { show: true, type: ['line', 'bar', 'stack'] },
         saveAsImage: { show: true, pixelRatio: 10},
+        myDataDownload: {
+            show: true,
+            title: 'Download CSV',
+            // simple download icon (arrow down)
+            icon: 'path://M12 2 L12 16 M6 10 L12 16 L18 10 M4 20 L20 20',
+            // default no-op; per-chart handler is injected in generateSeries
+            onclick: () => {}
+        },
         // custom dummy feature inserted BEFORE myRemove
         myDummy2: {
             show: true,
@@ -237,6 +245,56 @@ class Chart extends React.Component {
             ...COMMON_TOOLBOX,
             feature: {
                 ...COMMON_TOOLBOX.feature,
+                // Attach per-chart download handler that serialises source run data to CSV
+                myDataDownload: {
+                    ...COMMON_TOOLBOX.feature.myDataDownload,
+                    onclick: () => {
+                        try {
+                            const headers = ['workload','runId','runName','metric','timestamp','value'];
+                            const rows = [];
+
+                            (newChartData && newChartData.data || []).forEach(run => {
+                                const base = {
+                                    workload: run.workload ?? '',
+                                    runId: run.name ?? '',
+                                    runName: run.runName ?? run.run_name ?? '',
+                                    metric: run.metric ?? newChartData.metric ?? ''
+                                };
+                                (run.data || []).forEach(pt => {
+                                    // support both { timestamp, value } and [t, v] shapes
+                                    const t = (pt && (pt.timestamp ?? (Array.isArray(pt) ? pt[0] : undefined))) ?? '';
+                                    const v = (pt && (pt.value ?? (Array.isArray(pt) ? pt[1] : undefined))) ?? '';
+                                    rows.push([
+                                        base.workload, base.runId, base.runName, base.metric, t, v
+                                    ]);
+                                });
+                            });
+
+                            // CSV encode (quote every field, escape quotes)
+                            const csvLines = [headers.join(',')].concat(rows.map(r =>
+                                r.map(cell => {
+                                    const s = cell == null ? '' : String(cell);
+                                    return `"${s.replace(/"/g, '""')}"`;
+                                }).join(',')
+                            ));
+                            const csvContent = csvLines.join('\n');
+                            // prepend BOM for Excel compatibility
+                            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            const baseName = (newChartData && (newChartData.title || newChartData.id)) ? (newChartData.title || newChartData.id).toString().replace(/[^\w\-]/g, '_') : 'chart';
+                            a.download = `${baseName}-data.csv`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            URL.revokeObjectURL(url);
+                        } catch (e) {
+                            // fail silently but log to console
+                            console.error('Failed to export CSV', e);
+                        }
+                    }
+                },
                 myRemove: {
                     ...COMMON_TOOLBOX.feature.myRemove,
                     onclick: () => {
