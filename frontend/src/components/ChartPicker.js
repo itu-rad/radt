@@ -166,10 +166,13 @@ class ChartPicker extends React.Component {
 			});
 
 			// build the final chart object (keep same id so it replaces placeholder)
+			// derive a human-friendly title from the metric key
+			const displayName = metric.replace(/^system\/([^-]+)-/, "");
 			const finalChart = {
 				id: placeholderId,
 				data: chartRuns,
 				metric: metric,
+				title: displayName, // <- added title here
 				context: {
 					smoothing: 0,
 					shownRuns: [],
@@ -182,12 +185,6 @@ class ChartPicker extends React.Component {
 			const newCharts = (this.state.charts || []).map(c => (c.id === placeholderId ? finalChart : c));
 			// pass chartRendered = true so setCharts will decrement pending renders for URL sync
 			this.setCharts(newCharts, true);
-
-			// notify App about active metrics (setCharts already does this, but keep as-safety)
-			if (this.props.updateChartMetrics) {
-				const metrics = (this.state.charts || []).map(c => c.metric);
-				this.props.updateChartMetrics(metrics);
-			}
 		} catch (err) {
 			// on error remove placeholder and decrement pending renders
 			console.error("fetchChartData error:", err);
@@ -460,6 +457,11 @@ class ChartPicker extends React.Component {
 			});
 			// only expose combinedChart if we actually have series to show
 			if (combinedSeries.length > 0) {
+				// build display title listing all unique metrics (human-friendly)
+				const uniqueMetrics = [...new Set((charts || []).map(c => c.metric))];
+				const metricNames = uniqueMetrics.map(m => m.replace(/^system\/([^-]+)-/, ""));
+				const combinedTitle = metricNames.join(', ');
+
 				combinedChart = {
 					id: 'multi-axis',
 					metric: 'multi-axis',
@@ -467,6 +469,8 @@ class ChartPicker extends React.Component {
 					data: combinedSeries,
 					// USE persisted combinedContext from state so toggles persist and sync works
 					context: combinedContext
+					,
+					title: combinedTitle // <- added title for combined chart
 				};
 			}
 		}

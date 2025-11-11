@@ -370,6 +370,9 @@ class Chart extends React.Component {
                  return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
              })();
 
+             // Prefer explicit title from chartData (set by ChartPicker) when available
+             const finalTitle = (newChartData && newChartData.title) ? newChartData.title : chartTitle;
+ 
              // Adjust grid left/right to account for any yAxis offsets so the plot fills the wrapper
              const baseGrid = { left: 60, right: 60, top: 60, bottom: 96 };
              const leftOffsets = echYAxes.filter(a => (a.position || 'left') === 'left').map(a => a.offset || 0);
@@ -377,9 +380,14 @@ class Chart extends React.Component {
              const extraLeft = leftOffsets.length ? Math.max(...leftOffsets) : 0;
              const extraRight = rightOffsets.length ? Math.max(...rightOffsets) : 0;
              const adjustedGrid = { ...baseGrid, left: baseGrid.left + extraLeft, right: baseGrid.right + extraRight };
-
+ 
              const echOptions = {
-                 title: { text: chartTitle },
+                 title: {
+                     text: finalTitle,
+                     left: 'center',
+                     top: 12,
+                     textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
+                 },
                  // detailed tooltip formatter (always on) - show metric name above value when present
                  tooltip: {
                      trigger: 'axis',
@@ -471,7 +479,7 @@ class Chart extends React.Component {
             }
             return;
         }
-
+ 
         // SINGLE-AXIS mode
         const data = newChartData.data || [];
         const experimentList = new Set();
@@ -546,69 +554,75 @@ class Chart extends React.Component {
         }
 
         const chartTitle = (experimentList.size === 1) ? [...experimentList][0] : `Multiple Experiments (${experimentList.size})`;
+        const finalSingleTitle = (newChartData && newChartData.title) ? newChartData.title : chartTitle;
+ 
+         // legend selected map
+         const legendSelectedSingle = {};
+         echSeriesSingle.forEach(s => { legendSelectedSingle[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1); });
 
-        // legend selected map
-        const legendSelectedSingle = {};
-        echSeriesSingle.forEach(s => { legendSelectedSingle[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1); });
-
-        const echOptionsSingle = {
-            title: { text: chartTitle },
-            // detailed tooltip formatter (always on)
-            tooltip: {
-                trigger: 'axis',
-                // use the per-render lookup for single-axis series
-                formatter: function(params) {
-                    const ps = Array.isArray(params) ? params : [params];
-                    // group entries by workload similar to multi-axis
-                    const grouped = {};
-                    ps.forEach(p => {
-                        const seriesName = p.seriesName || '';
-                        const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
-                        // prefer the exact series option by index (echSeriesSingle is out of scope here),
-                        // so check p.series.userOptions.meta first then fall back to lookup
-                        const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '', workload: seriesName });
-                        const workload = meta.workload || seriesName;
-                        const entry = {
-                            seriesName,
-                            metric: meta.metric || '',
-                            value: p.value ? p.value[1] : '',
-                            dt: p.value ? p.value[0] : '',
-                            color: p.color,
-                            runs: meta.runs || []
-                        };
-                        if (!grouped[workload]) grouped[workload] = [];
-                        grouped[workload].push(entry);
-                    });
-                    let html = '';
-                    Object.keys(grouped).forEach(w => {
-                        html += `<div style="font-weight:bold; margin-bottom:6px;">${w}</div>`;
-                        grouped[w].forEach(e => {
-                            html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
-                            html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
-                            if (e.runs && e.runs.length) {
-                                const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
-                                const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
-                                const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
-                                const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
-                                if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
-                                if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
-                                if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
-                                if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
-                            }
-                            html += '<hr/>';
-                        });
-                    });
-                    return html;
-                }
+         const echOptionsSingle = {
+             title: {
+                 text: finalSingleTitle,
+                 left: 'center',
+                 top: 12,
+                 textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
              },
-             // single-axis legend also at bottom
-             legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
-             xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
-             yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
-             series: echSeriesSingle,
-             // ensure slider sits below the legend and reserve bottom space
-             dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-             grid: { left: 60, right: 60, top: 60, bottom: 96 }
+             // detailed tooltip formatter (always on)
+             tooltip: {
+                 trigger: 'axis',
+                 // use the per-render lookup for single-axis series
+                 formatter: function(params) {
+                     const ps = Array.isArray(params) ? params : [params];
+                     // group entries by workload similar to multi-axis
+                     const grouped = {};
+                     ps.forEach(p => {
+                         const seriesName = p.seriesName || '';
+                         const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
+                         // prefer the exact series option by index (echSeriesSingle is out of scope here),
+                         // so check p.series.userOptions.meta first then fall back to lookup
+                         const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '', workload: seriesName });
+                         const workload = meta.workload || seriesName;
+                         const entry = {
+                             seriesName,
+                             metric: meta.metric || '',
+                             value: p.value ? p.value[1] : '',
+                             dt: p.value ? p.value[0] : '',
+                             color: p.color,
+                             runs: meta.runs || []
+                         };
+                         if (!grouped[workload]) grouped[workload] = [];
+                         grouped[workload].push(entry);
+                     });
+                     let html = '';
+                     Object.keys(grouped).forEach(w => {
+                         html += `<div style="font-weight:bold; margin-bottom:6px;">${w}</div>`;
+                         grouped[w].forEach(e => {
+                             html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
+                             html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
+                             if (e.runs && e.runs.length) {
+                                 const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
+                                 const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
+                                 const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
+                                 const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
+                                 if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
+                                 if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
+                                 if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
+                                 if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
+                             }
+                             html += '<hr/>';
+                         });
+                     });
+                     return html;
+                 }
+              },
+              // single-axis legend also at bottom
+              legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
+              xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+              yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
+              series: echSeriesSingle,
+              // ensure slider sits below the legend and reserve bottom space
+              dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+              grid: { left: 60, right: 60, top: 60, bottom: 96 }
         };
 
         if (this.ecInstance) {
