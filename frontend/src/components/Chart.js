@@ -5,8 +5,7 @@ import * as echarts from 'echarts';
 import '../styles/Chart.css';
 
 class Chart extends React.Component {
-
-    constructor(props) {
+	constructor(props) {
 		super(props);
 		this.state = {
 			options: {
@@ -20,7 +19,17 @@ class Chart extends React.Component {
 				// reserve bottom space for legend + slider and keep slider below legend
 				grid: { left: 60, right: 60, top: 60, bottom: 96 },
 				// slider bottom should be less than legend.bottom so it sits below it
-				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }]
+				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+                toolbox: {
+                    show : true,
+                    feature : {
+                        mark : {show: true},
+                        dataView : {show: true, readOnly: false},
+                        magicType: {show: true, type: ['line', 'bar']},
+                        restore : {show: true},
+                        saveAsImage : {show: true}
+                }
+            }
 			},
              loading: true,
              id: null,
@@ -31,6 +40,9 @@ class Chart extends React.Component {
              smoothing: 0,
              range: {min: 0, max: 0},
              monochromeMode: false,
+             // NEW: SVG renderer toggle (off by default) and version to force remount
+             svgRendererEnabled: false,
+             rendererVersion: 0,
              boostMode: true,
              chartLineWidth: 3.0,
              wrapperReady: false, // wait until wrapper has layout before rendering chart
@@ -448,7 +460,16 @@ class Chart extends React.Component {
                   series: echSeries,
                   // ensure slider sits below the legend
                   dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-                  grid: adjustedGrid
+                  grid: adjustedGrid,
+                  toolbox: {
+                      show : true,
+                      feature : {
+                          mark : {show: true},
+                          dataView : {show: true, readOnly: false},
+                          magicType: {show: true, type: ['line', 'bar']},
+                          restore : {show: true},
+                          saveAsImage : {show: true}
+                  }}
              };
 
             if (this.ecInstance) {
@@ -622,7 +643,17 @@ class Chart extends React.Component {
               series: echSeriesSingle,
               // ensure slider sits below the legend and reserve bottom space
               dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-              grid: { left: 60, right: 60, top: 60, bottom: 96 }
+              grid: { left: 60, right: 60, top: 60, bottom: 96 },
+              toolbox: {
+                  show : true,
+                  feature : {
+                      mark : {show: true},
+                      dataView : {show: true, readOnly: false},
+                      magicType: {show: true, type: ['line', 'bar']},
+                      restore : {show: true},
+                      saveAsImage : {show: true}
+                  }
+              }
         };
 
         if (this.ecInstance) {
@@ -752,8 +783,17 @@ class Chart extends React.Component {
         this.setState({range: newRange});
     }
 
+    // NEW: toggle SVG renderer and bump rendererVersion to force ReactECharts remount
+	handleSvgRendererSwitch(event) {
+		const enabled = !!event.currentTarget.checked;
+		this.setState(prev => ({
+			svgRendererEnabled: enabled,
+			rendererVersion: (prev.rendererVersion || 0) + 1
+		}));
+	}
+
     render() {
-        const { options, id, workloads, smoothing, shownRuns } = this.state;
+        const { options, id, workloads, smoothing, shownRuns, rendererVersion, svgRendererEnabled } = this.state;
         const fullHeight = !!this.props.fullHeight;
         // When fullHeight, set wrapper height; do NOT set paddingBottom here (CSS gives 10px)
         const wrapperStyle = fullHeight
@@ -767,13 +807,14 @@ class Chart extends React.Component {
                  >
                      X
                  </button>
-                {/* chart area flexes to fill available space; only mount chart when wrapperReady */}
                 <div className="chartArea">
                     {this.state.wrapperReady ? (
                         <ReactECharts
+                            key={`ech-${rendererVersion}-${id || 'noid'}`}          // force remount when rendererVersion changes
                             ref={this.chartRef}
                             option={options}
                             style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: svgRendererEnabled ? 'svg' : 'canvas'}} // set renderer
                             onChartReady={this.afterChartCreated}
                         />
                     ) : null}
@@ -810,23 +851,26 @@ class Chart extends React.Component {
                              <span className="slider round"></span>
                          </label>
                      </div>   
-                     <div title="Toggle boost mode (ECharts does not have same boost impl)">
-                         Boost Chart: <label className="switch">
+
+                     {/* REPLACED: Boost toggle -> SVG Renderer toggle */}
+                     <div title="Use SVG renderer (may be slower) - requires remount">
+                         SVG Renderer: <label className="switch">
                              <input 
                                  type="checkbox" 
-                                 onChange={this.handleBoostSwitch.bind(this)} 
-                                 checked={this.state.boostMode}
+                                 onChange={this.handleSvgRendererSwitch.bind(this)} 
+                                 checked={this.state.svgRendererEnabled}
                              />
                              <span className="slider round"></span>
                          </label>         
-                     </div> 
+                     </div>
+
                      <div title="Adjust series line width (also updates ECharts line width)">
                          <LineWidthSlider 
                              onSetLineWidth={this.handleSetLineWidth.bind(this)}
                              defaultValue={this.state.chartLineWidth}
                          />        
                      </div>
-                </div>           
+                </div>
             </div>
         );
     }
