@@ -4,6 +4,17 @@ import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import '../styles/Chart.css';
 
+const COMMON_TOOLBOX = {
+    show: true,
+    feature: {
+        brush: { show: true },
+        dataZoom: { show: true},
+        magicType: { show: true, type: ['line', 'bar', 'stack'] },
+        restore: { show: true },
+        saveAsImage: { show: true }
+    },
+};
+
 class Chart extends React.Component {
 	constructor(props) {
 		super(props);
@@ -20,16 +31,7 @@ class Chart extends React.Component {
 				grid: { left: 60, right: 60, top: 60, bottom: 96 },
 				// slider bottom should be less than legend.bottom so it sits below it
 				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-                toolbox: {
-                    show : true,
-                    feature : {
-                        mark : {show: true},
-                        dataView : {show: true, readOnly: false},
-                        magicType: {show: true, type: ['line', 'bar']},
-                        restore : {show: true},
-                        saveAsImage : {show: true}
-                }
-            }
+				toolbox: COMMON_TOOLBOX // unified toolbox
 			},
              loading: true,
              id: null,
@@ -461,15 +463,7 @@ class Chart extends React.Component {
                   // ensure slider sits below the legend
                   dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
                   grid: adjustedGrid,
-                  toolbox: {
-                      show : true,
-                      feature : {
-                          mark : {show: true},
-                          dataView : {show: true, readOnly: false},
-                          magicType: {show: true, type: ['line', 'bar']},
-                          restore : {show: true},
-                          saveAsImage : {show: true}
-                  }}
+                  toolbox: COMMON_TOOLBOX
              };
 
             if (this.ecInstance) {
@@ -644,16 +638,7 @@ class Chart extends React.Component {
               // ensure slider sits below the legend and reserve bottom space
               dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
               grid: { left: 60, right: 60, top: 60, bottom: 96 },
-              toolbox: {
-                  show : true,
-                  feature : {
-                      mark : {show: true},
-                      dataView : {show: true, readOnly: false},
-                      magicType: {show: true, type: ['line', 'bar']},
-                      restore : {show: true},
-                      saveAsImage : {show: true}
-                  }
-              }
+              toolbox: COMMON_TOOLBOX
         };
 
         if (this.ecInstance) {
