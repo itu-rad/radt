@@ -10,7 +10,14 @@ const COMMON_TOOLBOX = {
         dataZoom: { show: true},
         magicType: { show: true, type: ['line', 'bar', 'stack'] },
         restore: { show: true },
-        saveAsImage: { show: true }
+        saveAsImage: { show: true },
+        // custom remove feature (icon/title defined here; onclick attached per-chart below)
+        myRemove: {
+            show: true,
+            title: 'Remove Chart',
+            // simple "X" path icon
+            icon: 'path://M4 4 L12 12 M12 4 L4 12'
+        }
     },
 };
 
@@ -206,6 +213,24 @@ class Chart extends React.Component {
 
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
+        // prepare a toolbox for this chart instance that wires the remove action to the parent callback
+        const toolboxWithRemove = {
+            ...COMMON_TOOLBOX,
+            feature: {
+                ...COMMON_TOOLBOX.feature,
+                myRemove: {
+                    ...COMMON_TOOLBOX.feature.myRemove,
+                    onclick: () => {
+                        try {
+                            if (this.props && typeof this.props.removeChart === 'function') {
+                                this.props.removeChart(newChartData && newChartData.id);
+                            }
+                        } catch (e) { /* swallow */ }
+                    }
+                }
+            }
+        };
+
         if (!newChartData || !newChartData.data) {
             const newOpts = { ...this.state.options, series: [] };
             if (this.ecInstance) {
@@ -401,6 +426,8 @@ class Chart extends React.Component {
                      top: 12,
                      textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
                  },
+                 // use per-chart toolbox that includes the remove button wired to this chart
+                 toolbox: toolboxWithRemove,
                  // detailed tooltip formatter (always on) - show metric name above value when present
                  tooltip: {
                      trigger: 'axis',
@@ -461,9 +488,10 @@ class Chart extends React.Component {
                   series: echSeries,
                   // ensure slider sits below the legend
                   dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-                  grid: adjustedGrid,
-                  toolbox: COMMON_TOOLBOX
-             };
+                  grid: adjustedGrid
+              };
+             // ensure echOptions uses the prepared toolbox (avoid accidental overwrite below)
+             echOptions.toolbox = toolboxWithRemove;
 
             if (this.ecInstance) {
                 try { this.ecInstance.setOption(echOptions, true); } catch (e) {}
@@ -581,11 +609,13 @@ class Chart extends React.Component {
                  top: 12,
                  textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
              },
-             // detailed tooltip formatter (always on)
-             tooltip: {
-                 trigger: 'axis',
-                 // use the per-render lookup for single-axis series
-                 formatter: function(params) {
+            // use per-chart toolbox that includes the remove button wired to this chart
+            toolbox: toolboxWithRemove,
+              // detailed tooltip formatter (always on)
+              tooltip: {
+                  trigger: 'axis',
+                  // use the per-render lookup for single-axis series
+                  formatter: function(params) {
                      const ps = Array.isArray(params) ? params : [params];
                      // group entries by workload similar to multi-axis
                      const grouped = {};
@@ -636,9 +666,10 @@ class Chart extends React.Component {
               series: echSeriesSingle,
               // ensure slider sits below the legend and reserve bottom space
               dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
-              grid: { left: 60, right: 60, top: 60, bottom: 96 },
-              toolbox: COMMON_TOOLBOX
-        };
+              grid: { left: 60, right: 60, top: 60, bottom: 96 }
+         };
+        // ensure echOptionsSingle has the toolbox set
+        echOptionsSingle.toolbox = toolboxWithRemove;
 
         if (this.ecInstance) {
             try { this.ecInstance.setOption(echOptionsSingle, true); } catch (e) {}
@@ -785,24 +816,18 @@ class Chart extends React.Component {
             : { height: 'calc(45vh - 20px)', boxSizing: 'border-box' };
         return (
             <div ref={this.wrapperRef} className="chartWrapper" style={wrapperStyle}>
-                 <button 
-                     className="removeChartBtn"
-                     onClick={() => this.props.removeChart(id)}
-                 >
-                     X
-                 </button>
                 <div className="chartArea">
-                    {this.state.wrapperReady ? (
-                        <ReactECharts
-                            key={`ech-${rendererVersion}-${id || 'noid'}`}          // force remount when rendererVersion changes
-                            ref={this.chartRef}
-                            option={options}
-                            style={{ height: '100%', width: '100%' }}
-                            opts={{ renderer: svgRendererEnabled ? 'svg' : 'canvas'}} // set renderer
-                            onChartReady={this.afterChartCreated}
-                        />
-                    ) : null}
-                </div>
+                     {this.state.wrapperReady ? (
+                         <ReactECharts
+                             key={`ech-${rendererVersion}-${id || 'noid'}`}          // force remount when rendererVersion changes
+                             ref={this.chartRef}
+                             option={options}
+                             style={{ height: '100%', width: '100%' }}
+                             opts={{ renderer: svgRendererEnabled ? 'svg' : 'canvas'}} // set renderer
+                             onChartReady={this.afterChartCreated}
+                         />
+                     ) : null}
+                 </div>
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
                     {workloads.map(workload => (
