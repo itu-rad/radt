@@ -309,3 +309,13 @@
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
+
+body.dataPickerOpen #chartsWrapper,
+body.dataPickerOpen .chartWrapper,
+body.dataPickerOpen .chartArea {
+    filter: blur(4px);
+    transition: filter 0.18s ease;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
