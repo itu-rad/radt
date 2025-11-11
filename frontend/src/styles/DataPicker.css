@@ -187,34 +187,41 @@
     box-shadow: 0 2px 6px rgba(43,123,185,0.03);
 }
 
-/* Make the action buttons compact MLflow-style pills */
+/* Make the action buttons compact MLflow-style pills - updated to match ChartPicker buttons */
 .selectionsHeader .clearBtn,
 .selectionsHeader .toggleSelectionsBtn {
-    height: 36px;
-    padding: 6px 10px;
+    height: 40px;
+    padding: 6px 12px;
     border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700; /* bold like other top controls */
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    box-shadow: none;
-    border: 1px solid transparent;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.12);
+    border: none;
     cursor: pointer;
+    min-width: 92px; /* ensure reasonable tap target */
 }
+
+/* Clear (red) button */
 .selectionsHeader .clearBtn {
-    background: #fff5f5;
-    color: #b4342f;
-    border-color: rgba(196, 67, 59, 0.12);
+    background: #e74c3c;
+    color: #fff;
 }
-.selectionsHeader .clearBtn:hover { filter: brightness(0.98); }
+.selectionsHeader .clearBtn:hover {
+    filter: brightness(1.08);
+}
+
+/* Explore / toggle button (blue) */
 .selectionsHeader .toggleSelectionsBtn {
     background: var(--ml-primary, #115785);
     color: #fff;
-    border-color: rgba(17,87,133,0.12);
 }
-.selectionsHeader .toggleSelectionsBtn:hover { background: #0b4f6c; }
+.selectionsHeader .toggleSelectionsBtn:hover {
+    background: #0b4f6c;
+}
 
 /* Reworked selections list: fills remaining space, scrolls, MLflow card-like items */
 #selectionsWrapper {
