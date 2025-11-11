@@ -32,159 +32,191 @@
     left: 50%;
     transform: translate(-50%, -50%);
 }
-#chartPickerWrapper #metricBtnList {
-    left: 0;
-    width: 250px;
-    height: 94%;
-    background-color: #f4f4f4;
-    border-right: 1px solid #ccc;
-    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-    overflow-y: scroll;
-    padding: 10px;
-    box-sizing: border-box;
 
-    /* scrollbar-width: none;  Firefox */
-    border: 1px solid #34495e;
-    box-sizing: border-box;
+/* MLflow-like palette and spacing */
+:root {
+    --ml-primary: #2b7bb9;
+    --ml-accent: #18a689;
+    --ml-muted: #6b7280;
+    --ml-surface: #fafafb;
+    --ml-surface-2: #ffffff;
+    --ml-border: #e6e8eb;
+    --ml-shadow: 0 6px 18px rgba(43,123,185,0.06);
+    --sidebar-width: 260px;
+    --gap-sm: 8px;
+    --gap-md: 12px;
+    --font-base: 13px;
+    --top-controls-height: 64px; /* Utility: explicit top-controls height used across layout */
+}
 
-    background-color: #f2f2f2;
-    padding: 10px;
-}
-#chartPickerWrapper #metricBtnList::-webkit-scrollbar {
-    /* display: none; */
-}
+/* SIDEBAR: softer background, compact, MLflow-like spacing */
 #metricSidebar {
-	position: fixed;
-	top: 0;
-	left: 0;
-	width: 250px;
-	height: 100%;
-	background-color: #f4f4f4;
-	border-right: 1px solid #ccc;
-	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100%;
+    background: linear-gradient(180deg, var(--ml-surface), var(--ml-surface-2));
+    border-right: 1px solid var(--ml-border);
+    box-shadow: var(--ml-shadow);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: #222;
+    z-index: 200;
+    padding-top: 8px; /* ensure padding doesn't prevent layout calculations */
+    padding-bottom: 8px;
+}
+
+/* Top controls: single normalized definition to prevent overlap */
+.toggleDataPickerWrapper {
+	height: var(--top-controls-height);
 	display: flex;
-	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	padding: 6px 8px;
+	box-sizing: border-box;
+	flex: 0 0 auto;
+	/* Never wrap the two buttons — keep them side-by-side and prevent shrink */
+	flex-wrap: nowrap;
+	overflow: hidden;
+}
+
+/* Ensure buttons inside the wrapper don't shrink and remain readable */
+.toggleDataPickerWrapper button {
+	flex: 0 0 auto;
+	margin: 0;
+}
+
+/* Data button (compact) */
+.toggleDataPickerBtn {
+	min-width: 88px;
+	height: 40px;
+	border-radius: 6px;
+	padding: 6px 12px;
 	box-sizing: border-box;
 }
 
-.toggleDataPickerWrapper {
-	height: 60px; /* Enforce fixed height */
-	display: flex;
-	align-items: center;
-	flex-direction: row; /* Ensure horizontal layout */
-	justify-content: flex-start; /* Align buttons to the left */
-	gap: 10px; /* Add spacing between buttons */
-	border-bottom: 1px solid #ccc;
-	padding: 10px; /* Add padding for spacing */
-}
-
-.toggleDataPickerBtn {
-	width: 100px;
+/* Multi-axis button cleanup to avoid conflicting earlier rules */
+.multiAxisBtn {
+	min-width: 140px;
 	height: 40px;
-    position: relative;
-	background-color: #115785;
-	color: white;
-	border: none;
-	cursor: pointer;
-	font-size: 14px;
-	font-weight: bold;
-	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+	border-radius: 6px;
+	padding: 6px 12px;
+	box-sizing: border-box;
 }
 
-.toggleDataPickerBtn:hover {
-	background-color: #0b4f6c;
+/* container that holds the scrollable metric list */
+#chartPickerWrapper #metricBtnList {
+    /* new vertical layout and spacing */
+    width: 100%;
+    height: auto; /* avoid fixed calc conflicts */
+    overflow-y: auto;
+    padding: 8px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: transparent;
+    border: none; /* rely on sidebar border */
 }
 
-.upload {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	background-color: #3498db;
-	border: none;
-	cursor: pointer;
-	border-radius: 4px;
-	position: relative; /* Ensure proper positioning for the hidden input */
+/* Small tweak to ensure final padding keeps scrollbar accessible */
+#chartPickerWrapper #metricBtnList {
+	padding-bottom: 12px;
 }
 
-.upload input[type="file"] {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	opacity: 0; /* Hide the file input */
-	cursor: pointer;
+/* smooth thin scrollbar */
+#chartPickerWrapper #metricBtnList::-webkit-scrollbar {
+    width: 8px;
+}
+#chartPickerWrapper #metricBtnList::-webkit-scrollbar-track {
+    background: transparent;
+}
+#chartPickerWrapper #metricBtnList::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.06);
+    border-radius: 8px;
 }
 
-.uploadSVG {
-	width: 20px;
-	filter: invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%);
-	pointer-events: none; /* Prevent interaction with the icon */
+/* Group body stacks metric buttons vertically and stretches them */
+.metricGroupBody {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch; /* children (buttons) take full width */
 }
 
-.upload:hover {
-	background-color: #1f78b4;
-}
-
-.download {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 40px;
-	height: 40px;
-	background-color: #f1c40f;
-	border: none;
-	cursor: pointer;
-	border-radius: 4px;
-}
-
-.downloadSVG {
-	width: 20px;
-	filter: invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%);
-}
-
-.download:hover {
-	background-color: #d4ac0d;
-}
-
+/* Metric buttons become stacked list items (full-width, left-aligned) */
 #chartPickerWrapper .metricBtn {
-	display: block;
-	width: 100%;
-	padding: 10px;
-	margin-bottom: 5px;
-	background-color: #115785;
-	color: white;
-	border: none;
-	cursor: pointer;
-	text-align: left;
-	font-size: 14px;
-	border-radius: 4px;
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--ml-surface-2);
+    color: #111827;
+    border: 1px solid var(--ml-border);
+    border-radius: 6px;
+    font-size: var(--font-base);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease, transform .06s ease, box-shadow .12s ease;
+    box-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
+/* hover & active states for stacked buttons */
 #chartPickerWrapper .metricBtn:hover {
-	background-color: #0b4f6c;
+    transform: translateY(-1px);
+    border-color: rgba(43,123,185,0.12);
+    box-shadow: 0 6px 18px rgba(43,123,185,0.04);
 }
+
+/* selected metric: filled primary color with subtle glow (adapted for full-width) */
+#chartPickerWrapper .metricBtn.selected {
+    background: var(--ml-primary);
+    color: #fff;
+    border-color: rgba(43,123,185,0.18);
+    box-shadow: 0 8px 24px rgba(43,123,185,0.10);
+}
+#chartPickerWrapper .metricBtn.selected::before {
+    content: "✔";
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 12px;
+    opacity: 0.95;
+}
+
+/* smaller secondary styles preserved for no-data */
 #noData {
     text-align: center;
     padding: 10px;
     font-style: italic;
+    color: var(--ml-muted);
 }
+
+/* ensure charts area shifts to the right with the new sidebar width */
 #chartsWrapper {
-	position: absolute;
-	top: 0px;
-	left: 250px; /* Start right after the metricSidebar */
-	right: 0px;
-	bottom: 0px;
-	margin: 0px;
-	padding: 10px;
-	box-sizing: border-box;
-	overflow-y: scroll;
-	background-color: #ffffff;
-	/* display: flex; */
-	flex-direction: column; /* Stack charts vertically */
-	gap: 15px; /* Add spacing between charts */
+    left: var(--sidebar-width);
+}
+
+/* keep upload/download icons compact and consistent */
+#downloadUploadWrapper {
+    right: 12px;
+    top: 12px;
+}
+#downloadUploadWrapper .upload,
+#downloadUploadWrapper .download {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /************************************** DATA PICKER */
@@ -276,6 +308,7 @@
 }
 .metricGroup {
 	margin-bottom: 15px;
+    padding: 4px 2px;
 }
 
 .metricGroupName {
