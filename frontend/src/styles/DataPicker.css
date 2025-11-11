@@ -68,14 +68,14 @@
     height: 25px;
     line-height: 26px;
     border-radius: 25px;
-    background-color: #115785;
+    background-color: var(--ml-primary);
     box-sizing: border-box;
     margin-right: 10px;
     color: white;
     font-weight: bold;
 }
 #experimentWrapper button.active {
-	background-color: #115785;
+	background-color: var(--ml-primary);
     color: white;
 }
 
@@ -130,7 +130,7 @@
 }
 #runsWrapper .groupLabel {
 	font-weight: 600;
-	color: #115785;
+	color: var(--ml-primary);
 	padding-left: 6px;
 }
 #runsWrapper .groupCheckbox {
@@ -177,13 +177,12 @@
     justify-content: space-between;
     gap: 8px;
     padding: 10px;
-    background: linear-gradient(180deg, #ffffff, #fbfcfd);
-    border-bottom: 1px solid var(--ml-border, #e6e8eb);
+    background: linear-gradient(180deg, var(--ml-surface-2), var(--ml-surface));
+    border-bottom: 1px solid var(--ml-border);
     box-sizing: border-box;
     position: sticky;
     top: 0;
     z-index: 10;
-    /* subtle elevation similar to sidebar controls */
     box-shadow: 0 2px 6px rgba(43,123,185,0.03);
 }
 
@@ -194,7 +193,7 @@
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 14px;
-    font-weight: 700; /* bold like other top controls */
+    font-weight: 700;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -207,8 +206,8 @@
 
 /* Clear (red) button */
 .selectionsHeader .clearBtn {
-    background: #e74c3c;
-    color: #fff;
+    background: var(--ml-danger);
+    color: var(--ml-surface-2);
 }
 .selectionsHeader .clearBtn:hover {
     filter: brightness(1.08);
@@ -216,11 +215,11 @@
 
 /* Explore / toggle button (blue) */
 .selectionsHeader .toggleSelectionsBtn {
-    background: var(--ml-primary, #115785);
-    color: #fff;
+    background: var(--ml-primary);
+    color: var(--ml-surface-2);
 }
 .selectionsHeader .toggleSelectionsBtn:hover {
-    background: #0b4f6c;
+    background: var(--ml-primary-dark);
 }
 
 /* Reworked selections list: fills remaining space, scrolls, MLflow card-like items */
@@ -258,8 +257,8 @@
      align-items: center;
      gap: 10px;
      padding: 0 12px;
-     background: linear-gradient(180deg, #115785, #0f4f73);
-     color: #fff;
+     background: var(--ml-primary-dark);
+     color: var(--ml-surface-2);
      font-size: 13px;
      font-weight: 600;
 }
@@ -267,9 +266,9 @@
 /* Remove buttons refined (used for both group and run remove) */
 #selectionsWrapper .removeWorkloadBtn,
 #selectionsWrapper .removeBtn {
-     background-color: #e74c3c;
+     background-color: var(--ml-danger);
      border: none;
-     color: #fff;
+     color: var(--ml-surface-2);
      width: 24px;
      height: 24px;
      border-radius: 16px;
@@ -304,7 +303,7 @@
 .toggleSelectionsBtn {
 	width: 48%;
 	height: 40px;
-	background-color: #115785;
+	background-color: var(--ml-primary);
 	color: white;
 	border: none;
 	cursor: pointer;
@@ -314,7 +313,7 @@
 }
 
 .toggleSelectionsBtn:hover {
-	background-color: #0b4f6c;
+	background-color: var(--ml-primary-dark);
 }
 
 .clearBtn {
@@ -380,7 +379,7 @@
 #experimentWrapper .highlightSelection,
 #runsWrapper .highlightSelection {
   background: #eaf6ff !important;
-  border-left: 3px solid #115785;
+  border-left: 3px solid var(--ml-primary);
 }
 
 /* Small adjustments for icons / status bullets */
@@ -391,11 +390,11 @@
 /* Group header (for grouped workloads) to match MLflow section headers */
 #runsWrapper .groupHeader td,
 #runsWrapper .ant-table-tbody > tr.groupHeader > td {
-  background: #eef6fb;
-  border-bottom: 1px solid #d0e7f6;
+  background: linear-gradient(180deg, var(--ml-surface-2), #f0f7fb); /* subtle surface + tint */
+  border-bottom: 1px solid rgba(15, 89, 133, 0.06);
   padding: 8px 12px;
   font-weight: 700;
-  color: #115785;
+  color: var(--ml-primary);
 }
 
 /* Group header inner layout */
@@ -419,7 +418,7 @@
   cursor: pointer;
   border-radius: 2px;
 }
-#runsWrapper .groupCheckbox:hover { border-color: #115785; background: #f0f8ff; }
+#runsWrapper .groupCheckbox:hover { border-color: var(--ml-primary-dark); background: #f0f8ff; }
 
 /* Selection checkbox (per-row) */
 #runsWrapper .checkbox,
@@ -437,7 +436,7 @@
 }
 #runsWrapper .checkbox:hover,
 #experimentWrapper .checkbox:hover {
-  border-color: #115785;
+  border-color: var(--ml-primary);
   background: #f0f8ff;
 }
 
@@ -508,7 +507,7 @@
 
 /* Run name link style */
 #runsWrapper .ant-table-tbody > tr > td .runName a {
-  color: #0b62a3;
+  color: var(--ml-primary);
   font-weight: 600;
   text-decoration: none;
 }
@@ -519,8 +518,8 @@
 /* Info chip (i) similar to MLflow */
 #runsWrapper .ant-table-tbody > tr > td .info {
   display: inline-block;
-  background: #5f6b73;
-  color: white;
+  background: var(--ml-muted-dark);
+  color: var(--ml-surface-2);
   padding: 2px 6px;
   border-radius: 12px;
   font-size: 11px;
@@ -540,11 +539,11 @@
 /* Selected row accent like MLflow: light background + colored left border */
 #runsWrapper .ant-table-tbody > tr.highlightSelection > td,
 #experimentWrapper .ant-table-tbody > tr.highlightSelection > td {
-  background: var(--selected-bg, #eef9ff) !important;
+  background: var(--selected-bg, rgba(17,87,133,0.06)) !important;
 }
 #runsWrapper .ant-table-tbody > tr.highlightSelection > td:first-child,
 #experimentWrapper .ant-table-tbody > tr.highlightSelection > td:first-child {
-  border-left: 3px solid var(--selected-border, #0b62a3);
+  border-left: 3px solid var(--ml-primary);
   padding-left: 8px;
 }
 
@@ -572,13 +571,13 @@
 #runsWrapper .checkbox,
 #experimentWrapper .checkbox {
   border-radius: 3px;
-  border: 1px solid #cfdbe6;
-  background: #fff;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: var(--ml-surface-2);
   width: 20px;
   height: 20px;
   line-height: 18px;
   font-weight: 700;
-  color: #0b62a3;
+  color: var(--ml-primary);
 }
 
 /* Search input smaller and aligned like MLflow */
@@ -691,7 +690,7 @@
 	position: absolute;
 	width: fit-content;
 	height: 40px;
-	background-color: #115785;
+	background-color: var(--ml-primary);
 	color: white;
 	border: none;
 	cursor: pointer;
@@ -701,5 +700,5 @@
 }
 
 .toggleDataPickerBtn:hover {
-	background-color: #0b4f6c;
+	background-color: var(--ml-primary-dark);
 }

@@ -4,8 +4,8 @@
     position: relative;
     margin: 10px;
     padding: 10px 10px 10px 0;    /* bottom padding remains 10px as requested */
-    background-color: white;
-    filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.3));
+    background-color: var(--ml-surface-2);
+    filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.08));
 }
 .chartArea {
     flex: 1 1 auto;
@@ -31,8 +31,8 @@
     top: 10px;
     right: 10px;
     z-index: 99;
-    background-color: #e74c3c;
-    color: white;
+    background-color: var(--ml-danger);
+    color: var(--ml-surface-2);
     width: 25px;
     height: 25px;
     border-radius: 25px;
@@ -43,7 +43,7 @@
     margin: 0;
 }
 .removeChartBtn:hover { 
-    filter: brightness(1.5);
+    filter: brightness(1.2);
 }
 .tooltipStyle {
     font-size: 20px;
@@ -69,7 +69,7 @@
     /* ensure smoother label matches the others */
     font-family: Arial, Helvetica, sans-serif;
     font-weight: 400;
-    color: #222;
+    color: var(--ml-muted);
 }
 #smootherWrapper input[type="range"] {
     width: 120px; /* wider range control */
@@ -96,7 +96,7 @@
     font-family: Arial, Helvetica, sans-serif;
     font-size: 13px;
     font-weight: 400;
-    color: #222;
+    color: var(--ml-muted);
 }
 #workloadGroupingControlsWrapper label {
     margin: 0 0 0 5px;
@@ -136,10 +136,10 @@
     transition: .4s;
 }
 input:checked + .slider {
-    background-color: #2980b9;
+    background-color: var(--ml-primary);
 }
 input:focus + .slider {
-    box-shadow: 0 0 1px #2980b9;
+    box-shadow: 0 0 1px var(--ml-primary);
 }
 input:checked + .slider:before {
     -webkit-transform: translateX(13px);
@@ -177,13 +177,13 @@ input:checked + .slider:before {
     font-family: Arial, Helvetica, sans-serif;
     font-size: 13px;
     font-weight: 400;
-    color: #222;
+    color: var(--ml-muted);
 }
 #exportOptionsWrapper input:checked + .slider {
-    background-color: #6e6e6e;
+    background-color: var(--ml-muted-dark);
 }
 #exportOptionsWrapper input:focus + .slider {
-    box-shadow: 0 0 1px #6e6e6e;
+    box-shadow: 0 0 1px var(--ml-muted-dark);
 }
 #lineWidthWrapper {
     margin: 0 !important;
@@ -224,7 +224,7 @@ input:checked + .slider:before {
     font-size: 12px;
 
     box-sizing: border-box;
-    border: 1px solid red;
+    border: 1px solid var(--ml-danger);
 }
 .seriesMetadata {
     text-align: left;
@@ -232,7 +232,7 @@ input:checked + .slider:before {
     margin: 5px;
 
     box-sizing: border-box;
-    border: 1px solid green;
+    border: 1px solid var(--ml-accent);
 }
 .seriesMetadata .label {
     font-weight: bold;

@@ -35,13 +35,16 @@
 
 /* MLflow-like palette and spacing */
 :root {
-    --ml-primary: #2b7bb9;
+    --ml-primary: #2272b4;
+    --ml-primary-dark: #0e538b;   /* darker companion for hover/active states */
     --ml-accent: #18a689;
+    --ml-danger: #e74c3c;
     --ml-muted: #6b7280;
+    --ml-muted-dark: #5f6b73;
+    --ml-border: #e6e8eb;
     --ml-surface: #fafafb;
     --ml-surface-2: #ffffff;
-    --ml-border: #e6e8eb;
-    --ml-shadow: 0 6px 18px rgba(43,123,185,0.06);
+    --ml-shadow: 0 6px 18px rgba(11,98,163,0.06);
     --sidebar-width: 260px;
     --gap-sm: 8px;
     --gap-md: 12px;
@@ -109,9 +112,9 @@
 }
 
 .multiAxisBtn.active {
-	background-color: #115785;
+	background-color: var(--ml-primary);
 	color: #ffffff;
-	border: 1px solid #115785;
+	border: 1px solid var(--ml-primary);
 }
 
 /* container that holds the scrollable metric list */

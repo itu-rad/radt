@@ -425,7 +425,7 @@ class Chart extends React.Component {
                      text: finalTitle,
                      left: 'center',
                      top: 12,
-                     textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
+                     textStyle: { fontSize: 16, fontWeight: '600' }
                  },
                  // use per-chart toolbox that includes the remove button wired to this chart
                  toolbox: toolboxWithRemove,
@@ -602,7 +602,7 @@ class Chart extends React.Component {
                  text: finalSingleTitle,
                  left: 'center',
                  top: 12,
-                 textStyle: { fontSize: 16, fontWeight: '600', color: '#115785' }
+                 textStyle: { fontSize: 16, fontWeight: '600' }
              },
             // use per-chart toolbox that includes the remove button wired to this chart
             toolbox: toolboxWithRemove,
