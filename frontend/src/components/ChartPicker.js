@@ -26,7 +26,9 @@ class ChartPicker extends React.Component {
 				shownRuns: [],
 				hiddenSeries: [],
 				range: { min: 0, max: 0 }
-			}
+			},
+			// track collapsed (minimized) state per metric group; groups start minimized by default
+			collapsedGroups: {}
 		};
 
 		this.inputField = React.createRef();
@@ -400,6 +402,17 @@ class ChartPicker extends React.Component {
 		}
 	}
 
+	// toggle collapsed state for a metric group
+	toggleGroup = (groupName) => {
+		this.setState(prev => ({
+			collapsedGroups: {
+				...(prev.collapsedGroups || {}),
+				// treat undefined as true (collapsed) so first toggle will open the group
+				[groupName]: !(prev.collapsedGroups?.[groupName] ?? true)
+			}
+		}));
+	}
+
 	render() {
 		const { availableMetrics, charts, multiAxisMode, combinedVersion, combinedContext } = this.state;
 
@@ -507,26 +520,58 @@ class ChartPicker extends React.Component {
 					</div>
 
 					<div id="metricBtnList">
-						{Object.entries(groupedMetrics).map(([groupName, metrics]) => (
-							<div key={groupName} className="metricGroup">
-								<h4 className="metricGroupName">{groupName}</h4> {/* Group header */}
-								{metrics.map(metric => {
-									const displayName = metric.replace(/^system\/([^-]+)-/, ""); // Extract unmatched part
-									// determine if this metric is currently selected (has a chart)
-									const isSelected = (charts || []).some(c => c.metric === metric);
-									return (
+						{Object.entries(groupedMetrics).map(([groupName, metrics]) => {
+							// treat unknown collapsed state as collapsed (start minimized)
+							const isCollapsed = this.state.collapsedGroups[groupName] === undefined
+								? true
+								: this.state.collapsedGroups[groupName];
+							return (
+								<div key={groupName} className="metricGroup">
+									{/* clickable header toggles collapse */}
+									<div
+										className="metricGroupHeader"
+										onClick={() => this.toggleGroup(groupName)}
+										style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+									>
+										<h4 className="metricGroupName" style={{ margin: 0 }}>{groupName}</h4>
 										<button
-											key={metric}
-											className={`metricBtn ${isSelected ? 'selected' : ''}`}
-											onClick={() => this.toggleMetric(metric)}
-											title={isSelected ? `Remove ${displayName}` : `Show ${displayName}`}
+											type="button"
+											aria-expanded={!isCollapsed}
+											className="groupToggleBtn"
+											style={{
+												border: 'none',
+												background: 'transparent',
+												fontSize: 14,
+												cursor: 'pointer',
+												padding: '0 8px'
+											}}
+											onClick={(e) => { e.stopPropagation(); this.toggleGroup(groupName); }}
 										>
-											{isSelected ? '✔ ' : ''}{displayName}
+											{isCollapsed ? '▶' : '▼'}
 										</button>
-									);
-								})}
-							</div>
-						))}
+									</div>
+
+									{/* hide metric buttons when collapsed */}
+									<div className="metricGroupBody" style={{ display: isCollapsed ? 'none' : 'block' }}>
+										{metrics.map(metric => {
+											const displayName = metric.replace(/^system\/([^-]+)-/, ""); // Extract unmatched part
+											// determine if this metric is currently selected (has a chart)
+											const isSelected = (charts || []).some(c => c.metric === metric);
+											return (
+												<button
+													key={metric}
+													className={`metricBtn ${isSelected ? 'selected' : ''}`}
+													onClick={() => this.toggleMetric(metric)}
+													title={isSelected ? `Remove ${displayName}` : `Show ${displayName}`}
+												>
+													{isSelected ? '✔ ' : ''}{displayName}
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							);
+						})}
 						<div id="noData" className={availableMetrics.length === 0 ? null : "hide"}>
 							No data available for current selection.
 						</div>
