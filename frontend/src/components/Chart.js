@@ -8,9 +8,28 @@ const COMMON_TOOLBOX = {
     show: true,
     feature: {
         dataZoom: { show: true},
-        magicType: { show: true, type: ['line', 'bar', 'stack'] },
         restore: { show: true },
-        saveAsImage: { show: true },
+        myDummy1: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
+        magicType: { show: true, type: ['line', 'bar', 'stack'] },
+        saveAsImage: { show: true, pixelRatio: 10},
+        // custom dummy feature inserted BEFORE myRemove
+        myDummy2: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
         // custom remove feature (icon/title defined here; onclick attached per-chart below)
         myRemove: {
             show: true,
@@ -571,7 +590,7 @@ class Chart extends React.Component {
              const name = s.id;
              if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
              // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
-             const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % plotColors.length];
+             const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % monoColors.length];
              const lineType = dashTypes[0]; // single-axis always uses solid lines
              echSeriesSingle.push({
                  name,
