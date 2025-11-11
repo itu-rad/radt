@@ -454,13 +454,33 @@ class ChartPicker extends React.Component {
 
 					if (pts.length === 0) return; // skip empty series
 
+					// NEW: use parent grouping (parent || run.name) as canonical group id so that
+					// Chart + controls use the same grouping as the Runs/Picker.
+					const parentGroup = run.parent || run.name || '';
+
+					// derive a friendly display name for the parent (prefer run_name, fallback to truncated run.name)
+					let parentDisplay = parentGroup;
+					const parentObj = (chart.data || []).find(r => r.name === parentGroup);
+					if (parentObj) {
+						parentDisplay = parentObj.run_name || (parentObj.name ? parentObj.name.substring(0, 6) : parentGroup);
+					} else if (run.run_name) {
+						parentDisplay = run.run_name;
+					} else if (run.name) {
+						parentDisplay = run.name.substring(0, 6);
+					}
+
+					// inject "(W) " prefix
+					const groupWorkload = `(W) ${parentDisplay}`;
+
+					// keep runs metadata through
 					combinedSeries.push({
 						// unique name: run + metric so Chart can label series
 						name: `${run.name} :: ${chart.metric}`,
 						// carry basic run metadata through
 						runName: run.run_name,
 						experimentName: run.experimentName,
-						workload: run.workload,
+						// IMPORTANT: inject display-ready grouping id here (with prefix)
+						workload: groupWorkload,
 						// preserve original metric so Chart can label y-axis
 						metric: chart.metric,
 						// normalized datapoints
@@ -468,6 +488,7 @@ class ChartPicker extends React.Component {
 					});
 				});
 			});
+
 			// only expose combinedChart if we actually have series to show
 			if (combinedSeries.length > 0) {
 				// build display title listing all unique metrics (human-friendly)

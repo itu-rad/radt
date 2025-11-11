@@ -232,7 +232,7 @@
 }
 
 /* Workload cards inside selections: subtle card, rounded, consistent spacing */
-#selectionsWrapper .workloadWrapper {
+#selectionsWrapper .groupWrapper {
      width: 100%;
      max-width: 100%;
      margin: 6px 0;
@@ -244,8 +244,8 @@
      box-sizing: border-box;
 }
 
-/* Workload header area: compact, MLflow-like accent */
-#selectionsWrapper .workloadWrapper .workload {
+/* Group header area: compact, MLflow-like accent */
+#selectionsWrapper .groupWrapper .group {
      height: 40px;
      display: flex;
      align-items: center;
@@ -257,7 +257,7 @@
      font-weight: 600;
 }
 
-/* Remove buttons refined */
+/* Remove buttons refined (used for both group and run remove) */
 #selectionsWrapper .removeWorkloadBtn,
 #selectionsWrapper .removeBtn {
      background-color: #e74c3c;
@@ -279,14 +279,14 @@
 }
 
 /* Run list inside card: white surface with subtle divider */
-#selectionsWrapper .workloadWrapper ul {
+#selectionsWrapper .groupWrapper ul {
      margin: 0;
      padding: 8px 12px;
      list-style: none;
      background: #fff;
      border-top: 1px solid rgba(15,89,133,0.04);
 }
-#selectionsWrapper .workloadWrapper ul li {
+#selectionsWrapper .groupWrapper ul li {
      display: flex;
      align-items: center;
      justify-content: space-between;

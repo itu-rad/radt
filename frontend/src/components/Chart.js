@@ -274,40 +274,22 @@ class Chart extends React.Component {
         // multi-axis mode detection
         if (newChartData.metric === 'multi-axis') {
             // newChartData.data is array of run-level objects with .metric
-            const metricsMap = new Map(); // metric -> Map(workloadId -> seriesObj)
+            const metricsMap = new Map(); // metric -> Map(groupId -> seriesObj)
             newChartData.data.forEach(run => {
                 if (!run.data || run.data.length === 0) return;
                 const metric = run.metric || 'unknown';
                 if (!metricsMap.has(metric)) metricsMap.set(metric, new Map());
                 const workloadMap = metricsMap.get(metric);
 
-                const rawWorkload = run.workload || '';
-                let workloadId = rawWorkload;
+                // Treat `run.workload` as canonical group id (parentGroup) injected by ChartPicker
+                const rawGroup = run.workload || '';
+                let workloadId = rawGroup;
                 const letter = (typeof run.letter === 'string' && run.letter.length > 0) ? run.letter : null;
                 const runIdForLabel = run.runName || run.name || '';
-                const dashPos = rawWorkload.indexOf('-');
-                const tail = dashPos >= 0 ? rawWorkload.substring(dashPos + 1) : '';
-
-                if (tail === 'null' || (newShownRuns && newShownRuns.indexOf(rawWorkload) > -1)) {
-                    if (!letter) {
-                        if (dashPos >= 0) {
-                            const removeNull = rawWorkload.substring(0, dashPos);
-                            workloadId = removeNull + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
-                        } else {
-                            workloadId = rawWorkload + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
-                        }
-                    } else {
-                        if (letter.length > 1) {
-                            workloadId = rawWorkload + ' ' + letter;
-                        } else {
-                            workloadId = rawWorkload + ' ' + letter + ' (' + (runIdForLabel ? runIdForLabel.substring(0, 5) : '') + ')';
-                        }
-                    }
-                }
 
                 if (!workloadMap.has(workloadId)) {
                     // keep runs metadata on the "custom" holder (used to populate point-level runs below)
-                    workloadMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] }, metric, rawWorkload });
+                    workloadMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] }, metric, rawWorkload: rawGroup });
                 }
                 const sObj = workloadMap.get(workloadId);
                 const perRunData = (run.data || []).map(pt => [pt.timestamp, pt.value]);
@@ -316,7 +298,7 @@ class Chart extends React.Component {
                     name: run.runName || run.name,
                     id: run.name,
                     experimentName: run.experimentName,
-                    workload: rawWorkload,
+                    workload: rawGroup,
                     letter: run.letter ?? null,
                     model: run.model ?? undefined,
                     source: run.source ?? undefined,
@@ -339,6 +321,7 @@ class Chart extends React.Component {
                 let seriesIdx = 0;
                 for (const [workloadId, s] of workloadMap.entries()) {
                     if (!s.data || s.data.length === 0) continue;
+                    // If the group id is present in newShownRuns, show each run individually
                     const showRunsIndividually = newShownRuns && newShownRuns.indexOf(s.rawWorkload) > -1;
                     if (showRunsIndividually) {
                         s.custom.runs.forEach((runMeta) => {
@@ -398,7 +381,6 @@ class Chart extends React.Component {
                                  itemStyle: { color },
                                  sampling: 'lttb',
                                  meta: { runs: s.custom.runs, metric, workload: s.rawWorkload }
-                                 // metadata lives on each point (runs, metric)
                              });
                          }
                          seriesIdx++;
@@ -544,29 +526,23 @@ class Chart extends React.Component {
         // SINGLE-AXIS mode
         const data = newChartData.data || [];
         const experimentList = new Set();
-        const seriesMap = new Map(); // workloadId -> { data: [], custom: { runs: [] } }
+        const seriesMap = new Map(); // groupKey -> { data: [], custom: { runs: [] } }
 
         data.forEach(run => {
             if (!run.data) return;
             experimentList.add(run.experimentName);
-            let workloadId = run.workload || '';
-            if (workloadId.substring(workloadId.indexOf("-") + 1) === "null" || (newShownRuns && newShownRuns.indexOf(workloadId) > -1)) {
-                if (run.letter === null || run.letter === undefined) {
-                    const removeNull = workloadId.substring(0, workloadId.indexOf("-"));
-                    workloadId = run.run_name ? run.run_name : (removeNull + " (" + run.name.substring(0, 5) + ")");
-                } else {
-                    if (run.letter.length > 1) {
-                        workloadId = workloadId + " " + run.letter;
-                    } else {
-                        workloadId = run.run_name ? run.run_name : (" (" + run.name.substring(0, 5) + ")");
-                    }
-                }
-            }
 
-            if (!seriesMap.has(workloadId)) {
-                seriesMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] } });
+            // Treat run.workload as canonical group id (parent-group)
+            const groupId = run.workload || '';
+            const showIndividually = newShownRuns && newShownRuns.indexOf(groupId) > -1;
+
+            // when showing individual runs for the group, use run-specific label/key; otherwise aggregate into groupId
+            const seriesKey = showIndividually ? (run.run_name || run.runName || (run.name ? run.name.substring(0,5) : groupId)) : groupId;
+
+            if (!seriesMap.has(seriesKey)) {
+                seriesMap.set(seriesKey, { id: seriesKey, data: [], custom: { runs: [] } });
             }
-            const s = seriesMap.get(workloadId);
+            const s = seriesMap.get(seriesKey);
             const metadata = { ...run };
             delete metadata.data;
             s.custom.runs.push(metadata);

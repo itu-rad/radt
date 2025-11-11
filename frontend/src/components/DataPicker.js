@@ -207,73 +207,59 @@ class DataPicker extends React.Component {
 	}
 
 	// adds or removes runs and workloads to a selection array 
-	toggleRunWorkloadSelection(workload, run = null) {
+	toggleRunWorkloadSelection(groupKey, run = null) {
 
-		// grab current state and clone it for changes
+		// treat `groupKey` as the canonical parent grouping (parent || name)
 		const { selectedWorkloads, selectedRuns, runData, experimentData } = this.state;
 		let newSelectedWorkloads = [...selectedWorkloads];
 		let newSelectedRuns = [...selectedRuns];
 
-		// five different ways the user can add/remove data to selection
-		if (workload === "null" && run === null) {
-			newSelectedRuns.forEach(run => {
-				if (run.workload.substring(run.workload.indexOf("-") + 1) === "null") {
-					const runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
-					newSelectedRuns = newSelectedRuns.slice(0, runIndex).concat(newSelectedRuns.slice(runIndex + 1));
-				}
-			});
-		}
-		else if (run === null) {
-			// add all runs from this workload to selection if they are not already added
-			let workloadIndex = newSelectedWorkloads.indexOf(workload);
-			if (workloadIndex === -1) {
-				runData.forEach(run => {
-					if (run.workload === workload) {
-						let runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
-						if (runIndex === -1) {
-							newSelectedRuns.push(run);
-						}
-					}
+		// If run === null -> toggle entire group (add/remove all runs in that group)
+		if (run === null) {
+			const groupRuns = runData.filter(r => (r.parent || r.name) === groupKey);
+			// if none of the group's runs are selected -> add them, otherwise remove them
+			const anySelected = groupRuns.some(gr => newSelectedRuns.findIndex(el => el.name === gr.name) > -1);
+
+			if (!anySelected) {
+				// add all runs from group that are not already selected
+				groupRuns.forEach(gr => {
+					if (newSelectedRuns.findIndex(el => el.name === gr.name) === -1) newSelectedRuns.push(gr);
 				});
-			}
-			else {
-				// remove all runs from this workload from selection
-				newSelectedRuns = newSelectedRuns.filter(el => el.workload !== workload);
+			} else {
+				// remove all runs belonging to this group
+				newSelectedRuns = newSelectedRuns.filter(el => (el.parent || el.name) !== groupKey);
 			}
 		}
+		// toggle single run
 		else {
 			let runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
 			if (runIndex === -1) {
-				// add run to selection if it is not already added
+				// add run to selection
 				newSelectedRuns.push(run);
-			}
-			else {
-				// remove run from selection if it is already added
+			} else {
+				// remove run from selection
 				newSelectedRuns = newSelectedRuns.slice(0, runIndex).concat(newSelectedRuns.slice(runIndex + 1));
 			}
 		}
 
-		// update list of selected workloads based on new selected runs, and add experiment name to data 
+		// Recompute selectedWorkloads as unique parent/group keys of selected runs
 		newSelectedWorkloads = [];
-		newSelectedRuns.forEach(run => {
-			let workloadIndex = newSelectedWorkloads.indexOf(run.workload);
-			if (workloadIndex === -1) {
-				newSelectedWorkloads.push(run.workload);
-			}
+		newSelectedRuns.forEach(r => {
+			const gk = r.parent || r.name;
+			if (newSelectedWorkloads.indexOf(gk) === -1) newSelectedWorkloads.push(gk);
 
 			experimentData.forEach(experiment => {
-				if (run.experimentId === experiment.id) {
-					run.experimentName = experiment.name;
+				if (r.experimentId === experiment.id) {
+					r.experimentName = experiment.name;
 				}
-			})
+			});
 		});
 
-		// update state
+		// update state and notify parent
 		this.setState({
 			selectedWorkloads: newSelectedWorkloads,
 			selectedRuns: newSelectedRuns
 		}, () => {
-			// Ensure `pullSelectedRuns` is called after state update
 			this.props.pullSelectedRuns(this.state.selectedRuns);
 			submitToLocalStorage(this.state.selectedWorkloads, this.state.selectedRuns);
 		});
@@ -313,14 +299,14 @@ class DataPicker extends React.Component {
 
 		return (
 			<>
-				{/* render overlay background when picker is visible so underlying UI is visible + blurred */}
+				{/* render overlay background when picker is visible so underlying UI is visible + blurred
 				{!this.props.toHide && (
 					<div
 						id="dataPickerWrapperBackground"
 						onClick={() => this.props.toggleDataPicker(false)}
-						aria-hidden="true"
+						// keep it presentational only; click closes picker
 					/>
-				)}
+				)} */}
 
 				<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
 					<div id="dataPickerContent">
@@ -732,68 +718,63 @@ function Runs(props) {
 	)
 }
 function Selections(props) {
-	// create new data object to render workloads and runs nicely in Selections
+	// create new data object to render groups and runs nicely in Selections
 	let visibleSelection = [];
-	props.selectedRuns.forEach(run => {
 
-		let workload = run.workload;
-		if (workload.substring(workload.indexOf("-") + 1) === "null") {
-			workload = "null"
-		}
-
-		let workloadIndex = visibleSelection.findIndex(el => el.workload === workload);
-		if (workloadIndex > -1) {
-			let runIndex = visibleSelection[workloadIndex].runs.findIndex(el => el.name === run.name);
-			if (runIndex === -1) {
-				visibleSelection[workloadIndex].runs.push(run);
-			}
-		}
-		else {
-			let runs = [];
-			runs.push(run);
-			visibleSelection.push({
-				workload: workload,
-				runs: runs
-			})
-		}
+	// Group selected runs by parentKey (parent || name)
+	const groupsByParent = {};
+	(props.selectedRuns || []).forEach(run => {
+		const parentKey = run.parent || run.name || 'null';
+		if (!groupsByParent[parentKey]) groupsByParent[parentKey] = [];
+		groupsByParent[parentKey].push(run);
 	});
 
-	function formatWorkloadLabel(workload) {
-		if (workload === "null") {
-			workload = "Unsorted Runs";
+	visibleSelection = Object.keys(groupsByParent).map(parentKey => ({
+		groupKey: parentKey,
+		runs: groupsByParent[parentKey]
+	}));
+
+	function formatGroupLabel(group) {
+		// group: { groupKey, runs }
+		const groupKey = group.groupKey;
+		if (groupKey === "null") {
+			return "Unsorted Runs";
 		}
-		else {
-			workload = "Workload " + workload;
+		// pick a representative parent run to show a friendly name
+		const parentRun = (group.runs || []).find(r => r.name === groupKey) || (group.runs && group.runs[0]);
+		let display = groupKey;
+		if (parentRun) {
+			display = parentRun.run_name || (parentRun.name ? parentRun.name.substring(0, 6) : groupKey);
 		}
-		return workload;
+		return display;
 	}
 
 	return (
 		<div id="selectionsWrapper">
-			{ /* render all workloads */}
-			{visibleSelection.map(visibleWorkload => (
+			{ /* render all groups */ }
+			{visibleSelection.map(group => (
 				<div
-					className='workloadWrapper'
-					key={visibleWorkload.workload}
+					className='groupWrapper'
+					key={group.groupKey}
 				>
-					<div className='workload'>
+					<div className='group'>
 						<button
 							className="removeWorkloadBtn"
-							onClick={() => props.onClickToggleWorkloadSelection(visibleWorkload.workload)}
+							onClick={() => props.onClickToggleWorkloadSelection(group.groupKey)}
 						>
 							X
 						</button>
-						{formatWorkloadLabel(visibleWorkload.workload)}
+						{formatGroupLabel(group)}
 					</div>
 					<ul>
-						{ /* render all runs */}
-						{visibleWorkload.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
+						{ /* render all runs */ }
+						{group.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
 							<li key={visibleRun.name}>
-								{visibleRun.run_name || visibleRun.name.substring(0, 6) + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								{visibleRun.run_name || (visibleRun.name ? visibleRun.name.substring(0, 6) : '') + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
 
 								<button
 									className="removeBtn"
-									onClick={() => props.onClickToggleWorkloadSelection(visibleWorkload.workload, visibleRun)}
+									onClick={() => props.onClickToggleWorkloadSelection(group.groupKey, visibleRun)}
 								>
 									X
 								</button>
@@ -802,7 +783,7 @@ function Selections(props) {
 					</ul>
 				</div>
 			))}
-			{ /* div ref to scroll to bottom of */}
+			{ /* div ref to scroll to bottom of */ }
 			<div ref={props.bottomOfScrollRef} />
 		</div>
 	);
