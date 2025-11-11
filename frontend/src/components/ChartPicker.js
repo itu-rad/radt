@@ -19,13 +19,8 @@ class ChartPicker extends React.Component {
 			// keep showLoadingOverlay for backwards compat if other code uses it
 			showLoadingOverlay: false,
 
-			// NEW: multi-axis single-chart mode
 			multiAxisMode: true,
-
-			// NEW: version to force re-mount / re-render of combined chart
 			combinedVersion: 0,
-
-			// NEW: persisted context for the combined multi-axis chart
 			combinedContext: {
 				smoothing: 0,
 				shownRuns: [],
@@ -183,7 +178,6 @@ class ChartPicker extends React.Component {
 				}
 			};
 
-			// --- REPLACED: use setCharts to update charts and bump combinedVersion ---
 			// compute newCharts from current state (placeholder present) and replace placeholder with final chart
 			const newCharts = (this.state.charts || []).map(c => (c.id === placeholderId ? finalChart : c));
 			// pass chartRendered = true so setCharts will decrement pending renders for URL sync
@@ -206,9 +200,7 @@ class ChartPicker extends React.Component {
 	}
 
 	// add chart data to state for rendering 
-	setCharts(newChartData, chartRendered = false, options = {}) {
-		// option: openDataPickerIfEmpty (default true)
-		const openIfEmpty = options.openDataPickerIfEmpty !== false;
+	setCharts(newChartData, chartRendered = false) {
  
 		this.setState(prev => ({
 			charts: newChartData,
@@ -223,11 +215,6 @@ class ChartPicker extends React.Component {
 			}
 			if (chartRendered) {
 				this.decrementPendingRenders();
-			}
- 
-			// Open DataPicker if no charts are loaded
-			if (newChartData.length === 0 && openIfEmpty) {
-				this.props.toggleDataPicker(true);
 			}
 		});
  
@@ -261,13 +248,12 @@ class ChartPicker extends React.Component {
 	// removes chart from state using its id 
 	removeChart(id) {
 		let newCharts = [...this.state.charts].filter(chart => chart.id !== id);
-		// do NOT auto-open DataPicker when user explicitly removes a chart
-		this.setCharts(newCharts, false, { openDataPickerIfEmpty: false }); // setCharts will notify App
+		this.setCharts(newCharts, false); // setCharts will notify App
 	}
 	
 	// update custom chart state for local data download
 	syncData(id, newSmoothing, newShownRuns, newHiddenSeries, newRange) {
-		// NEW: if multi-axis combined chart, persist context to combinedContext state
+		// if multi-axis combined chart, persist context to combinedContext state
 		if (id === 'multi-axis') {
 			this.setState(prev => ({
 				combinedContext: {
@@ -373,7 +359,7 @@ class ChartPicker extends React.Component {
 		}	
 	}
 
-	// NEW: toggle multi-axis single-chart mode
+	// toggle multi-axis single-chart mode
 	toggleMultiAxis = (toState = null) => {
 		this.setState(prev => ({
 			multiAxisMode: typeof toState === 'boolean' ? toState : !prev.multiAxisMode
@@ -386,7 +372,7 @@ class ChartPicker extends React.Component {
 		});
 	}
 
-	// NEW: toggle a metric on/off. If present, remove its chart(s); otherwise fetch it.
+	// toggle a metric on/off. If present, remove its chart(s); otherwise fetch it.
 	toggleMetric = (metric) => {
 		const { charts, multiAxisMode } = this.state;
 		const existing = (charts || []).filter(c => c.metric === metric);
@@ -431,7 +417,7 @@ class ChartPicker extends React.Component {
 			return groups;
 		}, {});
 
-		// NEW: build a combined chart object when multiAxisMode is enabled
+		// build a combined chart object when multiAxisMode is enabled
 		let combinedChart = null;
 		// Only build combinedChart when multiAxisMode is enabled AND there are charts to combine
 		if (multiAxisMode && (charts || []).length > 0) {
@@ -514,18 +500,6 @@ class ChartPicker extends React.Component {
 						>
 							{multiAxisMode ? 'Multi-Axis: ON' : 'Multi-Axis: OFF'}
 						</button>
-
-							{/* <label className="upload">
-								<input 
-									type="file" 
-									ref={this.inputField} 
-									onChange={() => this.uploadLocalData()} 
-								/>
-								<img src={UploadIcon} className="uploadSVG" alt="Upload Charts" />
-							</label>
-							<button className="download" onClick={() => this.downloadLocalData()}>
-								<img src={DownloadIcon} className="downloadSVG" alt="Download Charts" title="Download Charts" />
-							</button> */}
 					</div>
 
 					<div id="metricBtnList">
@@ -534,7 +508,7 @@ class ChartPicker extends React.Component {
 								<h4 className="metricGroupName">{groupName}</h4> {/* Group header */}
 								{metrics.map(metric => {
 									const displayName = metric.replace(/^system\/([^-]+)-/, ""); // Extract unmatched part
-									// NEW: determine if this metric is currently selected (has a chart)
+									// determine if this metric is currently selected (has a chart)
 									const isSelected = (charts || []).some(c => c.metric === metric);
 									return (
 										<button
@@ -557,7 +531,7 @@ class ChartPicker extends React.Component {
 
 				{/* Charts List */}
 				<div id="chartsWrapper" className={this.props.className}>
-					{/* NEW: when in multi-axis mode render a single combined chart */}
+					{/* when in multi-axis mode render a single combined chart */}
 					{multiAxisMode ? (
 						combinedChart ? (
 							<Chart
@@ -566,8 +540,8 @@ class ChartPicker extends React.Component {
 								chartData={combinedChart}
 								pullChartExtras={this.syncData.bind(this)}
 								// when user removes the combined chart, do not auto-open DataPicker
-								removeChart={() => this.setCharts([], false, { openDataPickerIfEmpty: false })}
-								// NEW: tell Chart to occupy full viewport height in multi-axis mode
+								removeChart={() => this.setCharts([], false)}
+								// tell Chart to occupy full viewport height in multi-axis mode
 								fullHeight={true}
 							/>
 						) : (
