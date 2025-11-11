@@ -81,6 +81,10 @@ class DataPicker extends React.Component {
 		};
 
 		this.bottomOfScrollRef = React.createRef();
+
+		// NEW: bind scroll helpers
+		this.scrollToExperiment = this.scrollToExperiment.bind(this);
+		this.scrollToRun = this.scrollToRun.bind(this);
 	}
 
 	componentDidMount() {
@@ -289,6 +293,52 @@ class DataPicker extends React.Component {
 		}));
 	};
 
+	// NEW: scroll to experiment row in Experiments table and briefly highlight it
+	scrollToExperiment(experimentId) {
+		try {
+			const el = document.getElementById(`experiment-row-${experimentId}`);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				el.classList.add('highlightSelection');
+				setTimeout(() => el.classList.remove('highlightSelection'), 1500);
+			}
+		} catch (e) { /* noop */ }
+	}
+
+	// NEW: scroll to run row in Runs table; if run isn't visible, open its experiment first
+	scrollToRun(runName) {
+		try {
+			const encoded = encodeURIComponent(runName || '');
+			const id = `run-row-${encoded}`;
+			const el = document.getElementById(id);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				el.classList.add('highlightSelection');
+				setTimeout(() => el.classList.remove('highlightSelection'), 1500);
+				// Also attempt to highlight parent grouping row if present
+				const parentRow = el.closest('tr')?.previousElementSibling;
+				return;
+			}
+
+			// If not found: find run in data, open its experiment, then try again shortly after DOM update
+			const run = (this.state.runData || []).find(r => r.name === runName || r.run_name === runName);
+			if (run) {
+				// open experiment so Runs list renders required rows
+				this.setVisibleWorkloads(run.experimentId);
+				setTimeout(() => {
+					const el2 = document.getElementById(`run-row-${encodeURIComponent(runName)}`);
+					if (el2) {
+						el2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						el2.classList.add('highlightSelection');
+						setTimeout(() => el2.classList.remove('highlightSelection'), 1500);
+					}
+					// ensure experiment table also scrolls to experiment row
+					this.scrollToExperiment(run.experimentId);
+				}, 300);
+			}
+		} catch (e) { /* noop */ }
+	}
+
 	render() {
 		const {
 			experimentData,
@@ -341,6 +391,9 @@ class DataPicker extends React.Component {
 									selectedRuns={selectedRuns}
 									onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
 									bottomOfScrollRef={this.bottomOfScrollRef}
+									// NEW: pass scroll handlers to Selections
+									scrollToRun={this.scrollToRun}
+									scrollToExperiment={this.scrollToExperiment}
 								/>
 							</div>
 						</div>
@@ -383,7 +436,9 @@ function Experiments(props) {
 					pagination={false}
 					rowClassName={(record) => props.activeExperimentId === record.id ? "active" : ""}
 					onRow={(record) => ({
-						onClick: () => props.onClickSetVisibleWorkloads(record.id)
+						onClick: () => props.onClickSetVisibleWorkloads(record.id),
+						// NEW: stable id per experiment row so other UI can scroll to it
+						id: `experiment-row-${record.id}`
 					})}
 					size="small"
 				/>
@@ -709,7 +764,9 @@ function Runs(props) {
 					}}
 					onRow={record => ({
 						onClick: () => handleSelection(record, props.selectedRuns, props.setSelectedRuns),
-						style: getRowStyle(record)
+						style: getRowStyle(record),
+						// NEW: stable id per run row (URL-encode to keep id-safe)
+						id: `run-row-${encodeURIComponent(record.name || '')}`
 					})}
 					size="small"
 				/>
@@ -764,13 +821,30 @@ function Selections(props) {
 						>
 							X
 						</button>
-						{formatGroupLabel(group)}
+
+						{/* NEW: clickable group title pans to run/experiment */}
+						<span
+							className="groupTitleLink"
+							style={{ cursor: 'pointer', marginLeft: 8 }}
+							onClick={() => {
+								if (props.scrollToRun) props.scrollToRun(group.groupKey);
+							}}
+						>
+							{formatGroupLabel(group)}
+						</span>
 					</div>
 					<ul>
 						{ /* render all runs */ }
 						{group.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
 							<li key={visibleRun.name}>
-								{visibleRun.run_name || (visibleRun.name ? visibleRun.name.substring(0, 6) : '') + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								{/* NEW: clickable run title */}
+								<span
+									className="runTitleLink"
+									style={{ cursor: 'pointer' }}
+									onClick={() => { if (props.scrollToRun) props.scrollToRun(visibleRun.name); }}
+								>
+									{visibleRun.run_name || (visibleRun.name ? visibleRun.name.substring(0, 6) : '') + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								</span>
 
 								<button
 									className="removeBtn"
