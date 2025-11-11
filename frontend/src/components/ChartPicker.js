@@ -504,16 +504,6 @@ class ChartPicker extends React.Component {
 							className={`multiAxisBtn ${multiAxisMode ? 'active' : ''}`}
 							title="Toggle multi-axis single chart"
 							onClick={() => this.toggleMultiAxis()}
-							style={{
-								marginLeft: 8,
-								width: 140,
-								height: 40,
-								background: multiAxisMode ? '#115785' : '#fff',
-								color: multiAxisMode ? '#fff' : '#115785',
-								border: '1px solid #115785',
-								cursor: 'pointer',
-								fontWeight: '600'
-							}}
 						>
 							{multiAxisMode ? 'Multi-Axis: ON' : 'Multi-Axis: OFF'}
 						</button>
