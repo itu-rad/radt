@@ -638,7 +638,7 @@
 
 .toggleDataPickerBtn {
 	position: absolute;
-	width: 100px;
+	width: fit-content;
 	height: 40px;
 	background-color: #115785;
 	color: white;
