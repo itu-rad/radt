@@ -292,3 +292,15 @@
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
+
+/* When DataPicker is open, hide the metric sidebar and expand charts area */
+body.dataPickerOpen #metricSidebar {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Shift charts to occupy full width when sidebar is hidden */
+body.dataPickerOpen #chartsWrapper {
+    left: 0 !important;
+}

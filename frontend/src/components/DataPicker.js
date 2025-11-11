@@ -84,6 +84,10 @@ class DataPicker extends React.Component {
 	}
 
 	componentDidMount() {
+		// ensure body has dataPickerOpen while this picker is visible
+		// this.props.toHide === true means picker is hidden; add class only when visible
+		if (!this.props.toHide) document.body.classList.add('dataPickerOpen');
+
 		// Fetch data to populate pickers
 		this.fetchExperiments();
 		this.fetchRuns();
@@ -140,6 +144,15 @@ class DataPicker extends React.Component {
 	}
 
 	componentDidUpdate(prevProps, prevState) {
+		// maintain body.dataPickerOpen according to visibility prop
+		if (prevProps.toHide !== this.props.toHide) {
+			if (!this.props.toHide) {
+				document.body.classList.add('dataPickerOpen');
+			} else {
+				document.body.classList.remove('dataPickerOpen');
+			}
+		}
+
 		// scroll to bottom of list when adding selections, but not removing
 		if (this.state.selectedWorkloads.length > prevState.selectedWorkloads.length) {
 			this.bottomOfScrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
