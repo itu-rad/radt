@@ -88,11 +88,11 @@
 
 /* Buttons inside top controls: do not shrink, width controlled by CSS classes */
 .toggleDataPickerWrapper > button {
-	flex: 0 0 auto;
 	min-width: 0;
 	margin: 0;
 	white-space: nowrap;
 	position: relative;
+	cursor: pointer; /* ensure pointer cursor for clickable buttons */
 }
 
 /* Data and Multi-axis buttons — size via padding, avoid forcing large min-widths */
@@ -103,14 +103,24 @@
 	padding: 6px 12px;
 	box-sizing: border-box;
 	min-width: 0;   /* allow flex container to control layout */
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+}
+
+.multiAxisBtn.active {
+	background-color: #115785;
+	color: #ffffff;
+	border: 1px solid #115785;
 }
 
 /* container that holds the scrollable metric list */
 #chartPickerWrapper #metricBtnList {
-    /* new vertical layout and spacing */
     width: 100%;
-    height: auto; /* avoid fixed calc conflicts */
-    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0; /* enable correct flexbox clipping/scrolling */
+    overflow-y: scroll; /* always show scrollbar */
+    -webkit-overflow-scrolling: touch; /* smooth on iOS */
     padding: 8px;
     box-sizing: border-box;
     display: flex;
@@ -118,11 +128,7 @@
     gap: 8px;
     background: transparent;
     border: none; /* rely on sidebar border */
-}
-
-/* Small tweak to ensure final padding keeps scrollbar accessible */
-#chartPickerWrapper #metricBtnList {
-	padding-bottom: 12px;
+    padding-bottom: 12px; /* keep some extra space at bottom */
 }
 
 /* smooth thin scrollbar */
@@ -240,68 +246,7 @@
     filter: invert(63%) sepia(51%) saturate(1315%) hue-rotate(355deg) brightness(100%) contrast(91%);
 }
 
-/***************************** DOWNLOAD/UPLOAD BUTTONS */
-#downloadUploadWrapper {
-    position: fixed;
-    width: 65px;
-    text-align: center;
-    right: 10px;
-    top: 10px;
-    cursor: pointer;
-    border: none;
-    text-align: center;
-}
-#downloadUploadWrapper .upload {
-    display: block;
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    margin: 0 auto 10px auto;
-    background-color: transparent;
-    border: none;
-    background-color: #3498db;
-}
-.uploadSVG {
-    position: relative;
-    width: 35px;
-    filter: invert(89%) sepia(23%) saturate(0%) hue-rotate(76deg) brightness(108%) contrast(103%); /* white */
-}
-#downloadUploadWrapper .upload:hover {
-    background-color: white;
-    border: 2px solid #3498db;
-    box-sizing: border-box;
-}
-#downloadUploadWrapper .upload:hover .uploadSVG {
-    filter: invert(52%) sepia(98%) saturate(1376%) hue-rotate(177deg) brightness(92%) contrast(86%); /* #3498db */
-}
-#downloadUploadWrapper .download {
-    display: block;
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    margin: auto;
-    background-color: transparent;
-    border: none; 
-    background-color: #f1c40f;
-}
-.downloadSVG {
-    position: relative;
-    top: 2px;
-    left: 2px;
-    width: 35px;
-    filter: invert(89%) sepia(23%) saturate(0%) hue-rotate(76deg) brightness(108%) contrast(103%); /* white */
-}
-#downloadUploadWrapper .download:hover {
-    background-color: white;
-    border: 2px solid #f1c40f;
-    box-sizing: border-box;
-}
-#downloadUploadWrapper .download:hover .downloadSVG {
-    filter: invert(76%) sepia(79%) saturate(1490%) hue-rotate(359deg) brightness(104%) contrast(89%); /* #f39c12 */ 
-}
-#downloadUploadWrapper #hiddenUpload {
-    display: none;
-}
+
 .metricGroup {
 	margin-bottom: 15px;
     padding: 4px 2px;
