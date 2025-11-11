@@ -201,9 +201,27 @@
     color: var(--ml-muted);
 }
 
-/* ensure charts area shifts to the right with the new sidebar width */
+/* ensure charts area sits to the right of the sidebar and is constrained to the viewport */
 #chartsWrapper {
+    position: absolute;
+    top: 0;
     left: var(--sidebar-width);
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 10px; /* inner spacing for charts */
+    box-sizing: border-box;
+    overflow-y: auto; /* allow scrolling of charts area */
+    display: block;
+    z-index: 100; /* sit below the sidebar (sidebar uses z-index:200) */
+}
+
+/* ensure individual chart wrappers don't overflow the charts area */
+.chartWrapper {
+    box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
+    margin: 10px 0; /* vertical spacing, horizontal spacing handled by chartsWrapper padding */
 }
 
 /* keep upload/download icons compact and consistent */
