@@ -563,7 +563,7 @@ class ChartPicker extends React.Component {
 													onClick={() => this.toggleMetric(metric)}
 													title={isSelected ? `Remove ${displayName}` : `Show ${displayName}`}
 												>
-													{isSelected ? '✔ ' : ''}{displayName}
+													{displayName}
 												</button>
 											);
 										})}

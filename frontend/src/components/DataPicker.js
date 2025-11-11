@@ -664,7 +664,6 @@ function Runs(props) {
 							props.setSelectedRuns(newSelectedRuns);
 						}}
 					>
-						{isSelected ? "✔" : " "}
 					</div>
 				);
 			}
