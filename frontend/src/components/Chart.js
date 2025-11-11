@@ -35,7 +35,7 @@ const COMMON_TOOLBOX = {
         },
         myDataDownload: {
             show: true,
-            title: 'Download CSV',
+            title: 'Download Visible (CSV)',
             // simple download arrow path
             icon: 'path://M12 2 L12 16 M5 9 L12 16 L19 9 M4 20 H20',
             // default no-op; per-chart handler is injected in generateSeries
@@ -256,55 +256,10 @@ class Chart extends React.Component {
             ...COMMON_TOOLBOX,
             feature: {
                 ...COMMON_TOOLBOX.feature,
-                // Attach per-chart download handler that serialises source run data to CSV
+                // keep default noop here; we'll replace per-branch after series are built
                 myDataDownload: {
                     ...COMMON_TOOLBOX.feature.myDataDownload,
-                    onclick: () => {
-                        try {
-                            const headers = ['workload','runId','runName','metric','timestamp','value'];
-                            const rows = [];
-
-                            (newChartData && newChartData.data || []).forEach(run => {
-                                const base = {
-                                    workload: run.workload ?? '',
-                                    runId: run.name ?? '',
-                                    runName: run.runName ?? run.run_name ?? '',
-                                    metric: run.metric ?? newChartData.metric ?? ''
-                                };
-                                (run.data || []).forEach(pt => {
-                                    // support both { timestamp, value } and [t, v] shapes
-                                    const t = (pt && (pt.timestamp ?? (Array.isArray(pt) ? pt[0] : undefined))) ?? '';
-                                    const v = (pt && (pt.value ?? (Array.isArray(pt) ? pt[1] : undefined))) ?? '';
-                                    rows.push([
-                                        base.workload, base.runId, base.runName, base.metric, t, v
-                                    ]);
-                                });
-                            });
-
-                            // CSV encode (quote every field, escape quotes)
-                            const csvLines = [headers.join(',')].concat(rows.map(r =>
-                                r.map(cell => {
-                                    const s = cell == null ? '' : String(cell);
-                                    return `"${s.replace(/"/g, '""')}"`;
-                                }).join(',')
-                            ));
-                            const csvContent = csvLines.join('\n');
-                            // prepend BOM for Excel compatibility
-                            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            const baseName = (newChartData && (newChartData.title || newChartData.id)) ? (newChartData.title || newChartData.id).toString().replace(/[^\w\-]/g, '_') : 'chart';
-                            a.download = `${baseName}-data.csv`;
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
-                            URL.revokeObjectURL(url);
-                        } catch (e) {
-                            // fail silently but log to console
-                            console.error('Failed to export CSV', e);
-                        }
-                    }
+                    onclick: () => { try { this.downloadVisibleCsv(); } catch (e) {} }
                 },
                 myRemove: {
                     ...COMMON_TOOLBOX.feature.myRemove,
@@ -732,7 +687,7 @@ class Chart extends React.Component {
               dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
               grid: { left: 60, right: 60, top: 60, bottom: 96 }
          };
-        // ensure echOptionsSingle has the toolbox set
+        // ensure echOptionsSingle has the toolbox set (myDataDownload already calls downloadVisibleCsv)
         echOptionsSingle.toolbox = toolboxWithRemove;
 
         if (this.ecInstance) {
@@ -870,6 +825,80 @@ class Chart extends React.Component {
 			rendererVersion: (prev.rendererVersion || 0) + 1
 		}));
 	}
+
+    // NEW helper: download currently visible data from the chart (used by toolbox + visible button)
+    downloadVisibleCsv() {
+        try {
+            const ec = this.ecInstance;
+            const opt = (ec && typeof ec.getOption === 'function') ? ec.getOption() : (this.state && this.state.options) ? this.state.options : null;
+            const seriesList = (opt && opt.series) ? opt.series : [];
+            // detect visible x-axis range (dataZoom startValue/endValue preferred)
+            let visibleStart, visibleEnd;
+            try {
+                if (opt && Array.isArray(opt.dataZoom)) {
+                    const dz = opt.dataZoom.find(d => {
+                        if (d == null) return false;
+                        const xi = d.xAxisIndex;
+                        if (Array.isArray(xi)) return xi.includes(0);
+                        return xi === 0 || xi == null;
+                    }) || opt.dataZoom[0];
+                    if (dz && typeof dz.startValue !== 'undefined' && typeof dz.endValue !== 'undefined') {
+                        visibleStart = Number(dz.startValue);
+                        visibleEnd = Number(dz.endValue);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
+            const headers = ['workload','runId','runName','metric','timestamp','value'];
+            const rows = [];
+
+            (seriesList || []).forEach(s => {
+                const meta = s.meta || (s.userOptions && s.userOptions.meta) || (s.userOption && s.userOption.meta) || {};
+                const workload = meta.workload || '';
+                const metric = meta.metric || '';
+                const runsMeta = meta.runs || [];
+                (s.data || []).forEach(pt => {
+                    let x, y;
+                    if (Array.isArray(pt)) { x = pt[0]; y = pt[1]; }
+                    else if (pt && pt.value) { x = pt.value[0]; y = pt.value[1]; }
+                    else return;
+                    if (typeof visibleStart !== 'undefined' && typeof visibleEnd !== 'undefined') {
+                        if (Number(x) < visibleStart || Number(x) > visibleEnd) return;
+                    }
+                    let runId = '';
+                    let runName = '';
+                    if (runsMeta.length === 1) {
+                        runId = runsMeta[0].id || '';
+                        runName = runsMeta[0].name || runsMeta[0].runName || runId || s.name || '';
+                    } else {
+                        runName = s.name || '';
+                    }
+                    rows.push([workload, runId, runName, metric, x, y]);
+                });
+            });
+
+            // CSV encode (quote every field, escape quotes)
+            const csvLines = [headers.join(',')].concat(rows.map(r =>
+                r.map(cell => {
+                    const s = cell == null ? '' : String(cell);
+                    return `"${s.replace(/"/g, '""')}"`;
+                }).join(',')
+            ));
+            const csvContent = csvLines.join('\n');
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const baseName = (this.props.chartData && (this.props.chartData.title || this.props.chartData.id)) ? (this.props.chartData.title || this.props.chartData.id).toString().replace(/[^\w\-]/g, '_') : 'chart';
+            a.download = `${baseName}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Failed to export CSV', e);
+        }
+    }
 
     render() {
         const { options, id, workloads, smoothing, shownRuns, rendererVersion, svgRendererEnabled } = this.state;
