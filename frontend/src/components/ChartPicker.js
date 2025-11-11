@@ -525,6 +525,10 @@ class ChartPicker extends React.Component {
 							const isCollapsed = this.state.collapsedGroups[groupName] === undefined
 								? true
 								: this.state.collapsedGroups[groupName];
+							// count how many metrics in this group are currently selected (unique by metric)
+							const totalCount = metrics.length;
+							const selectedCount = metrics.filter(metric => (charts || []).some(c => c.metric === metric)).length;
+
 							return (
 								<div key={groupName} className="metricGroup">
 									{/* clickable header toggles collapse */}
@@ -533,7 +537,12 @@ class ChartPicker extends React.Component {
 										onClick={() => this.toggleGroup(groupName)}
 										style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
 									>
-										<h4 className="metricGroupName" style={{ margin: 0 }}>{groupName}</h4>
+										<h4 className="metricGroupName" style={{ margin: 0 }}>
+											{groupName}
+											<span className="groupCount" style={{ fontSize: 12, color: '#666', marginLeft: 8 }}>
+												({selectedCount}/{totalCount})
+											</span>
+										</h4>
 										<button
 											type="button"
 											aria-expanded={!isCollapsed}
