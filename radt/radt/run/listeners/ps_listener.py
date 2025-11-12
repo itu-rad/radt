@@ -37,6 +37,6 @@ class PSThread(Process):
                 cpu = line[3]
                 mem = line[4]
 
-                mlflow.log_metric(f"PS - CPU {psr}", float(cpu))
-                mlflow.log_metric(f"PS - MEM {psr}", float(mem))
+                mlflow.log_metric(f"system/PS - CPU {psr}", float(cpu))
+                mlflow.log_metric(f"system/PS - MEM {psr}", float(mem))
             time.sleep(5)

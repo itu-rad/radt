@@ -26,21 +26,21 @@ class FreeThread(Process):
                 continue
 
             if "Mem:" in line[0]:
-                m["Free - Mem Total GB"] = float(line[1]) / 1024
-                m["Free - Mem Used GB"] = float(line[2]) / 1024
-                m["Free - Mem Free GB"] = float(line[3]) / 1024
-                m["Free - Mem Shared GB"] = float(line[4]) / 1024
-                m["Free - Mem Buff/Cache GB"] = float(line[5]) / 1024
-                m["Free - Mem Available GB"] = float(line[6]) / 1024
+                m["system/Free - Mem Total GB"] = float(line[1]) / 1024
+                m["system/Free - Mem Used GB"] = float(line[2]) / 1024
+                m["system/Free - Mem Free GB"] = float(line[3]) / 1024
+                m["system/Free - Mem Shared GB"] = float(line[4]) / 1024
+                m["system/Free - Mem Buff/Cache GB"] = float(line[5]) / 1024
+                m["system/Free - Mem Available GB"] = float(line[6]) / 1024
 
             elif "Swap:" in line[0]:
-                m["Free - Swap Total GB"] = float(line[1]) / 1024
-                m["Free - Swap Used GB"] = float(line[2]) / 1024
-                m["Free - Swap Free GB"] = float(line[3]) / 1024
+                m["system/Free - Swap Total GB"] = float(line[1]) / 1024
+                m["system/Free - Swap Used GB"] = float(line[2]) / 1024
+                m["system/Free - Swap Free GB"] = float(line[3]) / 1024
 
             elif "Total:" in line[0]:
-                m["Free - Total Total GB"] = float(line[1]) / 1024
-                m["Free - Total Used GB"] = float(line[2]) / 1024
-                m["Free - Total Free GB"] = float(line[3]) / 1024
+                m["system/Free - Total Total GB"] = float(line[1]) / 1024
+                m["system/Free - Total Used GB"] = float(line[2]) / 1024
+                m["system/Free - Total Free GB"] = float(line[3]) / 1024
                 mlflow.log_metrics(m)
                 m = {}

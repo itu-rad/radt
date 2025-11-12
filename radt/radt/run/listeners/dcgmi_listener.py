@@ -115,6 +115,6 @@ class DCGMIThread(Process):
                 ):  # [2:] to get rid of gpu name
                     if value.strip() == "N/A":
                         value = 0
-                    m[f"DCGMI - {name}"] = float(value)
+                    m[f"system/DCGMI - {name}"] = float(value)
 
                 mlflow.log_metrics(m)

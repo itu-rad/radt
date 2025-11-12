@@ -59,18 +59,20 @@ class TOPThread(Process):
                         Flag = not (Flag)
 
                         if Flag == pervFlag:
-                            m["TOP - CPU Utilization"] = CPU_util
-                            m["TOP - Memory Utilization"] = Mem_util
+                            m["system/TOP - CPU Utilization"] = CPU_util
+                            m["system/TOP - Memory Utilization"] = Mem_util
                             pervFlag = not (Flag)
                             CPU_util = 0
                             Mem_util = 0
 
                         if word_vector[8] == "used,":
-                            m["TOP - Memory Usage GB"] = float(word_vector[7]) / 1000
+                            m["system/TOP - Memory Usage GB"] = (
+                                float(word_vector[7]) / 1000
+                            )
                         # else:
                         #     m["top - Memory Usage (GB)"] = float(word_vector[6])/1000)
                     elif word_vector[1] == "Swap:":
-                        m["TOP - Swap Memory GB"] = float(word_vector[6]) / 1000
+                        m["system/TOP - Swap Memory GB"] = float(word_vector[6]) / 1000
 
                 elif len(word_vector) != 0:
                     if word_vector[11].strip() in self.process_names:
@@ -81,6 +83,6 @@ class TOPThread(Process):
                 mlflow.log_metrics(m)
 
         m = {}
-        m["TOP - CPU Utilization"] = CPU_util
-        m["TOP - Memory Utilization"] = Mem_util
+        m["system/system/TOP - CPU Utilization"] = CPU_util
+        m["system/TOP - Memory Utilization"] = Mem_util
         mlflow.log_metrics(m)

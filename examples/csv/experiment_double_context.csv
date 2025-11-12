@@ -1,0 +1,3 @@
+Experiment,Workload,Name,Status,Run,Devices,Collocation,File,Listeners,Params
+0,1,cifar collocated context test run 1,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,1,cifar collocated context test run 2,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
