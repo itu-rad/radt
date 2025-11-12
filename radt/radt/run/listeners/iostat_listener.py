@@ -26,7 +26,10 @@ class IOstatThread(Process):
             m = {}
             line = line.lstrip()
 
-            if line.startswith("nvme") or line.startswith("sd"):
+            if not (line.startswith("nvme") or line.startswith("sd")):
+                continue # move on to next iostat line 
+            
+            try: 
                 word_vector = line.strip().split()
 
                 device = word_vector[0]  # storage device
@@ -65,3 +68,7 @@ class IOstatThread(Process):
                     total_mb_written_s += float(mb_written_s)
                     total_mb_read += float(mb_read)
                     total_mb_written += float(mb_written)
+            
+            except Exception as e:
+                print(f"[WARN] Failed to parse or log line: '{line.strip()}' ({e})")
+                continue  # move on to next iostat line
