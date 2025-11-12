@@ -25,6 +25,7 @@ The current release is `0.2.16`. radT has been recently released and is frequent
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
 ### Changelog
+- 0.2.21: Listeners now export system metrics, added name column.
 - 0.2.20: Resolve runs being closed when listeners exit.
 - 0.2.19: Add free listener, add pytorch data workers to top.
 - 0.2.18: Resolved issue of listeners duplicating runs under new mlflow versions.
@@ -101,11 +102,13 @@ RADT can take the hassle of large experiments off you by training multiple model
 
 ```csv
 Experiment,Workload,Status,Run,Devices,Collocation,    File,    Listeners,Params
-         1,       1,      ,   ,      0,          -,train.py,smi+top+dcgmi,batch-size=128
-         1,       1,      ,   ,      1,          -,train.py,smi+top+dcgmi,batch-size=128
-         1,       2,      ,   ,      2,    3g.20gb,train.py,smi+top+dcgmi,batch-size=128
-         1,       2,      ,   ,      2,    3g.20gb,train.py,smi+top+dcgmi,batch-size=128
-         1,       3,      ,   ,      1,          -,train.py,smi+top+dcgmi,batch-size=256
+0,1,no sharing,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 1,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 2,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 1,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 2,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 1,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 2,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
 ```
 
 When interrupted by any means, a csv experiment can be rescheduled to continue from where it left off.

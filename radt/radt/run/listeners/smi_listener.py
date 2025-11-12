@@ -29,20 +29,20 @@ class SMIThread(Process):
             if len(line) > 1 and line[0] != "#":
                 try:
                     m = {}
-                    m["SMI - Power Draw"] = float(line[0])
-                    m["SMI - Timestamp"] = datetime.strptime(
+                    m["system/SMI - Power Draw"] = float(line[0])
+                    m["system/SMI - Timestamp"] = datetime.strptime(
                         line[1] + "000", r"%Y/%m/%d %H:%M:%S.%f"
                     ).timestamp()
                     try:
-                        m["SMI - GPU Util"] = float(line[2]) / 100
+                        m["system/SMI - GPU Util"] = float(line[2]) / 100
                     except ValueError:
-                        m["SMI - GPU Util"] = float(-1)
+                        m["system/SMI - GPU Util"] = float(-1)
                     try:
-                        m["SMI - Mem Util"] = float(line[3]) / 100
+                        m["system/SMI - Mem Util"] = float(line[3]) / 100
                     except ValueError:
-                        m["SMI - Mem Util"] = float(-1)
-                    m["SMI - Mem Used"] = float(line[4])
-                    m["SMI - Performance State"] = int(line[5][1:])
+                        m["system/SMI - Mem Util"] = float(-1)
+                    m["system/SMI - Mem Used"] = float(line[4])
+                    m["system/SMI - Performance State"] = int(line[5][1:])
                     mlflow.log_metrics(m)
                 except ValueError as e:
                     print("SMI Listener failed to report metrics")

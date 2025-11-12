@@ -6,6 +6,7 @@ CSV_FORMAT = np.dtype(
     [
         ("Experiment", int),
         ("Workload", int),
+        ("Name", str),
         ("Status", str),
         ("Run", str),
         ("Devices", str),

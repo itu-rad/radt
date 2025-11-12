@@ -55,6 +55,14 @@ def schedule_parse_arguments(args: list):
         help="Devices to run on separated by +, e.g. 0, 1+2",
     )
     parser.add_argument(
+        "-n",
+        "--name",
+        type=str,
+        dest="name",
+        default="0",
+        help="Name of the run",
+    )
+    parser.add_argument(
         "-c",
         "--collocation",
         type=str,

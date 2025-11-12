@@ -152,19 +152,19 @@ def execute_workload(cmds: list, timeout: float):
     start_time = time.time()
 
     # Remove MLprojects
-    for _, _, _, _, _, _, filepath, _ in cmds:
+    for _, _, _, _, _, _, _, filepath, _ in cmds:
         while (Path(filepath) / "MLproject").is_file():
             (Path(filepath) / "MLproject").unlink()
             time.sleep(2)
 
     with ExitStack() as stack:
         try:
-            for id, colour, letter, vars, cmd, mlproject, filepath, _ in cmds:
+            for id, colour, letter, run_name, vars, cmd, mlproject, filepath, _ in cmds:
                 print(
                     runformat(
                         colour,
                         letter,
-                        f"context: {id}-{colour}-{letter}-{vars}-{cmd}-{filepath}",
+                        f"context: {id}-{colour}-{letter}-{run_name}-{vars}-{cmd}-{filepath}",
                     )
                 )
 
@@ -212,14 +212,20 @@ def execute_workload(cmds: list, timeout: float):
             # Group runs into workload children
             # And add experiment/workload to name
             parent_id = ""
-            for _, _, letter, _, _, _, filepath, _ in cmds:
+            for _, _, letter, run_name, _, _, _, filepath, _ in cmds:
                 if run_id := run_ids[letter]:
                     client = MlflowClient()
                     if run := client.get_run(run_id):
+                        workload_name = run.data.params["workload"]
+                        run_name = (
+                            run_name
+                            if (str(run_name).strip() not in ("", "nan"))
+                            else run.info.run_name
+                        )
                         client.set_tag(
                             run_id,
                             "mlflow.runName",
-                            f"({run.data.params['workload']} {letter}) {run.info.run_name}",
+                            f"({workload_name} {letter}) {run_name}",  # todo: rename this to be less ambigious with the other name
                         )
 
                         if not parent_id:
@@ -228,7 +234,7 @@ def execute_workload(cmds: list, timeout: float):
                             client.set_tag(run_id, "mlflow.parentRunId", parent_id)
 
             # Remove run blockers to start synchronised runs
-            for _, _, _, _, _, _, filepath, _ in cmds:
+            for _, _, _, _, _, _, _, filepath, _ in cmds:
                 if (Path(filepath) / "radtlock").is_file():
                     (Path(filepath) / "radtlock").unlink()
 
@@ -277,7 +283,7 @@ def execute_workload(cmds: list, timeout: float):
     sysprint("Sending logs to server.")
     results = []
 
-    for id, _, letter, _, _, _, filepath, row in cmds:
+    for id, _, letter, _, _, _, _, filepath, row in cmds:
         if run_id := run_ids[letter]:
             client = MlflowClient()
             if run := client.get_run(run_id):
@@ -425,7 +431,7 @@ def remove_mps():
 
 def clear_page_cache():
     """Clears OS page cache"""
-    return # TODO: re-enable
+    return  # TODO: re-enable
     execute_command(['sudo sh -c "/bin/echo 3 > /proc/sys/vm/drop_caches"'], shell=True)
 
 
@@ -455,6 +461,7 @@ def determine_operating_mode(
             {
                 "Experiment": parsed_args.experiment,
                 "Workload": parsed_args.workload,
+                "Name": parsed_args.name,
                 "Status": "",
                 "Run": "",
                 "Devices": parsed_args.devices,
@@ -468,6 +475,14 @@ def determine_operating_mode(
     elif file.suffix == ".csv":
         df_raw = pd.read_csv(file, delimiter=",", header=0, skipinitialspace=True)
         df_raw["Collocation"] = df_raw["Collocation"].astype(str)
+        # Ensure a Name column exists immediately after Workload
+        cols = list(df_raw.columns)
+        if "Name" not in df_raw.columns:
+            try:
+                widx = cols.index("Workload")
+                df_raw.insert(widx + 1, "Name", "")
+            except ValueError:
+                raise ValueError("CSV file must contain a 'Workload' column")
         df = df_raw.copy()
 
     return df, df_raw
@@ -590,6 +605,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                     id,
                     constants.COLOURS[i % 6],
                     row["Letter"],
+                    row["Name"],
                     {
                         "MLFLOW_EXPERIMENT_ID": str(row["Experiment"]).strip(),
                         "CUDA_VISIBLE_DEVICES": ",".join(map(str, mig_table[id])),

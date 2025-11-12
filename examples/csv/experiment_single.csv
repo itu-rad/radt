@@ -1,0 +1,2 @@
+Experiment,Workload,Name,Status,Run,Devices,Collocation,File,Listeners,Params
+0,1,cifar test run,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
