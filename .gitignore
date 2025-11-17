@@ -145,3 +145,4 @@ _run_temp.csv
 .vscode
 MLproject
 data
+environment.sh
