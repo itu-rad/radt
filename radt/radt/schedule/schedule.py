@@ -320,13 +320,16 @@ def get_gpu_ids():
     """Get UUIDs of all gpus
 
     Returns:
-        dict: GPU indices and UUIDs
+        dict: GPU indices and UUIDs or empty if nvidia-smi not found
     """
     gpus = {}
-    for line in execute_command("nvidia-smi -L"):
-        if "UUID: GPU" in line:
-            gpu = line.split("GPU")[1].split(":")[0].strip()
-            gpus[gpu] = line.split("UUID:")[1].split(")")[0].strip()
+    try:
+        for line in execute_command("nvidia-smi -L"):
+            if "UUID: GPU" in line:
+                gpu = line.split("GPU")[1].split(":")[0].strip()
+                gpus[gpu] = line.split("UUID:")[1].split(")")[0].strip()
+    except FileNotFoundError as e:
+        sysprint(f"SMI not found or unreachable. Continuing without SMI. ({e})")
     return gpus
 
 
@@ -576,6 +579,21 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
 
         commands = []
 
+        # Check if python or python3 is the correct command -- only when not using conda
+        if parsed_args.useconda:
+            python_command = "python"
+        else:
+            py_check = execute_command("command -v python || command -v python3", shell=True)
+
+            # if ends on python3, use that
+            if py_check and py_check[-1].strip()[-7:] == "python3":
+                python_command = "python3"
+            else:
+                python_command = "python"
+
+
+
+
         for i, (id, row) in enumerate(df_workload.iterrows()):
             row = row.copy()
             row["Filepath"] = str(Path(row["File"]).parent.absolute())
@@ -614,6 +632,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                         "RADT_MAX_EPOCH": str(parsed_args.max_epoch),
                         "RADT_MAX_TIME": str(parsed_args.max_time * 60),
                         "RADT_MANUAL_MODE": "True" if parsed_args.manual else "False",
+                        "PYTHONUNBUFFERED": "1" if not parsed_args.buffered else "",
                     }
                     | listener_env_vars,
                     constants.COMMAND.format(**row).split()
@@ -625,6 +644,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                             Listeners=listeners,
                             File=row["File"],
                             Params=row["Params"] or '""',
+                            PythonCommand=python_command,
                         ),
                     ).replace(
                         "<REPLACE_ENV>",

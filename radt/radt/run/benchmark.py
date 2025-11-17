@@ -67,7 +67,8 @@ class RADTBenchmark:
 
         try:
             self.log_text("".join(execute_command("conda list")), "conda.txt")
-        except FileNotFoundError as e:
+        except Exception as e: # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
+            print(f"Conda not found or unreachable. Continuing without conda list. ({e})")
             pass
 
         try:
