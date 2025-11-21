@@ -5,14 +5,7 @@ from time import time
 from subprocess import PIPE, Popen
 import mlflow
 
-from .listeners import (
-    dcgmi_listener,
-    ps_listener,
-    smi_listener,
-    top_listener,
-    iostat_listener,
-    free_listener,
-)
+from .listeners import listeners
 
 
 def dummy(*args, **kwargs):
@@ -67,7 +60,8 @@ class RADTBenchmark:
 
         try:
             self.log_text("".join(execute_command("conda list")), "conda.txt")
-        except FileNotFoundError as e:
+        except Exception as e: # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
+            print(f"Conda not found or unreachable. Continuing without conda list. ({e})")
             pass
 
         try:
@@ -99,25 +93,12 @@ class RADTBenchmark:
         self.max_epoch = int(os.getenv("RADT_MAX_EPOCH"))
         self.max_time = time() + int(os.getenv("RADT_MAX_TIME"))
 
-        # Spawn threads for listeners
-        if os.getenv("RADT_LISTENER_PS") == "True":
-            os.environ["RADT_LISTENER_PS"] = "False"
-            self.threads.append(ps_listener.PSThread(self.run_id))
-        if os.getenv("RADT_LISTENER_SMI") == "True":
-            os.environ["RADT_LISTENER_SMI"] = "False"
-            self.threads.append(smi_listener.SMIThread(self.run_id))
-        if os.getenv("RADT_LISTENER_DCGMI") == "True":
-            os.environ["RADT_LISTENER_DCGMI"] = "False"
-            self.threads.append(dcgmi_listener.DCGMIThread(self.run_id))
-        if os.getenv("RADT_LISTENER_TOP") == "True":
-            os.environ["RADT_LISTENER_TOP"] = "False"
-            self.threads.append(top_listener.TOPThread(self.run_id))
-        if os.getenv("RADT_LISTENER_IOSTAT") == "True":
-            os.environ["RADT_LISTENER_IOSTAT"] = "False"
-            self.threads.append(iostat_listener.IOstatThread(self.run_id))
-        if os.getenv("RADT_LISTENER_FREE") == "True":
-            os.environ["RADT_LISTENER_FREE"] = "False"
-            self.threads.append(free_listener.FreeThread(self.run_id))
+        # Spawn threads for enabled listeners
+        for listener_name, listener_class in listeners.items():
+            listener_env_key = f"RADT_LISTENER_{listener_name.upper()}"
+            if os.getenv(listener_env_key) == "True":
+                os.environ[listener_env_key] = "False"
+                self.threads.append(listener_class(self.run_id))    
 
         for thread in self.threads:
             thread.start()

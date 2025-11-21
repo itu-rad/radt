@@ -59,7 +59,7 @@ def schedule_parse_arguments(args: list):
         "--name",
         type=str,
         dest="name",
-        default="0",
+        default="",
         help="Name of the run",
     )
     parser.add_argument(
@@ -106,15 +106,22 @@ def schedule_parse_arguments(args: list):
         "--conda",
         action="store_true",
         dest="useconda",
-        default=True,
+        default=False,
         help="Use conda.yaml to create a conda environment",
     )
+    # parser.add_argument(
+    #     "--local",
+    #     action="store_false",
+    #     dest="useconda",
+    #     default=True,
+    #     help="Use the current active environment",
+    # )
     parser.add_argument(
-        "--local",
-        action="store_false",
-        dest="useconda",
-        default=True,
-        help="Use the current active environment",
+        "--buffered",
+        action="store_true",
+        dest="buffered",
+        default=False,
+        help="Whether to use buffered output (PYTHONUNBUFFERED is true if not set)",
     )
     parser.add_argument(
         "--manual",
