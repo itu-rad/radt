@@ -8,6 +8,8 @@ import threading
 from mlflow.tracking import MlflowClient
 from mlflow.entities import Metric as MlflowMetric
 from collections import deque
+import queue
+import multiprocessing
 
 from .listeners import listeners
 
@@ -43,12 +45,14 @@ def execute_command(cmd: str):
 
 # new: background logger thread that flushes metrics via MlflowClient.log_batch
 class MLFlowLogger(threading.Thread):
-    def __init__(self, run_id, buffers, lock, flush_interval=5.0, max_batch_size=1000):
+    def __init__(self, run_id, buffers, lock=None, flush_interval=5.0, max_batch_size=1000):
         super().__init__(daemon=True)
         self.run_id = run_id
-        # buffers is a dict-like object with 'write' and 'flush' deque objects
+        # buffers is now a queue.Queue instance
         self._buffers = buffers
+        # locks are obsolete with queue-based design
         self._lock = lock
+        # enforce flush_interval (kept as-is)
         self._flush_interval = float(flush_interval)
         self._stop_event = threading.Event()
         self._client = MlflowClient()
@@ -57,7 +61,11 @@ class MLFlowLogger(threading.Thread):
     def run(self):
         # Periodically flush buffer until stopped
         while not self._stop_event.is_set():
-            self._flush_once()
+            try:
+                self._flush_once()
+            except Exception as e:
+                # keep running on errors
+                print(f"MLFlowLogger error during flush: {e}")
             # try:
             # except Exception as e:
             #     print(f"MLFlowLogger error during flush: {e}")
@@ -65,63 +73,63 @@ class MLFlowLogger(threading.Thread):
 
         # On stop: repeatedly swap+flush until no remaining metrics
         while True:
-            flushed_any = self._flush_once(final=True)
-            # try:
-            # except Exception as e:
-            #     print(f"MLFlowLogger final flush error: {e}")
-            #     flushed_any = False
+            try:
+                flushed_any = self._flush_once(final=True)
+            except Exception as e:
+                print(f"MLFlowLogger final flush error: {e}")
+                flushed_any = False
             if not flushed_any:
                 break
 
-    def _swap_buffers(self):
-        # swap write deque with a fresh deque under lock and return the deque to flush
-        with self._lock:
-            current_write = self._buffers["write"]
-            if not current_write:
-                # empty deque object -> nothing to flush
-                return None
-            self._buffers["write"] = deque()
-        return current_write
+    def _drain_queue(self):
+        # Drain all currently queued items into a list without blocking producers.
+        drained = []
+        try:
+            while True:
+                item = self._buffers.get_nowait()
+                drained.append(item)
+        except queue.Empty:
+            pass
+        return drained
 
     def _flush_once(self, final=False):
-        # Swap out the write buffer quickly and process outside the lock
-        to_flush = self._swap_buffers()
+        # Drain the queue into a local list and process outside the queue
+        to_flush = self._drain_queue()
         if not to_flush:
             return False
 
-        # Convert deque items to metric dicts
+        # Normalize items to dicts for conversion / requeue on failure
         metric_dicts = []
         for m in to_flush:
-            metric_dicts.append(
-                MlflowMetric(key=m["key"],
-                                value=float(m["value"]),
-                                timestamp=int(m["timestamp"]),
-                                step=int(m["step"]))
-            )
+            metric_dicts.append({
+                "key": m.get("key") or m.get("name"),
+                "value": float(m.get("value")),
+                "timestamp": int(m.get("timestamp")),
+                "step": int(m.get("step", 0)),
+            })
 
         # Send in chunks if needed
         try:
-            if metric_dicts:
-                # chunking to avoid overly large batches
-                for i in range(0, len(metric_dicts), self._max_batch_size):
-                    batch = metric_dicts[i:i + self._max_batch_size]
-                    self._client._tracking_client.store.log_batch(run_id=self.run_id, metrics=batch, params=[], tags=[])
+            if not metric_dicts:
+                return True
+            # convert to Mlflow Metric entities and send in chunks
+            for i in range(0, len(metric_dicts), self._max_batch_size):
+                batch_dicts = metric_dicts[i:i + self._max_batch_size]
+                batch_entities = [
+                    MlflowMetric(d["key"], d["value"], d["timestamp"], d["step"]) for d in batch_dicts
+                ]
+                # use underlying store API to log a batch of metrics
+                self._client._tracking_client.store.log_batch(run_id=self.run_id, metrics=batch_entities, params=[], tags=[])
             return True
         except Exception:
-            # TODO: fix this
             # On failure, requeue the metrics at the front of the current write buffer
-            # Requeue under lock to avoid races
-            with self._lock:
-                # prepend failed metrics back into the current write deque preserving order
-                # convert dicts back to original entry format
-                for d in reversed(metric_dicts):
-                    print("R", d)
-                    self._buffers["write"].appendleft({
-                        "key": d["key"],
-                        "value": d["value"],
-                        "timestamp": d["timestamp"],
-                        "step": d["step"],
-                    })
+            # Requeue failed items back into the queue (order will be preserved relative to this batch)
+            for original in to_flush:
+                try:
+                    self._buffers.put(original)
+                except Exception:
+                    # best-effort; if put fails, drop the metric
+                    pass
             raise
 
     def terminate(self):
@@ -145,14 +153,14 @@ class RADTBenchmark:
         self.run_id = run.info.run_id
 
         # Shared in-memory swap buffers and synchronization primitives for main metrics
-        self._buffers_main = {"write": deque(), "flush": deque()}
-        self._buffers_lock_main = threading.Lock()
+        # main buffer is a thread-safe queue
+        self._buffers_main = queue.Queue()
         # fallback buffer used when main batch logger is not active; merged on next log call
         self._fallback_buffer_main = []
 
-        # Separate buffers for listeners so listener traffic doesn't interfere with main metrics
-        self._buffers_listeners = {"write": deque(), "flush": deque()}
-        self._buffers_lock_listeners = threading.Lock()
+        # Separate queue for listeners so listener traffic doesn't interfere with main metrics
+        # Use multiprocessing.Queue so listener Process instances can put() into it across processes.
+        self._buffers_listeners = multiprocessing.Queue()
         self._fallback_buffer_listeners = []
 
         # enable batch logger (always enabled when RADT is active; can be made conditional)
@@ -203,10 +211,10 @@ class RADTBenchmark:
         # spawn the batch logger thread and include in threads list
         if getattr(self, "_batch_logger_enabled", False):
             # main logger handles user-invoked log_metric/log_metrics
-            main_logger = MLFlowLogger(self.run_id, self._buffers_main, self._buffers_lock_main, flush_interval=self._batch_flush_interval)
+            main_logger = MLFlowLogger(self.run_id, self._buffers_main, flush_interval=self._batch_flush_interval)
             self.threads.append(main_logger)
             # listener logger accepts metrics from listeners
-            listener_logger = MLFlowLogger(self.run_id, self._buffers_listeners, self._buffers_lock_listeners, flush_interval=self._batch_flush_interval)
+            listener_logger = MLFlowLogger(self.run_id, self._buffers_listeners, flush_interval=self._batch_flush_interval)
             self.threads.append(listener_logger)
         else:
             listener_logger = None
@@ -216,8 +224,8 @@ class RADTBenchmark:
             listener_env_key = f"RADT_LISTENER_{listener_name.upper()}"
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
-                # pass listener_logger as second arg (listeners accept mlflow_logger optional)
-                inst = listener_class(self.run_id, listener_logger)
+                # pass the listener queue (buffer) as second arg; listeners will put() into it
+                inst = listener_class(self.run_id, self._buffers_listeners)
                 self.threads.append(inst)    
 
         for thread in self.threads:
@@ -229,7 +237,8 @@ class RADTBenchmark:
         # Terminate listeners and run
         if "RADT_MAX_EPOCH" not in os.environ:
             return
-        for thread in self.threads:
+        # Terminate listeners before loggers so the logger can flush remaining items.
+        for thread in reversed(self.threads):
             thread.terminate()
         mlflow.end_run()
 
@@ -258,10 +267,10 @@ class RADTBenchmark:
             # move any main fallback entries first
             if self._fallback_buffer_main:
                 for e in self._fallback_buffer_main:
-                    self._buffers_main["write"].append(e)
+                    self._buffers_main.put(e)
                 self._fallback_buffer_main.clear()
-            # append the new entry to the main write deque (non-blocking)
-            self._buffers_main["write"].append(entry)
+            # append the new entry to the main queue (non-blocking)
+            self._buffers_main.put(entry)
             return
 
         # Batch logger not enabled: store into main fallback list
@@ -290,11 +299,11 @@ class RADTBenchmark:
             # move any main fallback entries first
             if self._fallback_buffer_main:
                 for e in self._fallback_buffer_main:
-                    self._buffers_main["write"].append(e)
+                    self._buffers_main.put(e)
                 self._fallback_buffer_main.clear()
-            # append all new entries to main write deque
+            # append all new entries to main queue
             for entry in entries:
-                self._buffers_main["write"].append(entry)
+                self._buffers_main.put(entry)
             return
 
         # Batch logger not enabled: extend main fallback buffer

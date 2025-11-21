@@ -9,7 +9,7 @@ class TOPThread(Process):
     def __init__(
         self,
         run_id,
-        mlflow_logger=None,
+        mlflow_buffer=None,
         process_names=[
             "python",
             "pt_data_worker",
@@ -19,19 +19,16 @@ class TOPThread(Process):
         super(TOPThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
-        self.mlflow_logger = mlflow_logger
+        self.mlflow_buffer = mlflow_buffer
 
         self.process_names = process_names
 
     def _enqueue_metrics(self, metrics, timestamp_ms=None):
-        if self.mlflow_logger:
+        if self.mlflow_buffer:
             ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
             entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
-            try:
-                for e in entries:
-                    self.mlflow_logger._buffers["write"].append(e)
-            except Exception:
-                mlflow.log_metrics(metrics)
+            for e in entries:
+                self.mlflow_buffer.put(e)
         else:
             mlflow.log_metrics(metrics)
 

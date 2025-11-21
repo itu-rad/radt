@@ -10,19 +10,19 @@ import os
 
 
 class SMIThread(Process):
-    def __init__(self, run_id, mlflow_logger=None, experiment_id=88):
+    def __init__(self, run_id, mlflow_buffer=None, experiment_id=88):
         super(SMIThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
-        self.mlflow_logger = mlflow_logger
+        self.mlflow_buffer = mlflow_buffer
 
     def _enqueue_metrics(self, metrics, timestamp_ms=None):
-        if self.mlflow_logger:
+        if self.mlflow_buffer:
             ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
             entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
             try:
                 for e in entries:
-                    self.mlflow_logger._buffers["write"].append(e)
+                    self.mlflow_buffer.put(e)
             except Exception:
                 mlflow.log_metrics(metrics)
         else:
