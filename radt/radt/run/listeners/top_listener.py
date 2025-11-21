@@ -1,6 +1,7 @@
 import io
 import mlflow
 import subprocess
+import time
 from multiprocessing import Process
 
 
@@ -8,6 +9,7 @@ class TOPThread(Process):
     def __init__(
         self,
         run_id,
+        mlflow_logger=None,
         process_names=[
             "python",
             "pt_data_worker",
@@ -17,8 +19,21 @@ class TOPThread(Process):
         super(TOPThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
+        self.mlflow_logger = mlflow_logger
 
         self.process_names = process_names
+
+    def _enqueue_metrics(self, metrics, timestamp_ms=None):
+        if self.mlflow_logger:
+            ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+            entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
+            try:
+                for e in entries:
+                    self.mlflow_logger._buffers["write"].append(e)
+            except Exception:
+                mlflow.log_metrics(metrics)
+        else:
+            mlflow.log_metrics(metrics)
 
     def run(self):
         mlflow.start_run(run_id=self.run_id).__enter__()  # attach to run
@@ -69,8 +84,6 @@ class TOPThread(Process):
                             m["system/TOP - Memory Usage GB"] = (
                                 float(word_vector[7]) / 1000
                             )
-                        # else:
-                        #     m["top - Memory Usage (GB)"] = float(word_vector[6])/1000)
                     elif word_vector[1] == "Swap:":
                         m["system/TOP - Swap Memory GB"] = float(word_vector[6]) / 1000
 
@@ -80,9 +93,9 @@ class TOPThread(Process):
                             CPU_util += float(word_vector[8])
                             Mem_util += float(word_vector[9])
             if len(m):
-                mlflow.log_metrics(m)
+                self._enqueue_metrics(m)
 
         m = {}
         m["system/system/TOP - CPU Utilization"] = CPU_util
         m["system/TOP - Memory Utilization"] = Mem_util
-        mlflow.log_metrics(m)
+        self._enqueue_metrics(m)

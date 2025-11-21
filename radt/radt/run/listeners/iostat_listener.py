@@ -1,19 +1,33 @@
 import mlflow
 import subprocess
 import io
+import time
 
 from multiprocessing import Process
 
 
 class IOstatThread(Process):
-    def __init__(self, run_id, experiment_id=88):
+    def __init__(self, run_id, mlflow_logger=None, experiment_id=88):
         super(IOstatThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
+        self.mlflow_logger = mlflow_logger
+
+    def _enqueue_metrics(self, metrics, timestamp_ms=None):
+        if self.mlflow_logger:
+            ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+            entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
+            try:
+                for e in entries:
+                    self.mlflow_logger._buffers["write"].append(e)
+            except Exception:
+                mlflow.log_metrics(metrics)
+        else:
+            mlflow.log_metrics(metrics)
 
     def run(self):
         mlflow.start_run(run_id=self.run_id).__enter__()  # attach to run
-    
+
         ps = subprocess.Popen(
             "iostat 1 -m".split(),
             stdout=subprocess.PIPE,
@@ -46,10 +60,10 @@ class IOstatThread(Process):
                 m[f"system/iostat - {device} - MB read"] = float(mb_read)
                 m[f"system/iostat - {device} - MB written"] = float(mb_written)
 
-                mlflow.log_metrics(m)
+                self._enqueue_metrics(m)
 
                 if device in devices:
-                    mlflow.log_metrics(
+                    self._enqueue_metrics(
                         {
                             "system/iostat - Total tps": total_tps,
                             "system/iostat - Total MB read/s": total_mb_read_s,
