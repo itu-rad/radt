@@ -17,7 +17,7 @@ METRIC_NAMES = [
     "GPU Utilization",
     "Memory Copy Utilization",
     "GR Engine Active",
-    "SN Active",
+    "SM Active",
     "SM Occupancy",
     "Tensor Active",
     "DRAM Active",
