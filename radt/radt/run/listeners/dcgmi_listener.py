@@ -38,6 +38,52 @@ class DCGMIThread(Process):
         self.experiment_id = experiment_id
         self.mlflow_buffer = mlflow_buffer
 
+
+        # Hierarchy of metrics to monitor. Fall back in ascending order if certain metrics are not available for collection.
+        self.dcgm_fields = [
+            [
+                155,
+                156,
+                200,
+                201,
+                203,
+                204,
+                1001,
+                1002,
+                1003,
+                1004,
+                1005,
+                1006,
+                1007,
+                1008,
+                1009,
+                1010,
+                1011,
+                1012,
+            ],  # A100, H100
+            [
+                155,
+                156,
+                200,
+                201,
+                203,
+                204,
+                1001,
+                1002,
+                1003,
+                1004,
+                1005,
+                1007,
+                1008,
+                1009,
+                1010,
+                1011,
+                1012,
+            ],  # A10
+            [155, 156, 200, 201, 203, 204],  # Rest
+        ]
+
+
     def _enqueue_metrics(self, metrics, timestamp_ms=None):
         if self.mlflow_buffer:
             ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
