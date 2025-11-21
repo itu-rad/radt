@@ -106,16 +106,16 @@ def schedule_parse_arguments(args: list):
         "--conda",
         action="store_true",
         dest="useconda",
-        default=True,
+        default=False,
         help="Use conda.yaml to create a conda environment",
     )
-    parser.add_argument(
-        "--local",
-        action="store_false",
-        dest="useconda",
-        default=True,
-        help="Use the current active environment",
-    )
+    # parser.add_argument(
+    #     "--local",
+    #     action="store_false",
+    #     dest="useconda",
+    #     default=True,
+    #     help="Use the current active environment",
+    # )
     parser.add_argument(
         "--buffered",
         action="store_true",
