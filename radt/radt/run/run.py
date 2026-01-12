@@ -71,8 +71,6 @@ def start_run(args, listeners):
     globs = {"run_path": runpy.run_path, "progname": args.command}
 
     mlflow.log_param("manual", os.getenv("RADT_MANUAL_MODE") == "True")
-    mlflow.log_param("max_epoch", int(os.getenv("RADT_MAX_EPOCH")))
-    mlflow.log_param("max_time", int(os.getenv("RADT_MAX_TIME")))
 
     # Wait for lock
     while Path("radtlock").is_file():

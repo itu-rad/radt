@@ -43,7 +43,7 @@ class RADTBenchmark:
         Context manager for a run.
         Will track ML operations while active.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
 
         try:
@@ -60,8 +60,12 @@ class RADTBenchmark:
 
         try:
             self.log_text("".join(execute_command("conda list")), "conda.txt")
-        except Exception as e: # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
-            print(f"Conda not found or unreachable. Continuing without conda list. ({e})")
+        except (
+            Exception
+        ) as e:  # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
+            print(
+                f"Conda not found or unreachable. Continuing without conda list. ({e})"
+            )
             pass
 
         try:
@@ -80,25 +84,24 @@ class RADTBenchmark:
         except AttributeError:
             att = getattr(mlflow, name)
 
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             if isinstance(att, types.MethodType) or isinstance(att, types.FunctionType):
                 return dummy
+
         return att
 
     def __enter__(self):
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return self
 
         self.threads = []
-        self.max_epoch = int(os.getenv("RADT_MAX_EPOCH"))
-        self.max_time = time() + int(os.getenv("RADT_MAX_TIME"))
 
         # Spawn threads for enabled listeners
         for listener_name, listener_class in listeners.items():
             listener_env_key = f"RADT_LISTENER_{listener_name.upper()}"
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
-                self.threads.append(listener_class(self.run_id))    
+                self.threads.append(listener_class(self.run_id))
 
         for thread in self.threads:
             thread.start()
@@ -107,8 +110,9 @@ class RADTBenchmark:
 
     def __exit__(self, type, value, traceback):
         # Terminate listeners and run
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
+
         for thread in self.threads:
             thread.terminate()
         mlflow.end_run()
@@ -125,12 +129,9 @@ class RADTBenchmark:
         :param epoch: Integer training step (epoch) at which was the metric calculated.
                      Defaults to 0.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
         mlflow.log_metric(name, value, epoch)
-        if epoch >= self.max_epoch or time() > self.max_time:
-            print("Maximum epoch reached")
-            sys.exit()
 
     def log_metrics(self, metrics, epoch=0):
         """
@@ -140,9 +141,6 @@ class RADTBenchmark:
         :param epoch: Integer training step (epoch) at which was the metric calculated.
                      Defaults to 0.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
         mlflow.log_metrics(metrics, epoch)
-        if epoch >= self.max_epoch or time() > self.max_time:
-            print("Maximum epoch reached")
-            sys.exit()

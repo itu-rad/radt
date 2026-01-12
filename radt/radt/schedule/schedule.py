@@ -10,8 +10,10 @@ from subprocess import PIPE, STDOUT, Popen
 from threading import Thread
 
 import migedit
+import mlflow
 import numpy as np
 import pandas as pd
+
 from mlflow.tracking import MlflowClient
 
 from .. import constants
@@ -131,7 +133,7 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(cmds: list, timeout: float):
+def execute_workload(cmds: list, group_run_id: str | None = None):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
@@ -230,6 +232,13 @@ def execute_workload(cmds: list, timeout: float):
 
                         if not parent_id:
                             parent_id = run_id
+
+                            # If using a group, parents should fall under that
+                            if group_run_id:
+                                client.set_tag(
+                                    run_id, "mlflow.parentRunId", group_run_id
+                                )
+
                         elif parent_id != run_id:
                             client.set_tag(run_id, "mlflow.parentRunId", parent_id)
 
@@ -239,10 +248,6 @@ def execute_workload(cmds: list, timeout: float):
                     (Path(filepath) / "radtlock").unlink()
 
             while True:
-
-                # Stop on timeout (failsafe)
-                if time.time() - start_time > timeout + 60:
-                    break
 
                 # Stop once all processes have finished
                 for _, _, p, _, _ in popens:
@@ -494,13 +499,19 @@ def determine_operating_mode(
     return df, df_raw
 
 
-def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
+def start_schedule(
+    parsed_args: Namespace,
+    file: Path,
+    args_passthrough: list,
+    group_name: str | None = None,
+):
     """Schedule (execute) a .py or .csv file via RADT
 
     Args:
         parsed_args (Namespace): Schedule arguments
         file (Path): Path to file
         args_passthrough (list): Run arguments
+        group_name (str | None): Group name
     """
     df, df_raw = determine_operating_mode(parsed_args, file, args_passthrough)
 
@@ -586,16 +597,15 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
         if parsed_args.useconda:
             python_command = "python"
         else:
-            py_check = execute_command("command -v python || command -v python3", shell=True)
+            py_check = execute_command(
+                "command -v python || command -v python3", shell=True
+            )
 
             # if ends on python3, use that
             if py_check and py_check[-1].strip()[-7:] == "python3":
                 python_command = "python3"
             else:
                 python_command = "python"
-
-
-
 
         for i, (id, row) in enumerate(df_workload.iterrows()):
             row = row.copy()
@@ -632,8 +642,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                         "CUDA_VISIBLE_DEVICES": ",".join(map(str, mig_table[id])),
                         "RADT_DCGMI_GROUP": str(dcgmi_table[id]),
                         "SMI_GPU_ID": str(row["Devices"]),
-                        "RADT_MAX_EPOCH": str(parsed_args.max_epoch),
-                        "RADT_MAX_TIME": str(parsed_args.max_time * 60),
+                        "RADT_PRESENT": "True",
                         "RADT_MANUAL_MODE": "True" if parsed_args.manual else "False",
                         "PYTHONUNBUFFERED": "1" if not parsed_args.buffered else "",
                     }
@@ -658,9 +667,23 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                 )
             )
 
-        # Format and run the row
-        sysprint(f"RUNNING WORKLOAD: {workload}")
-        results = execute_workload(commands, parsed_args.max_time * 60)
+        # If group name is set, start a run to group all workloads into
+        if group_name is not None:
+            with mlflow.start_run(
+                run_name=group_name,
+                experiment_id=str(df_workload.loc[:, "Experiment"].iloc[0]).strip(),
+            ) as parent_run:
+                sysprint(
+                    f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run.info.run_id}"
+                )
+                results = execute_workload(
+                    commands, group_run_id=parent_run.info.run_id
+                )
+        else:
+            # Format and run the row
+            sysprint(f"RUNNING WORKLOAD: {workload}")
+            results = execute_workload(commands)
+
         remove_mps()
 
         # Write if .csv
