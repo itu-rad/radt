@@ -139,7 +139,7 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(defs: list, timeout: float, execution_type: ExecutionType = ExecutionType.DIRECT, poll_interval=0.5):
+def execute_workload(defs: list, timeout: float, execution_type: ExecutionType = ExecutionType.DIRECT, poll_interval=1.0):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
@@ -700,7 +700,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
         # Format and run the row
         execution_type = ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
         sysprint(f"Running workload {workload} in {execution_type.value} mode")
-        results = execute_workload(workload_definitions, parsed_args.max_time * 60, execution_type)
+        results = execute_workload(workload_definitions, parsed_args.max_time * 60, execution_type, parsed_args.poll_interval)
         remove_mps()
 
         # Write if .csv

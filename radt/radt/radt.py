@@ -109,13 +109,13 @@ def schedule_parse_arguments(args: list):
         default=False,
         help="Use conda.yaml to create a conda environment",
     )
-    # parser.add_argument(
-    #     "--local",
-    #     action="store_false",
-    #     dest="useconda",
-    #     default=True,
-    #     help="Use the current active environment",
-    # )
+    parser.add_argument(
+        "--poll_interval",
+        type=float,
+        dest="poll_interval",
+        default=1.0,
+        help="Polling interval in seconds",
+    )
     parser.add_argument(
         "--buffered",
         action="store_true",
