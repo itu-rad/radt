@@ -723,12 +723,12 @@ def start_schedule(
                     f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run.info.run_id} in {execution_type.value} mode"
                 )
                 results = execute_workload(
-                    commands, group_run_id=parent_run.info.run_id, execution_type=execution_type, poll_interval=parsed_args.poll_interval
+                    workload_definitions, group_run_id=parent_run.info.run_id, execution_type=execution_type, poll_interval=parsed_args.poll_interval
                 )
         else:
             # Format and run the row
             sysprint(f"RUNNING WORKLOAD: {workload} in {execution_type.value} mode")
-            results = execute_workload(commands, execution_type=execution_type, poll_interval=parsed_args.poll_interval)
+            results = execute_workload(workload_definitions, execution_type=execution_type, poll_interval=parsed_args.poll_interval)
 
         remove_mps()
 
