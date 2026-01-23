@@ -57,3 +57,7 @@ entry_points:
 MLFLOW_COMMAND = (
     '''{WorkloadListener}{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
 )
+
+DIRECT_COMMAND = (
+  '''{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
+)

@@ -108,7 +108,7 @@ with radt.run.RADTBenchmark() as run:
 
             # print statistics
             running_loss += loss.item()
-            if i % 20 == 19:  # print every 20 mini-batches
+            if True:#i % 20 == 19:  # print every 20 mini-batches
                 print(f"[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}")
                 run.log_metric("ML - loss", running_loss / 2000, epoch)
                 running_loss = 0.0
