@@ -20,7 +20,6 @@ from mlflow.tracking import MlflowClient
 
 from .. import constants
 
-
 class ExecutionType(Enum):
     DIRECT = "direct"
     MLFLOW = "mlflow"
@@ -140,7 +139,7 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(defs: list, timeout: float, execution_type: ExecutionType = ExecutionType.DIRECT):
+def execute_workload(defs: list, timeout: float, execution_type: ExecutionType = ExecutionType.DIRECT, poll_interval=0.5):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
@@ -275,6 +274,7 @@ def execute_workload(defs: list, timeout: float, execution_type: ExecutionType =
                     break
 
                 process_output(popens, log_runs, log, run_ids)
+                time.sleep(poll_interval)
 
         except KeyboardInterrupt:
             try:
@@ -296,6 +296,7 @@ def execute_workload(defs: list, timeout: float, execution_type: ExecutionType =
                             log_runs[letter].append(l)
                             log.append(runformat(None, letter, l))
                             print(runformat(colour, letter, l), end="")
+                        time.sleep(poll_interval)
             except KeyboardInterrupt:
                 pass
 
