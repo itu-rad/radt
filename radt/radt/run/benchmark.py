@@ -131,7 +131,40 @@ class _MLFlowLogger(multiprocessing.Process):
         self.join()
 
 
+_benchmark_instance = None
+
+def _get_benchmark_instance():
+    """Get or create the singleton RADTBenchmark instance"""
+    global _benchmark_instance
+    if _benchmark_instance is None:
+        _benchmark_instance = _RADTBenchmark()
+        _benchmark_instance.__enter__()
+    return _benchmark_instance
+
+def log_metric(name, value, epoch=0):
+    """Module-level log_metric"""
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _get_benchmark_instance()
+    instance.log_metric(name, value, epoch)
+
+def log_metrics(metrics, epoch=0):
+    """Module-level log_metrics"""
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _get_benchmark_instance()
+    instance.log_metrics(metrics, epoch)
+
 class RADTBenchmark:
+    """Context manager wrapper that returns the singleton"""
+    def __enter__(self):
+        return _get_benchmark_instance()
+    
+    def __exit__(self, type, value, traceback):
+        # TODO: check if this should terminate
+        pass
+
+class _RADTBenchmark:
     def __init__(self):
         """
         Context manager for a run.
@@ -191,6 +224,8 @@ class RADTBenchmark:
     def __enter__(self):
         if "RADT_PRESENT" not in os.environ:
             return self
+        
+        # TODO: store whether we have been initialised
 
         self.processes = []
 
