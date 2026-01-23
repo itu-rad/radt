@@ -1,4 +1,5 @@
 import os
+import shlex
 import sys
 import time
 from argparse import Namespace
@@ -8,13 +9,21 @@ from queue import Empty, Queue
 from string import ascii_uppercase
 from subprocess import PIPE, STDOUT, Popen
 from threading import Thread
+from enum import Enum
 
 import migedit
 import numpy as np
 import pandas as pd
+
+from mlflow import log_params
 from mlflow.tracking import MlflowClient
 
 from .. import constants
+
+
+class ExecutionType(Enum):
+    DIRECT = "direct"
+    MLFLOW = "mlflow"
 
 
 def coloured(colour: int, string: str):
@@ -108,8 +117,8 @@ def enqueue_output(out: PIPE, queue: Queue):
 
 
 def process_output(popens, log_runs, log, run_ids):
-    for colour, letter, p, q, _ in popens:
-        while True:  # p.poll() is None:
+    for colour, letter, _, q, _ in popens:
+        while True:
             try:
                 l = q.get_nowait()
                 if not l.strip() and not "\n" in l:
@@ -131,11 +140,11 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(cmds: list, timeout: float):
+def execute_workload(defs: list, timeout: float, execution_type: ExecutionType = ExecutionType.DIRECT):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
-        cmds (list): Commands to run
+        defs (list): Workload definitions to run
 
     Returns:
         list: Run results to write back to df
@@ -152,14 +161,14 @@ def execute_workload(cmds: list, timeout: float):
     start_time = time.time()
 
     # Remove MLprojects
-    for _, _, _, _, _, _, _, filepath, _ in cmds:
+    for _, _, _, _, _, _, _, filepath, _ in defs:
         while (Path(filepath) / "MLproject").is_file():
             (Path(filepath) / "MLproject").unlink()
             time.sleep(2)
 
     with ExitStack() as stack:
         try:
-            for id, colour, letter, run_name, vars, cmd, mlproject, filepath, _ in cmds:
+            for id, colour, letter, run_name, vars, cmd, param_def, filepath, _ in defs:
                 print(
                     runformat(
                         colour,
@@ -177,8 +186,12 @@ def execute_workload(cmds: list, timeout: float):
                     lock.write("")
 
                 # Write mlflow mlproject
+                # This is used even when not using MLflow managed runs (as a blocker)
                 with open(Path(filepath) / "MLproject", "w") as project_file:
-                    project_file.write(mlproject)
+                    if execution_type == ExecutionType.MLFLOW:
+                        project_file.write(param_def)
+                    else:
+                        project_file.write("")
 
                 stack.enter_context(
                     p := Popen(
@@ -188,6 +201,7 @@ def execute_workload(cmds: list, timeout: float):
                         bufsize=1,
                         env=env,
                         universal_newlines=True,
+                        # shell=True,  # TODO: remove shell
                     )
                 )
 
@@ -212,11 +226,19 @@ def execute_workload(cmds: list, timeout: float):
             # Group runs into workload children
             # And add experiment/workload to name
             parent_id = ""
-            for _, _, letter, run_name, _, _, _, filepath, _ in cmds:
+            for _, _, letter, run_name, _, _, _, filepath, _ in defs:
                 if run_id := run_ids[letter]:
                     client = MlflowClient()
                     if run := client.get_run(run_id):
-                        workload_name = run.data.params["workload"]
+                        
+                        # MLFlow: params are set, we grab workload name from there
+                        if execution_type == ExecutionType.MLFLOW:
+                            workload_name = run.data.params["workload"]
+                        else:
+                            # Direct: set the params in param_def
+                            log_params(param_def, run_id=run_id)
+                            workload_name = param_def["workload"]
+
                         run_name = (
                             run_name
                             if (str(run_name).strip() not in ("", "nan"))
@@ -234,7 +256,7 @@ def execute_workload(cmds: list, timeout: float):
                             client.set_tag(run_id, "mlflow.parentRunId", parent_id)
 
             # Remove run blockers to start synchronised runs
-            for _, _, _, _, _, _, _, filepath, _ in cmds:
+            for _, _, _, _, _, _, _, filepath, _ in defs:
                 if (Path(filepath) / "radtlock").is_file():
                     (Path(filepath) / "radtlock").unlink()
 
@@ -283,7 +305,7 @@ def execute_workload(cmds: list, timeout: float):
     sysprint("Sending logs to server.")
     results = []
 
-    for id, _, letter, _, _, _, _, filepath, row in cmds:
+    for id, _, letter, _, _, _, _, filepath, row in defs:
         if run_id := run_ids[letter]:
             client = MlflowClient()
             if run := client.get_run(run_id):
@@ -577,7 +599,7 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
 
         make_mps(df_workload, gpu_uuids)
 
-        commands = []
+        workload_definitions = []
 
         # Check if python or python3 is the correct command -- only when not using conda
         if parsed_args.useconda:
@@ -590,9 +612,6 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                 python_command = "python3"
             else:
                 python_command = "python"
-
-
-
 
         for i, (id, row) in enumerate(df_workload.iterrows()):
             row = row.copy()
@@ -618,7 +637,42 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
 
             listeners = "+".join(listeners)
 
-            commands.append(
+            # Determine the actual command to run
+            # This differs for CONDA mode (using mlflow wrapping) vs using a direct python command
+            if parsed_args.useconda:
+                # CONDA mode (using mlflow wrapping)
+                command = (constants.COMMAND.format(**row).split()
+                    + ["-P", f"workload_listener={row['WorkloadListener']}"])
+                param_def = (constants.MLPROJECT_CONTENTS.replace(
+                        "<REPLACE_COMMAND>",
+                        constants.MLFLOW_COMMAND.format(
+                            WorkloadListener=row["WorkloadListener"],
+                            Listeners=listeners,
+                            File=row["File"],
+                            Params=row["Params"] or '""',
+                            PythonCommand=python_command,
+                        ),
+                    ).replace(
+                        "<REPLACE_ENV>",
+                        "conda_env: conda.yaml" if parsed_args.useconda else "",
+                    ))
+            else:
+                # Direct mode (using direct python command)
+                command = shlex.split(constants.DIRECT_COMMAND.format(
+                        Listeners=listeners,
+                        File=row["File"],
+                        Params=row["Params"] or '""',
+                        PythonCommand=python_command,
+                    ))
+                param_def = {"letter": row["Letter"],
+                             "workload": row["Workload"],
+                             "listeners": listeners,
+                             "params": row["Params"] or "",
+                             "file": row["File"],
+                             "workload_listener": row["WorkloadListener"]
+                             }
+
+            workload_definitions.append(
                 (
                     id,
                     constants.COLOURS[i % 6],
@@ -635,29 +689,17 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
                         "PYTHONUNBUFFERED": "1" if not parsed_args.buffered else "",
                     }
                     | listener_env_vars,
-                    constants.COMMAND.format(**row).split()
-                    + ["-P", f"workload_listener={row['WorkloadListener']}"],
-                    constants.MLPROJECT_CONTENTS.replace(
-                        "<REPLACE_COMMAND>",
-                        constants.MLFLOW_COMMAND.format(
-                            WorkloadListener=row["WorkloadListener"],
-                            Listeners=listeners,
-                            File=row["File"],
-                            Params=row["Params"] or '""',
-                            PythonCommand=python_command,
-                        ),
-                    ).replace(
-                        "<REPLACE_ENV>",
-                        "conda_env: conda.yaml" if parsed_args.useconda else "",
-                    ),
+                    command,
+                    param_def,
                     row["Filepath"],
                     row,
                 )
             )
 
         # Format and run the row
-        sysprint(f"RUNNING WORKLOAD: {workload}")
-        results = execute_workload(commands, parsed_args.max_time * 60)
+        execution_type = ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
+        sysprint(f"Running workload {workload} in {execution_type.value} mode")
+        results = execute_workload(workload_definitions, parsed_args.max_time * 60, execution_type)
         remove_mps()
 
         # Write if .csv
