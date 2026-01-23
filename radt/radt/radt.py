@@ -87,22 +87,6 @@ def schedule_parse_arguments(args: list):
         help="Whether to force rerun runs that have previously failed",
     )
     parser.add_argument(
-        "-i",
-        "--epoch",
-        type=int,
-        dest="max_epoch",
-        default=5,
-        help="Maximum number of epochs to train for",
-    )
-    parser.add_argument(
-        "-t",
-        "--time",
-        type=int,
-        dest="max_time",
-        default=2 * 24 * 60,
-        help="Maximum amount of time to train for (minutes)",
-    )
-    parser.add_argument(
         "--conda",
         action="store_true",
         dest="useconda",
@@ -200,3 +184,16 @@ def cli():
         cli_run()
     else:
         cli_schedule()
+
+
+def schedule_external(args, df, group_name=None):
+    """Schedule a dataframe
+
+    Args:
+        entrypoint (str): Path to the entrypoint
+        run_definitions (list): List of run definitions
+    """
+
+    parsed_args = schedule_parse_arguments(args)
+    args_passthrough = []
+    start_schedule(parsed_args, df, args_passthrough, group_name=group_name)

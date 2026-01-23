@@ -25,6 +25,8 @@ The current release is `0.2.16`. radT has been recently released and is frequent
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
 ### Changelog
+- 0.2.24: Added `macmon` listener for MacOS.
+- 0.2.23: Added external scheduling, removed `max_epoch` and `max_time`.
 - 0.2.22: Removed default conda dependency
 - 0.2.21: Listeners now export system metrics, added name column.
 - 0.2.20: Resolve runs being closed when listeners exit.

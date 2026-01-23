@@ -137,7 +137,7 @@ class RADTBenchmark:
         Context manager for a run.
         Will track ML operations while active.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
 
         try:
@@ -158,8 +158,12 @@ class RADTBenchmark:
 
         try:
             self.log_text("".join(execute_command("conda list")), "conda.txt")
-        except Exception as e: # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
-            print(f"Conda not found or unreachable. Continuing without conda list. ({e})")
+        except (
+            Exception
+        ) as e:  # Either a FileNotFoundError or DirectoryNotACondaEnvironmentError
+            print(
+                f"Conda not found or unreachable. Continuing without conda list. ({e})"
+            )
             pass
 
         try:
@@ -178,18 +182,17 @@ class RADTBenchmark:
         except AttributeError:
             att = getattr(mlflow, name)
 
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             if isinstance(att, types.MethodType) or isinstance(att, types.FunctionType):
                 return dummy
+
         return att
 
     def __enter__(self):
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return self
 
         self.processes = []
-        self.max_epoch = int(os.getenv("RADT_MAX_EPOCH"))
-        self.max_time = time() + int(os.getenv("RADT_MAX_TIME"))
 
         # main logger handles user-invoked log_metric/log_metrics
         main_logger = _MLFlowLogger(self.run_id, self._buffer_main)
@@ -216,7 +219,7 @@ class RADTBenchmark:
         """
         Terminate listeners and run
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
         
         # Terminate listeners before loggers so the logger can flush remaining items.
@@ -237,12 +240,8 @@ class RADTBenchmark:
         :param epoch: Integer training step (epoch) at which was the metric calculated.
                      Defaults to 0.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
-        # termination check first
-        if epoch >= self.max_epoch or time() > self.max_time:
-            print("Maximum epoch reached")
-            sys.exit()
 
         entry = {"key": name, "value": value, "timestamp": int(time() * 1000), "step": int(epoch)}
         self._buffer_main.put(entry)
@@ -255,14 +254,9 @@ class RADTBenchmark:
         :param epoch: Integer training step (epoch) at which was the metric calculated.
                      Defaults to 0.
         """
-        if "RADT_MAX_EPOCH" not in os.environ:
+        if "RADT_PRESENT" not in os.environ:
             return
-        # termination check first
-        if epoch >= self.max_epoch or time() > self.max_time:
-            print("Maximum epoch reached")
-            sys.exit()
 
-        timestamp = int(time() * 1000)
-        entries = [{"key": k, "value": v, "timestamp": timestamp, "step": int(epoch)} for k, v in metrics.items()]
+        entries = [{"key": k, "value": v, "timestamp": int(time() * 1000), "step": int(epoch)} for k, v in metrics.items()]
         for entry in entries:
             self._buffer_main.put(entry)
