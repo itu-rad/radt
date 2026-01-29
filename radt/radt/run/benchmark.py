@@ -4,6 +4,11 @@ import types
 from time import time
 from subprocess import PIPE, Popen
 import mlflow
+from mlflow.tracking import MlflowClient
+from mlflow.entities import Metric as MlflowMetric
+from collections import deque
+import multiprocessing
+import queue
 
 from .listeners import listeners
 
@@ -28,7 +33,7 @@ def execute_command(cmd: str):
     env = os.environ.copy()
 
     result = []
-    with Popen(cmd, stdout=PIPE, bufsize=1, universal_newlines=True, env=env) as p:
+    with Popen(cmd, stdout=PIPE, bufsize=1, universal_newlines=True, env=env, shell=True) as p:
         result.extend(p.stdout)
 
         if p.returncode != 0:
@@ -37,7 +42,129 @@ def execute_command(cmd: str):
     return result
 
 
+class _MLFlowLogger(multiprocessing.Process):
+    """
+    Background process that periodically flushes metrics from a queue to MLflow
+    """
+    def __init__(self, run_id, buffers, lock=None, flush_interval=5.0, max_batch_size=1000):
+        super().__init__(daemon=True)
+        self.run_id = run_id
+        self._buffers = buffers
+        self._lock = lock
+
+        self._flush_interval = float(flush_interval)
+        self._stop_event = multiprocessing.Event()
+        self._client = MlflowClient()
+        self._max_batch_size = int(max_batch_size)
+
+    def run(self):
+        # Periodically flush buffer until stopped
+        while not self._stop_event.is_set():
+            try:
+                self._flush_once()
+            except Exception as e:
+                # keep running on errors
+                print(f"MLFlowLogger error during flush: {e}")
+            self._stop_event.wait(self._flush_interval)
+
+        # On stop: repeatedly flush until no remaining metrics
+        while True:
+            try:
+                flushed_any = self._flush_once(final=True)
+            except Exception as e:
+                print(f"MLFlowLogger final flush error: {e}")
+                flushed_any = False
+            if not flushed_any:
+                break
+
+    def _drain_queue(self):
+        # Drain all currently queued items into a list without blocking.
+        drained = []
+        try:
+            while True:
+                item = self._buffers.get_nowait()
+                drained.append(item)
+        except queue.Empty:
+            pass
+        return drained
+
+    def _flush_once(self, final=False):
+        # Drain the queue into a local list and process outside the queue
+        to_flush = self._drain_queue()
+        if not to_flush:
+            return False
+
+        # Normalize items to dicts for conversion / requeue on failure
+        metric_dicts = []
+        for m in to_flush:
+            metric_dicts.append({
+                "key": m.get("key") or m.get("name"),
+                "value": float(m.get("value")),
+                "timestamp": int(m.get("timestamp")),
+                "step": int(m.get("step", 0)),
+            })
+
+        # Send in chunks if needed because mlflow has a max batch size
+        try:
+            if not metric_dicts:
+                return True
+            # convert to Mlflow Metric entities and send in chunks
+            for i in range(0, len(metric_dicts), self._max_batch_size):
+                batch_dicts = metric_dicts[i:i + self._max_batch_size]
+                batch_entities = [
+                    MlflowMetric(d["key"], d["value"], d["timestamp"], d["step"]) for d in batch_dicts
+                ]
+                self._client._tracking_client.store.log_batch(run_id=self.run_id, metrics=batch_entities, params=[], tags=[])
+            return True
+        except Exception:
+            # On failure, requeue the metrics at the front of the current write buffer
+            for original in to_flush:
+                try:
+                    self._buffers.put(original)
+                except Exception:
+                    # if put fails, drop the metric
+                    pass
+            raise
+
+    def terminate(self):
+        self._stop_event.set()
+        self.join()
+
+
+_benchmark_instance = None
+
+def _get_benchmark_instance():
+    """Get or create the singleton RADTBenchmark instance"""
+    global _benchmark_instance
+    if _benchmark_instance is None:
+        _benchmark_instance = _RADTBenchmark()
+        _benchmark_instance.__enter__()
+    return _benchmark_instance
+
+def log_metric(name, value, epoch=0):
+    """Module-level log_metric"""
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _get_benchmark_instance()
+    instance.log_metric(name, value, epoch)
+
+def log_metrics(metrics, epoch=0):
+    """Module-level log_metrics"""
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _get_benchmark_instance()
+    instance.log_metrics(metrics, epoch)
+
 class RADTBenchmark:
+    """Context manager wrapper that returns the singleton"""
+    def __enter__(self):
+        return _get_benchmark_instance()
+    
+    def __exit__(self, type, value, traceback):
+        # TODO: check if this should terminate
+        pass
+
+class _RADTBenchmark:
     def __init__(self):
         """
         Context manager for a run.
@@ -51,6 +178,10 @@ class RADTBenchmark:
         except Exception as e:
             run = mlflow.active_run()
         self.run_id = run.info.run_id
+
+        # Queue for main process and listener logging
+        self._buffer_main = multiprocessing.Queue()
+        self._buffer_listeners = multiprocessing.Queue()
 
         # Capture (package) versions for pip, conda, smi
         try:
@@ -93,28 +224,43 @@ class RADTBenchmark:
     def __enter__(self):
         if "RADT_PRESENT" not in os.environ:
             return self
+        
+        # TODO: store whether we have been initialised
 
-        self.threads = []
+        self.processes = []
 
-        # Spawn threads for enabled listeners
+        # main logger handles user-invoked log_metric/log_metrics
+        main_logger = _MLFlowLogger(self.run_id, self._buffer_main)
+        self.processes.append(main_logger)
+
+        # listener logger accepts metrics from listeners
+        listener_logger = _MLFlowLogger(self.run_id, self._buffer_listeners)
+        self.processes.append(listener_logger)
+
+        # Spawn processes for enabled listeners
         for listener_name, listener_class in listeners.items():
             listener_env_key = f"RADT_LISTENER_{listener_name.upper()}"
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
-                self.threads.append(listener_class(self.run_id))
+                inst = listener_class(self.run_id, self._buffer_listeners)
+                self.processes.append(inst)    
 
-        for thread in self.threads:
-            thread.start()
+        for process in self.processes:
+            process.start()
 
         return self
 
     def __exit__(self, type, value, traceback):
-        # Terminate listeners and run
+        """
+        Terminate listeners and run
+        """
         if "RADT_PRESENT" not in os.environ:
             return
-
-        for thread in self.threads:
-            thread.terminate()
+        
+        # Terminate listeners before loggers so the logger can flush remaining items.
+        for process in reversed(self.processes):
+            process.terminate()
+        
         mlflow.end_run()
 
     def log_metric(self, name, value, epoch=0):
@@ -131,7 +277,9 @@ class RADTBenchmark:
         """
         if "RADT_PRESENT" not in os.environ:
             return
-        mlflow.log_metric(name, value, epoch)
+
+        entry = {"key": name, "value": value, "timestamp": int(time() * 1000), "step": int(epoch)}
+        self._buffer_main.put(entry)
 
     def log_metrics(self, metrics, epoch=0):
         """
@@ -143,4 +291,7 @@ class RADTBenchmark:
         """
         if "RADT_PRESENT" not in os.environ:
             return
-        mlflow.log_metrics(metrics, epoch)
+
+        entries = [{"key": k, "value": v, "timestamp": int(time() * 1000), "step": int(epoch)} for k, v in metrics.items()]
+        for entry in entries:
+            self._buffer_main.put(entry)

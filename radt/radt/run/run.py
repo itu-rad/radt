@@ -63,14 +63,16 @@ def start_run(args, listeners):
 
     # Clear MLproject file so next run may start
     with open(Path("MLproject")) as file:
-        mlflow.log_text(file.read(), "MLproject")
-
+        mlflow.log_text(file.read() or "Direct mode - no contents", "MLproject")
     Path("MLproject").unlink()
 
     code = "run_path(progname, run_name='__main__')"
     globs = {"run_path": runpy.run_path, "progname": args.command}
 
     mlflow.log_param("manual", os.getenv("RADT_MANUAL_MODE") == "True")
+
+    # Print RUN_ID to initiate lock release
+    print(f"RADT active in run with ID '{RUN_ID}'")
 
     # Wait for lock
     while Path("radtlock").is_file():
