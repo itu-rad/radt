@@ -76,7 +76,7 @@ def schedule_parse_arguments(args: list):
         type=str,
         dest="listeners",
         default="smi+top+dcgmi+iostat+free",
-        help=f"Metric collectors separated by +, available: {' '.join(constants.RUN_LISTENERS + list(constants.WORKLOAD_LISTENERS.keys()))}",
+        help=f"Metric collectors separated by +, available: {' '.join(constants.RUN_LISTENERS + list(constants.WORKLOAD_LISTENERS.keys()))}",  # TODO: remove RUN_LISTENERS from here
     )
     parser.add_argument(
         "-r",
