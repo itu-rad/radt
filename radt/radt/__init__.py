@@ -3,4 +3,6 @@
 __version__ = "0.2.24"
 
 from .radt import cli, schedule_external
-from .run import log_metric, log_metrics, listeners
+from .run import log_metric, log_metrics, listeners, _patch_mlflow_async_export_queue
+
+_patch_mlflow_async_export_queue()
