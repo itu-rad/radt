@@ -33,7 +33,7 @@ class _TraceExportLogger(multiprocessing.Process):
     Batches spans by merging lists from tasks with the same callable.
     """
 
-    def __init__(self, buffer, flush_interval=5.0):
+    def __init__(self, buffer, flush_interval=1.0):
         super().__init__(daemon=True)
 
         self._exporter = provider._get_trace_exporter()
@@ -77,7 +77,21 @@ class _TraceExportLogger(multiprocessing.Process):
         if not to_flush:
             return False
 
-        # Group tasks by handler, merging span lists from the second argument
+        SEQUENCE_MODE = True  # for debugging
+        if SEQUENCE_MODE:
+            for task in to_flush:
+                if task[0] == 0:
+                    self._exporter._log_trace(t := Trace.from_dict(task[1]), [])
+                    print("Logged trace:", t)
+                else:
+                    self._exporter._log_spans(
+                        0, sl := [Span.from_dict(span) for span in task[1]]
+                    )  # TODO: need support for custom exp ids
+                    print("Logged spans:", sl)
+
+            # Group tasks by handler, merging span lists from the second argument
+            return True
+
         trace_list = []
         span_list = []
 
@@ -96,12 +110,12 @@ class _TraceExportLogger(multiprocessing.Process):
                 _logger.error(f"Failed to log trace {trace.info.trace_id}: {e}")
                 failed_traces.append((0, trace.to_dict()))
 
-        # Requeue failed traces
-        for failed_task in failed_traces:
-            try:
-                self._buffer.put(failed_task)
-            except Exception as e:
-                _logger.error(f"Failed to requeue trace: {e}")
+            # Requeue failed traces
+            for failed_task in failed_traces:
+                try:
+                    self._buffer.put(failed_task)
+                except Exception as e:
+                    _logger.error(f"Failed to requeue trace: {e}")
 
         # Execute batched span uploads
         try:
@@ -184,7 +198,7 @@ class AsyncTraceExportQueueV2:
 
     def flush(self, terminate=False) -> None:
         """
-        Flush the async queue.
+        Flush the async queue by waiting for all tasks to be processed.
 
         Args:
             terminate: If True, shut down the process after flushing.
@@ -193,7 +207,10 @@ class AsyncTraceExportQueueV2:
             return
 
         if self._process is not None:
+            # Signal the process to stop, which will trigger final flush
             self._process.terminate()
+            # Wait for the process to finish flushing
+            self._process.join(timeout=30)  # Give it up to 30 seconds to finish
             self._is_active = False
 
         # Restart if not terminating
