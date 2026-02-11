@@ -1,183 +1,124 @@
 import React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import Highcharts from 'highcharts/highstock';
-import HighchartsReact from 'highcharts-react-official';
+import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 import '../styles/Chart.css';
 
-class Chart extends React.Component {
+const COMMON_TOOLBOX = {
+    show: true,
+    feature: {
+        dataZoom: { show: true},
+        restore: { show: true },
+        myDummy1: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
+        magicType: { show: true, type: ['line', 'bar', 'stack'] },
+        myDummy2: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
+        saveAsImage: {
+            show: true,
+            pixelRatio: 10,
+            icon: 'path://M 864 248 H 728 l -32.4 -90.8 a 32.07 32.07 0 0 0 -30.2 -21.2 H 358.6 c -13.5 0 -25.6 8.5 -30.1 21.2 L 296 248 H 160 c -44.2 0 -80 35.8 -80 80 v 456 c 0 44.2 35.8 80 80 80 h 704 c 44.2 0 80 -35.8 80 -80 V 328 c 0 -44.2 -35.8 -80 -80 -80 Z Z M 512 384 c -88.4 0 -160 71.6 -160 160 s 71.6 160 160 160 s 160 -71.6 160 -160 s -71.6 -160 -160 -160 Z Z'
+        },
+        myDataDownload: {
+            show: true,
+            title: 'Download Visible (CSV)',
+            // simple download arrow path
+            icon: 'path://M12 2 L12 16 M5 9 L12 16 L19 9 M4 20 H20',
+            // default no-op; per-chart handler is injected in generateSeries
+            onclick: () => {}
+        },
+        myDummy3: {
+            show: true,
+            title: '',
+            // invisible rectangle path: occupies space but will be rendered transparent via iconStyle
+            icon: 'path://M0 0 L24 0 L24 24 L0 24 Z',
+            iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' },
+            emphasis: { iconStyle: { opacity: 0, cursor: 'default', pointerEvents: 'none' } },
+            onclick: () => {}
+        },
+        myRemove: {
+            show: true,
+            title: 'Remove Chart',
+            // simple "X" path icon
+            icon: 'path://M4 4 L12 12 M12 4 L4 12'
+        }
+    },
+};
 
-    constructor(props) {
+class Chart extends React.Component {
+	constructor(props) {
 		super(props);
 		this.state = {
-            options: {
-                title: {
-                    style: {
-                        fontWeight: 'bold'
-                    }
-                },
-                exporting: {
-                    buttons: {
-                        contextButton: {
-                            align: 'left',
-                            x: 0,
-                            y: -5,
-                            verticalAlign: 'top',
-                            menuItems: ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "separator", "downloadCSV", "downloadXLS"]
-                        }
-                    },
-                    scale: 3,
-                    sourceWidth: 1200,
-                    sourceHeight: 800,
-                    chartOptions: {
-                        navigator: {
-                            enabled: false       
-                        },
-                    },
-                    fallbackToExportServer: false
-                },
-                chart: {
-                    type: "line",
-                    zoomType: 'x',
-                },
-                legend: {
-                    enabled: true
-                },
-                xAxis: {
-                    events: {
-                        setExtremes: function(event) {
-                            if (!this.zoomButton) {
-                                const chart = this.chart;
-                                this.zoomButton = chart.renderer.button('Reset Zoom', null, null, function() {
-                                    chart.xAxis[0].setExtremes(null, null);
-                                }, {
-                                    zIndex: 20
-                                }).attr({
-                                    id: 'resetZoom',
-                                    align: 'left'
-                                }).add().align({
-                                    align: 'left',
-                                    x: 50,
-                                    y: 0
-                                }, false, null);                    
-                            }
-                            if(!event.min && !event.max){
-                                if (this.zoomButton != null) {
-                                    this.zoomButton.destroy();
-                                    this.zoomButton = null;
-                                }                      
-                            }
-                        },
-                        afterSetExtremes: this.handleAfterSetExtremes.bind(this)
-                    },
-                    ordinal: false,
-                    type: "datetime",
-                    title: {
-                        text: "Time Elapsed",
-                        style: {
-                            fontWeight: 'bold'
-                        }
-                    },
-                    labels:{
-                        formatter:function(){
-                            return (milliToMinsSecs(this.value))            
-                        },
-                    },
-                },
-                yAxis: {
-                    opposite: false,
-                    title: {
-                        text: "Value",
-                        style: {
-                            fontWeight: 'bold'
-                        }
-                    },
-                },
-                credits: {
-                    enabled: false
-                },
-                accessibility: {
-                    enabled: false
-                },
-                tooltip: {
-                    crosshairs: {
-                        color: 'black',
-                        dashStyle: '5'
-                    },
-                    shared: false,
-                    split: false
-                },
-                navigator: {
-                    xAxis: {
-                        labels: {
-                            enabled: false
-                        }
-                    },
-                    height: 75,
-                    enabled: true,
-                    boostThreshold: 1,
-                    series: {
-                        dataGrouping: {
-                            enabled: false
-                        }
-                    }        
-                },
-                rangeSelector: {
-                    enabled: false
-                },
-                scrollbar: {
-                    enabled: false
-                },
-                plotOptions: {
-                    series: {
-                        lineWidth: 1,
-                        boostThreshold: 1, 
-                        marker: {
-                            radius: 1
-                        },       
-                        states: {
-                            hover: {
-                                enabled: false,
-                                halo: {
-                                    size: 0
-                                }
-                            },
-                            inactive: {
-                                opacity: 1
-                            }
-                        },
-                        dataGrouping: {
-                            enabled: false,
-                            units: [[
-                                'millisecond', 
-                                [1] 
-                            ]]
-                        },
-                        events: {
-                            legendItemClick: this.toggleSeriesVisibility.bind(this)
-                        }
-                    },
-                },
-            },
-            loading: true,
-            id: null,
-            data: [],
-            workloads: [],
-            shownRuns: [],
-            hiddenSeries: [],
-            smoothing: 0,
-            range: {min: 0, max: 0},
-            showDetailedTooltip: false, 
-            monochromeMode: false,
-            boostMode: true,
-            chartLineWidth: 1.0
+			options: {
+				title: { text: '', left: 'center', textStyle: { fontWeight: 'bold' } },
+				tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+				// place legend at bottom (px) so it anchors consistently across resolutions
+				legend: { data: [], bottom: 48 },
+				xAxis: { type: 'time', name: 'Time Elapsed', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+				yAxis: [{ type: 'value', name: 'Value', nameLocation: 'middle', nameGap: 50 }],
+				series: [],
+				// reserve bottom space for legend + slider and keep slider below legend
+				grid: { left: 60, right: 60, top: 60, bottom: 96 },
+				// slider bottom should be less than legend.bottom so it sits below it
+				dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+				toolbox: COMMON_TOOLBOX // unified toolbox
+			},
+             loading: true,
+             id: null,
+             data: [],
+             workloads: [],
+             shownRuns: [],
+             hiddenSeries: [],
+             smoothing: 0,
+             range: {min: 0, max: 0},
+             monochromeMode: false,
+             // NEW: SVG renderer toggle (off by default) and version to force remount
+             svgRendererEnabled: false,
+             rendererVersion: 0,
+             boostMode: true,
+             chartLineWidth: 3.0,
+             wrapperReady: false, // wait until wrapper has layout before rendering chart
 		}; 
 
         this.chartRef = React.createRef();
+        this.wrapperRef = React.createRef();
         this.handleShowRunsSwitch = (workloadId) => (event) => this.toggleShownRuns(workloadId, event);
+        this._resizeObserver = null;
+		// NEW: flag to suppress parent-sync calls while reacting to incoming props
+		this._skipPullAfterPropChange = false;
+
+        // reference to echarts instance (set in afterChartCreated)
+        this.ecInstance = null;
 	}
 
-    componentDidMount() {
+    // called when echarts instance is ready
+    afterChartCreated = (ec) => {
+        this.ecInstance = ec;
+        // If we already have options in state (initial mount), apply them directly to the instance
+        try {
+            if (this.state && this.state.options) {
+                ec.setOption(this.state.options, true);
+            }
+            // force a resize on next tick so echarts calculates correct size
+            setTimeout(() => { try { ec.resize(); } catch (e) {} }, 0);
+        } catch (e) {}
+    }
 
+    componentDidMount() {
         // only show workload ID's which contain more than 1 run in Toggle Run section
         const workloads = this.props.chartData.data.map(run => run.workload);
         const nonUnique = [...new Set(workloads.filter((item,i) => workloads.includes(item, i+1)))];
@@ -192,13 +133,85 @@ class Chart extends React.Component {
             // with default settings (e.g. no smoothing and combined as workloads)
             this.generateSeries(this.props.chartData, 0, [], [], {min: 0, max: 0}, false); 
         }
-    }
 
-    componentDidUpdate(prevProps, prevState) {
-        if (prevState.smoothing !== this.state.smoothing || prevState.shownRuns.length !== this.state.shownRuns.length || prevState.hiddenSeries.length !== this.state.hiddenSeries.length || prevState.range.min !== this.state.range.min || prevState.range.max !== this.state.range.max) {     
-            this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
+        // Defer mounting the chart until the wrapper is laid out to avoid wrong initial render.
+        const el = this.wrapperRef.current;
+        if (el) {
+            if (typeof ResizeObserver !== 'undefined') {
+                this._resizeObserver = new ResizeObserver(entries => {
+                    for (const entry of entries) {
+                        const { width, height } = entry.contentRect || {};
+                        if (width > 0 && height > 0) {
+                            this.setState({ wrapperReady: true }, () => {
+                                if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+                            });
+                            return;
+                        }
+                    }
+                });
+                this._resizeObserver.observe(el);
+            } else {
+                // fallback: poll until sized
+                const checkSize = () => {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                        this.setState({ wrapperReady: true });
+                    } else {
+                        requestAnimationFrame(checkSize);
+                    }
+                };
+                requestAnimationFrame(checkSize);
+            }
+        } else {
+            // if no ref (unlikely), allow chart to render
+            this.setState({ wrapperReady: true });
         }
     }
+
+    componentWillUnmount() {
+        if (this._resizeObserver) {
+            try { this._resizeObserver.disconnect(); } catch (e) {}
+            this._resizeObserver = null;
+        }
+    }
+ 
+    componentDidUpdate(prevProps, prevState) {
+		// If chartData prop changed (new combined chart or a different single chart), regenerate series
+		if (prevProps.chartData !== this.props.chartData) {
+			// recompute workloads (keep same logic as componentDidMount)
+			const workloads = (this.props.chartData && this.props.chartData.data) ? this.props.chartData.data.map(run => run.workload) : [];
+			const nonUnique = [...new Set(workloads.filter((item,i) => workloads.includes(item, i+1)))];
+
+			// Determine context values from incoming chartData (fallback to defaults)
+			const ctx = this.props.chartData && this.props.chartData.context ? this.props.chartData.context : null;
+			const smoothing = ctx ? ctx.smoothing : 0;
+			const shownRuns = ctx ? ctx.shownRuns : [];
+			const hiddenSeries = ctx ? ctx.hiddenSeries : [];
+			const range = ctx ? ctx.range : { min: 0, max: 0 };
+
+			// Set flag to avoid pushing the (just-applied) state back to parent
+			this._skipPullAfterPropChange = true;
+
+			// Update workloads then regenerate series with preserved monochromeMode
+			this.setState({ workloads: nonUnique }, () => {
+				this.generateSeries(this.props.chartData, smoothing, shownRuns, hiddenSeries, range, this.state.monochromeMode);
+				// Clear the skip flag on the next tick so subsequent user interactions still call pullChartExtras
+				setTimeout(() => { this._skipPullAfterPropChange = false; }, 0);
+			});
+		}
+
+		// Existing behavior: notify parent when chart-level state changes, but only if not suppressing due to prop-driven update
+		if (
+			(prevState.smoothing !== this.state.smoothing ||
+			prevState.shownRuns.length !== this.state.shownRuns.length ||
+			prevState.hiddenSeries.length !== this.state.hiddenSeries.length ||
+			prevState.range.min !== this.state.range.min ||
+			prevState.range.max !== this.state.range.max)
+			&& !this._skipPullAfterPropChange
+		) {
+			this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
+		}
+	}
 
     // format detailed tooltip if it is enabled
     static formatTooltip(tooltip, toShow) {
@@ -234,184 +247,473 @@ class Chart extends React.Component {
         
         return tooltipData;
     }
+    
 
     // takes the run data, parses it to an object Highcharts can render, and applies it to state (which will auto-update the chart)
     generateSeries(newChartData, newSmoothing, newShownRuns, newHiddenSeries, newRange, monoMode) {
+        // prepare a toolbox for this chart instance that wires the remove action to the parent callback
+        const toolboxWithRemove = {
+            ...COMMON_TOOLBOX,
+            feature: {
+                ...COMMON_TOOLBOX.feature,
+                // keep default noop here; we'll replace per-branch after series are built
+                myDataDownload: {
+                    ...COMMON_TOOLBOX.feature.myDataDownload,
+                    onclick: () => { try { this.downloadVisibleCsv(); } catch (e) {} }
+                },
+                myRemove: {
+                    ...COMMON_TOOLBOX.feature.myRemove,
+                    onclick: () => {
+                        try {
+                            if (this.props && typeof this.props.removeChart === 'function') {
+                                this.props.removeChart(newChartData && newChartData.id);
+                            }
+                        } catch (e) { /* swallow */ }
+                    }
+                }
+            }
+        };
 
-        //console.log("Generating..."); // debugging
-        const data = newChartData.data;
+        if (!newChartData || !newChartData.data) {
+            const newOpts = { ...this.state.options, series: [] };
+            if (this.ecInstance) {
+                try { this.ecInstance.setOption(newOpts, true); } catch (e) {}
+                setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+                // update non-options state only
+                this.setState({ loading: false });
+            } else {
+                // echarts instance not ready -> set options in state so ReactECharts mounts with them
+                this.setState({ loading: false, options: newOpts });
+            }
+             return;
+        }
 
-        // format data into series for highcharts
+        // palettes and helpers
+        const monoDashStyles = ['solid', 'dashed', 'dotted', 'dashed'];
+        const monoColors = ['#000000', '#cccccc', '#7f7f7f', '#999999', '#666666'];
+        const plotColors = ['#0070DE', '#ABD473', '#9482C9', '#C41F3B', '#00FF96', '#A330C9', '#F58CBA', '#FF7D0A', '#C79C6E', '#FF4D6B', '#69CCF0', '#FFD100'];
+        // dash styles used to indicate different metrics (dash chosen by metricIndex)
+        const dashTypes = ['solid', 'dashed', 'dotted'];
+
+        // multi-axis mode detection
+        if (newChartData.metric === 'multi-axis') {
+            // newChartData.data is array of run-level objects with .metric
+            const metricsMap = new Map(); // metric -> Map(groupId -> seriesObj)
+            newChartData.data.forEach(run => {
+                if (!run.data || run.data.length === 0) return;
+                const metric = run.metric || 'unknown';
+                if (!metricsMap.has(metric)) metricsMap.set(metric, new Map());
+                const workloadMap = metricsMap.get(metric);
+
+                // Treat `run.workload` as canonical group id (parentGroup) injected by ChartPicker
+                const rawGroup = run.workload || '';
+                let workloadId = rawGroup;
+                const letter = (typeof run.letter === 'string' && run.letter.length > 0) ? run.letter : null;
+                const runIdForLabel = run.runName || run.name || '';
+
+                if (!workloadMap.has(workloadId)) {
+                    // keep runs metadata on the "custom" holder (used to populate point-level runs below)
+                    workloadMap.set(workloadId, { id: workloadId, data: [], custom: { runs: [] }, metric, rawWorkload: rawGroup });
+                }
+                const sObj = workloadMap.get(workloadId);
+                const perRunData = (run.data || []).map(pt => [pt.timestamp, pt.value]);
+                // include metric on run metadata as well so it is available when attached to points
+                const metadata = {
+                    name: run.runName || run.name,
+                    id: run.name,
+                    experimentName: run.experimentName,
+                    workload: rawGroup,
+                    letter: run.letter ?? null,
+                    model: run.model ?? undefined,
+                    source: run.source ?? undefined,
+                    params: run.params ?? undefined,
+                    metric: metric,
+                    data: perRunData
+                };
+                sObj.custom.runs.push(metadata);
+                perRunData.forEach(([t, v]) => sObj.data.push([t, v])); // keep flat numeric storage for now
+            });
+
+            // build echarts yAxis and series
+            const echYAxes = [];
+            const echSeries = [];
+            // lightweight lookup mapping seriesName -> { runs: [...], metric: '...' }
+            const seriesMetaLookup = {};
+            let metricIndex = 0;
+            for (const [metric, workloadMap] of metricsMap.entries()) {
+                echYAxes.push({ type: 'value', name: metric, position: metricIndex % 2 === 1 ? 'right' : 'left', offset: metricIndex * 50, nameLocation: 'middle', nameGap: 50});
+                let seriesIdx = 0;
+                for (const [workloadId, s] of workloadMap.entries()) {
+                    if (!s.data || s.data.length === 0) continue;
+                    // If the group id is present in newShownRuns, show each run individually
+                    const showRunsIndividually = newShownRuns && newShownRuns.indexOf(s.rawWorkload) > -1;
+                    if (showRunsIndividually) {
+                        s.custom.runs.forEach((runMeta) => {
+                            if (!runMeta.data || runMeta.data.length === 0) return;
+                            runMeta.data.sort((a, b) => a[0] - b[0]);
+                            const earliest = runMeta.data[0][0];
+                            // keep points compact: simple [time-offset, value] arrays
+                            const points = runMeta.data.map(pt => [pt[0] - earliest, pt[1]]);
+                            const seriesName = runMeta.name || runMeta.id;
+                            // populate lookup once per series and record workload on meta
+                            seriesMetaLookup[seriesName] = seriesMetaLookup[seriesName] || { runs: [], metric, workload: runMeta.workload || s.rawWorkload };
+                            seriesMetaLookup[seriesName].runs.push(runMeta);
+                            seriesMetaLookup[seriesName].metric = metric;
+                            seriesMetaLookup[seriesName].workload = runMeta.workload || s.rawWorkload;
+                            const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % plotColors.length];
+                            // colour is based on the run/series index; dash is based on the metric index
+                            const lineType = dashTypes[metricIndex % dashTypes.length];
+                            if (!(newHiddenSeries && newHiddenSeries.indexOf(runMeta.name || runMeta.id) > -1)) {
+                                // include metric/name metadata on the series option (preferred lookup in formatter)
+                                echSeries.push({
+                                    name: seriesName,
+                                     type: 'line',
+                                     yAxisIndex: metricIndex,
+                                     data: points,
+                                     showSymbol: false,
+                                     lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                                     itemStyle: { color },
+                                     sampling: 'lttb',
+                                     meta: { runs: [runMeta], metric, workload: runMeta.workload || s.rawWorkload }
+                                     // metadata is attached to each point in "data"; no series-level custom relied upon
+                                 });
+                             }
+                             seriesIdx++;
+                         });
+                     } else {
+                         s.data.sort((a, b) => a[0] - b[0]);
+                         const earliest = s.data[0][0];
+                         // keep points compact and store runs/metric in lookup
+                         const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+                         const seriesName = s.id;
+                        // accumulate runs per series id (store runs, metric and workload)
+                        if (!seriesMetaLookup[seriesName]) seriesMetaLookup[seriesName] = { runs: [], metric, workload: s.rawWorkload };
+                        seriesMetaLookup[seriesName].runs.push(...(s.custom.runs || []));
+                        seriesMetaLookup[seriesName].metric = metric;
+                        seriesMetaLookup[seriesName].workload = s.rawWorkload;
+                         const color = monoMode ? monoColors[seriesIdx % monoColors.length] : plotColors[seriesIdx % monoColors.length];
+                         const lineType = dashTypes[metricIndex % dashTypes.length];
+                         if (!(newHiddenSeries && newHiddenSeries.indexOf(s.id) > -1)) {
+                             // attach metric into custom payload for aggregated series too
+                             echSeries.push({
+                                name: seriesName,
+                                 type: 'line',
+                                 yAxisIndex: metricIndex,
+                                 data: points,
+                                 showSymbol: false,
+                                 lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                                 itemStyle: { color },
+                                 sampling: 'lttb',
+                                 meta: { runs: s.custom.runs, metric, workload: s.rawWorkload }
+                             });
+                         }
+                         seriesIdx++;
+                     }
+                 }
+                 metricIndex++;
+             }
+
+             // smoothing
+             if (newSmoothing > 0) {
+                 echSeries.forEach(series => {
+                     if (series.data && series.data.length > 0) {
+                         series.data = calcEMA(series.data, newSmoothing);
+                     }
+                 });
+             }
+
+             // build legendSelected map to hide hiddenSeries if present
+             const legendSelected = {};
+             echSeries.forEach(s => {
+                 legendSelected[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1);
+             });
+
+             const chartTitle = (() => {
+                 const experimentCount = new Set((newChartData.data || []).map(s => s.experimentName)).size;
+                 return experimentCount === 1 ? (newChartData.data[0] && newChartData.data[0].experimentName) : `Multiple Experiments (${experimentCount})`;
+             })();
+
+             // Prefer explicit title from chartData (set by ChartPicker) when available
+             const finalTitle = (newChartData && newChartData.title) ? newChartData.title : chartTitle;
+ 
+             // Adjust grid left/right to account for any yAxis offsets so the plot fills the wrapper
+             const baseGrid = { left: 60, right: 60, top: 60, bottom: 96 };
+             const leftOffsets = echYAxes.filter(a => (a.position || 'left') === 'left').map(a => a.offset || 0);
+             const rightOffsets = echYAxes.filter(a => (a.position || 'left') === 'right').map(a => a.offset || 0);
+             const extraLeft = leftOffsets.length ? Math.max(...leftOffsets) : 0;
+             const extraRight = rightOffsets.length ? Math.max(...rightOffsets) : 0;
+             const adjustedGrid = { ...baseGrid, left: baseGrid.left + extraLeft, right: baseGrid.right + extraRight };
+ 
+             const echOptions = {
+                 title: {
+                     text: finalTitle,
+                     left: 'center',
+                     top: 12,
+                     textStyle: { fontSize: 16, fontWeight: '600' }
+                 },
+                 // use per-chart toolbox that includes the remove button wired to this chart
+                 toolbox: toolboxWithRemove,
+                 // detailed tooltip formatter (always on) - show metric name above value when present
+                 tooltip: {
+                     trigger: 'axis',
+                     axisPointer: { type: 'cross' },
+                     // formatter closes over seriesMetaLookup to avoid per-point metadata
+                     formatter: function(params) {
+                        const ps = Array.isArray(params) ? params : [params];
+                        // group series entries by workload
+                        const grouped = {};
+                        ps.forEach(p => {
+                            const seriesName = p.seriesName || '';
+                            const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
+                            // prefer the exact series option by index (avoids name collisions), then series.userOptions.meta, then lookup
+                            const seriesOption = (typeof p.seriesIndex === 'number' && echSeries[p.seriesIndex]) ? echSeries[p.seriesIndex] : null;
+                            const meta = (seriesOption && seriesOption.meta) ? seriesOption.meta
+                                        : (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta
+                                        : (seriesMetaLookup[seriesName] || { runs: [], metric: '', workload: seriesName });
+                            const workload = meta.workload || seriesName;
+                            const entry = {
+                                seriesName,
+                                metric: meta.metric || '',
+                                value: p.value ? p.value[1] : '',
+                                dt: p.value ? p.value[0] : '',
+                                color: p.color,
+                                runs: meta.runs || []
+                            };
+                            if (!grouped[workload]) grouped[workload] = [];
+                            grouped[workload].push(entry);
+                        });
+
+                        // render HTML grouped by workload, showing metric before value for each series
+                        let html = '';
+                        Object.keys(grouped).forEach(workload => {
+                            html += `<div style="font-weight:bold; margin-bottom:6px;">${workload}</div>`;
+                            grouped[workload].forEach(e => {
+                                html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
+                                html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
+                                if (e.runs && e.runs.length) {
+                                    const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
+                                    const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
+                                    const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
+                                    const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
+                                    if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
+                                    if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
+                                    if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
+                                    if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
+                                }
+                                html += '<hr/>';
+                            });
+                        });
+                        return html;
+                     }
+                 },
+                  // keep legend at bottom and leave room in grid.bottom
+                  legend: { data: echSeries.map(s => s.name), selected: legendSelected, bottom: 48 },
+                  xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+                  yAxis: echYAxes,
+                  series: echSeries,
+                  // ensure slider sits below the legend
+                  dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+                  grid: adjustedGrid
+              };
+             // ensure echOptions uses the prepared toolbox (avoid accidental overwrite below)
+             echOptions.toolbox = toolboxWithRemove;
+
+            if (this.ecInstance) {
+                try { this.ecInstance.setOption(echOptions, true); } catch (e) {}
+                setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+                // update state fields except options to avoid triggering ReactECharts full update
+                this.setState({
+                    id: newChartData.id,
+                    data: newChartData.data,
+                    shownRuns: newShownRuns,
+                    hiddenSeries: newHiddenSeries,
+                    smoothing: newSmoothing,
+                    monochromeMode: monoMode,
+                    loading: false
+                });
+            } else {
+                // echarts not ready yet — set options in state so ReactECharts mounts with them
+                this.setState({
+                    id: newChartData.id,
+                    data: newChartData.data,
+                    options: echOptions,
+                    shownRuns: newShownRuns,
+                    hiddenSeries: newHiddenSeries,
+                    smoothing: newSmoothing,
+                    monochromeMode: monoMode,
+                    loading: false
+                });
+            }
+            return;
+        }
+ 
+        // SINGLE-AXIS mode
+        const data = newChartData.data || [];
         const experimentList = new Set();
-        const allSeries = [];
+        const seriesMap = new Map(); // groupKey -> { data: [], custom: { runs: [] } }
+
         data.forEach(run => {
-            if (run.data !== undefined) {      
+            if (!run.data) return;
+            experimentList.add(run.experimentName);
 
-                // prepare for chart title    
-                experimentList.add(run.experimentName);
+            // Treat run.workload as canonical group id (parent-group)
+            const groupId = run.workload || '';
+            const showIndividually = newShownRuns && newShownRuns.indexOf(groupId) > -1;
 
-                // check for ungrouped workloads or unsorted workloads
-                let workloadId = run.workload;
-                if (workloadId.substring(workloadId.indexOf("-") + 1) === "null" || newShownRuns.indexOf(workloadId) > -1) {
-                    if (run.letter === null) {
-                        const removeNull = workloadId.substring(0, workloadId.indexOf("-"));
-                        workloadId = removeNull + " (" + run.name.substring(0, 5) + ")";
-                    }
-                    else {
-                        if (run.letter.length > 1) {
-                            workloadId = workloadId + " " + run.letter;
-                        }
-                        else {
-                            workloadId = workloadId + " " + run.letter + " (" + run.name.substring(0, 5) + ")";
-                        }             
-                    }   
-                }
+            // when showing individual runs for the group, use run-specific label/key; otherwise aggregate into groupId
+            const seriesKey = showIndividually ? (run.run_name || run.runName || (run.name ? run.name.substring(0,5) : groupId)) : groupId;
 
-                // add all runs to one series per workload, unless they are unsorted runs
-                const seriesIndex = allSeries.findIndex(series => series.id === workloadId);
-                if (seriesIndex === -1) {      
-
-                    let newSeries = {
-                        id: workloadId,
-                        data: [],
-                        custom: {
-                            runs: []
-                        }
-                    };
-                    
-                    // add series (runs) metadata to HC api for tooltip
-                    const metadata = {...run};
-                    delete metadata.data;
-                    newSeries.custom.runs.push(metadata);
-
-                    run.data.forEach(data => {
-                        newSeries.data.push([data.timestamp, data.value]);
-                    })
-                    allSeries.push(newSeries);
-                }
-                else {
-                    run.data.forEach(data => {
-                        allSeries[seriesIndex].data.push([data.timestamp, data.value]);
-                    })
-
-                    // add series (runs) metadata to HC api for tooltip
-                    const metadata = {...run};
-                    delete metadata.data;
-                    allSeries[seriesIndex].custom.runs.push(metadata);
-                }
+            if (!seriesMap.has(seriesKey)) {
+                seriesMap.set(seriesKey, { id: seriesKey, data: [], custom: { runs: [] } });
             }
-        });
-
-        // sort all series by unix timestamp
-        allSeries.forEach(series => {
-            series.data.sort((a, b) => a[0] - b[0]);
-        });
-
-        // styling for monochrome mode
-        let monoSeriesCounter = 0;
-        const dashStyles = ["Solid", "Solid", "Solid ", "Dot", "LongDash"];
-        const monoColors = ["#000000", "#cccccc", "#7f7f7f ", "#999999", "#666666"];
-
-        allSeries.forEach(series => {
-            // subtract earliest time from all timestamps to get ms passed
-            const earliestTime = series.data[0][0];
-            series.data.forEach(timeAndValue => {
-                timeAndValue[0] = timeAndValue[0] - earliestTime;
+            const s = seriesMap.get(seriesKey);
+            const metadata = { ...run };
+            delete metadata.data;
+            s.custom.runs.push(metadata);
+            (run.data || []).forEach(d => {
+                s.data.push([d.timestamp, d.value]);
             });
-
-            // add name
-            series.name = series.id;
-
-            // prevent duplicate ids in highcharts api
-            delete series.id;
-
-            // hide any series which are supposed to be invisible
-            series.visible = true;
-
-            newHiddenSeries.forEach(seriesToHide => {
-                if (series.name === seriesToHide) {
-                    series.visible = false;
-                }
-            })
-
-            // update series styles/colors for for monochrome mode
-            if (monoMode) {
-                series.dashStyle = dashStyles[monoSeriesCounter];
-                series.color = monoColors[monoSeriesCounter];
-            }
-            else {
-                series.dashStyle = "solid";
-                series.color = null;
-                series.colorIndex = monoSeriesCounter;
-            }
-            monoSeriesCounter++;
-
         });
 
-        // apply smoothing to each series if over zero
+        // Build echarts series array
+        const echSeriesSingle = [];
+        const seriesMetaLookupSingle = {};
+        let monoCounter = 0;
+        for (const [id, s] of seriesMap.entries()) {
+             if (!s.data || s.data.length === 0) continue;
+             s.data.sort((a, b) => a[0] - b[0]);
+             const earliest = s.data[0][0];
+             const points = s.data.map(pt => [pt[0] - earliest, pt[1]]);
+            // accumulate runs per series id (store runs, metric, workload)
+            if (!seriesMetaLookupSingle[s.id]) seriesMetaLookupSingle[s.id] = { runs: [], metric: newChartData.metric || '', workload: (s.custom.runs && s.custom.runs[0] && s.custom.runs[0].workload) || s.id };
+            seriesMetaLookupSingle[s.id].runs.push(...(s.custom.runs || []));
+             const name = s.id;
+             if (newHiddenSeries && newHiddenSeries.indexOf(name) > -1) continue; // skip hidden
+             // use seriesIdx for color (per-run/workload), and metricIndex to select dash style
+             const color = monoMode ? monoColors[monoCounter % monoColors.length] : plotColors[monoCounter % monoColors.length];
+             const lineType = dashTypes[0]; // single-axis always uses solid lines
+             echSeriesSingle.push({
+                 name,
+                 type: 'line',
+                 showSymbol: false,
+                 data: points,
+                 lineStyle: { width: this.state.chartLineWidth, type: lineType },
+                 itemStyle: { color },
+                 sampling: 'lttb',
+                 // metadata attached to each point; no reliance on series.custom
+             });
+             monoCounter++;
+         }
+ 
+        // apply smoothing
         if (newSmoothing > 0) {
-            allSeries.forEach(series => {
-                series.data = calcEMA(series.data, newSmoothing);
+            echSeriesSingle.forEach(series => {
+                if (series.data && series.data.length > 0) {
+                    series.data = calcEMA(series.data, newSmoothing);
+                }
             });
         }
 
-        // get chart title based on number of experiments
-        let chartTitle = "Loading..."
-        if (experimentList.size === 1) {
-            [chartTitle] = experimentList;
-        }
-        else {
-            chartTitle = "Multiple Experiments (" + experimentList.size + ")";
-        }
+        const chartTitle = (experimentList.size === 1) ? [...experimentList][0] : `Multiple Experiments (${experimentList.size})`;
+        const finalSingleTitle = (newChartData && newChartData.title) ? newChartData.title : chartTitle;
+ 
+         // legend selected map
+         const legendSelectedSingle = {};
+         echSeriesSingle.forEach(s => { legendSelectedSingle[s.name] = !(newHiddenSeries && newHiddenSeries.indexOf(s.name) > -1); });
 
-        // check if should be detailed tooltip
-        const showDetailedTooltip = this.state.showDetailedTooltip;
+         const echOptionsSingle = {
+             title: {
+                 text: finalSingleTitle,
+                 left: 'center',
+                 top: 12,
+                 textStyle: { fontSize: 16, fontWeight: '600' }
+             },
+            // use per-chart toolbox that includes the remove button wired to this chart
+            toolbox: toolboxWithRemove,
+              // detailed tooltip formatter (always on)
+              tooltip: {
+                  trigger: 'axis',
+                  // use the per-render lookup for single-axis series
+                  formatter: function(params) {
+                     const ps = Array.isArray(params) ? params : [params];
+                     // group entries by workload similar to multi-axis
+                     const grouped = {};
+                     ps.forEach(p => {
+                         const seriesName = p.seriesName || '';
+                         const seriesUserOpt = p.series && p.series.userOptions ? p.series.userOptions : null;
+                         // prefer the exact series option by index (echSeriesSingle is out of scope here),
+                         // so check p.series.userOptions.meta first then fall back to lookup
+                         const meta = (seriesUserOpt && seriesUserOpt.meta) ? seriesUserOpt.meta : (seriesMetaLookupSingle[seriesName] || { runs: [], metric: '', workload: seriesName });
+                         const workload = meta.workload || seriesName;
+                         const entry = {
+                             seriesName,
+                             metric: meta.metric || '',
+                             value: p.value ? p.value[1] : '',
+                             dt: p.value ? p.value[0] : '',
+                             color: p.color,
+                             runs: meta.runs || []
+                         };
+                         if (!grouped[workload]) grouped[workload] = [];
+                         grouped[workload].push(entry);
+                     });
+                     let html = '';
+                     Object.keys(grouped).forEach(w => {
+                         html += `<div style="font-weight:bold; margin-bottom:6px;">${w}</div>`;
+                         grouped[w].forEach(e => {
+                             html += `<div style="color:${e.color}"><b>${e.metric}</b> — <b>${e.seriesName}</b>: ${e.value}</div>`;
+                             html += `<div style="font-size:smaller">Time: ${milliToMinsSecs(e.dt)}</div>`;
+                             if (e.runs && e.runs.length) {
+                                 const models = [...new Set(e.runs.map(r=>r.model).filter(Boolean))];
+                                 const sources = [...new Set(e.runs.map(r=>r.source).filter(Boolean))];
+                                 const paramsSet = [...new Set(e.runs.map(r=>r.params).filter(Boolean))];
+                                 const letters = [...new Set(e.runs.map(r=>r.letter).filter(Boolean))];
+                                 if (models.length) html += `<div style="font-size:smaller"><b>Model(s):</b> ${models.join(', ')}</div>`;
+                                 if (sources.length) html += `<div style="font-size:smaller"><b>Source(s):</b> ${sources.join(', ')}</div>`;
+                                 if (paramsSet.length) html += `<div style="font-size:smaller"><b>Param(s):</b> ${paramsSet.join(', ')}</div>`;
+                                 if (letters.length) html += `<div style="font-size:smaller"><b>Run(s):</b> ${letters.join(', ')}</div>`;
+                             }
+                             html += '<hr/>';
+                         });
+                     });
+                     return html;
+                 }
+              },
+              // single-axis legend also at bottom
+              legend: { data: echSeriesSingle.map(s => s.name), selected: legendSelectedSingle, bottom: 48 },
+              xAxis: { type: 'time', axisLabel: { formatter: (val) => milliToMinsSecs(val) } },
+              yAxis: [{ type: 'value', name: newChartData.metric || 'Value', nameLocation: 'middle', nameGap: 50}],
+              series: echSeriesSingle,
+              // ensure slider sits below the legend and reserve bottom space
+              dataZoom: [{ type: 'inside', xAxisIndex: [0] }, { type: 'slider', xAxisIndex: [0], bottom: 12 }],
+              grid: { left: 60, right: 60, top: 60, bottom: 96 }
+         };
+        // ensure echOptionsSingle has the toolbox set (myDataDownload already calls downloadVisibleCsv)
+        echOptionsSingle.toolbox = toolboxWithRemove;
 
-        // if range is the deault range, don't specify it for Highcharts API
-        let minRange = newRange.min;
-        let maxRange = newRange.max;
-        if (minRange < 1) {
-            minRange = null;
+        if (this.ecInstance) {
+            try { this.ecInstance.setOption(echOptionsSingle, true); } catch (e) {}
+            setTimeout(() => { try { this.ecInstance.resize(); } catch (e) {} }, 0);
+            this.setState({
+                id: newChartData.id,
+                data: newChartData.data,
+                shownRuns: newShownRuns,
+                hiddenSeries: newHiddenSeries,
+                smoothing: newSmoothing,
+                monochromeMode: monoMode,
+                loading: false
+            });
+        } else {
+            this.setState({
+                id: newChartData.id,
+                data: newChartData.data,
+                options: echOptionsSingle,
+                shownRuns: newShownRuns,
+                hiddenSeries: newHiddenSeries,
+                smoothing: newSmoothing,
+                monochromeMode: monoMode,
+                loading: false
+            });
         }
-        if (maxRange < 1) {
-            maxRange = null;
-        }
-        
-        // update state which will update render of chart
-        this.setState({
-            id: newChartData.id,
-            data: newChartData.data,
-            options: { 
-                title: {
-                    text: chartTitle
-                },
-                xAxis: {
-                    min: minRange,
-                    max: maxRange
-                },
-                yAxis: {
-                    title: {
-                        text: newChartData.metric,
-                    },
-                },
-                series: allSeries,
-                navigator: {
-                    series: allSeries,
-                    //enabled: !monoMode,
-                },
-                tooltip: {
-                    formatter() {
-                        return Chart.formatTooltip(this, showDetailedTooltip);
-                    }
-                }
-            },   
-            shownRuns: newShownRuns,
-            hiddenSeries: newHiddenSeries,
-            smoothing: newSmoothing,
-            monochromeMode: monoMode,
-            loading: false
-        });
-              
     }
 
     // updates smoothness state 
@@ -423,21 +725,25 @@ class Chart extends React.Component {
 
     // controls which workloads show their runs
     toggleShownRuns(workloadId, event) {
-        const toAdd = event.target.checked;
-        const shownRuns = [...this.state.shownRuns];
-        const workloadIdIndex = shownRuns.indexOf(workloadId);
-        if (toAdd) {
-            if (workloadIdIndex === -1) {
-                shownRuns.push(workloadId);
-            }        
-        }
-        else{
-            if (workloadIdIndex > -1) {
-                shownRuns.splice(workloadIdIndex, 1);
-            }
-        }
-        this.generateSeries(this.props.chartData, this.state.smoothing, shownRuns, this.state.hiddenSeries, this.state.range, false);
-    }
+		const toAdd = event.target.checked;
+		this.setState(prev => {
+			const shownRuns = [...prev.shownRuns];
+			const idx = shownRuns.indexOf(workloadId);
+			if (toAdd) {
+				if (idx === -1) shownRuns.push(workloadId);
+			} else {
+				if (idx > -1) shownRuns.splice(idx, 1);
+			}
+			return { shownRuns };
+		}, () => {
+			// regenerate series using the UPDATED state (ensures multi-axis branch sees it)
+			this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, this.state.monochromeMode);
+			// notify parent about the updated chart extras (so ChartPicker can persist if needed)
+			if (this.props.pullChartExtras) {
+				this.props.pullChartExtras(this.state.id, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range);
+			}
+		});
+	}
 
     // controls the series visibility after the legend item is clicked
     toggleSeriesVisibility(event) {
@@ -468,73 +774,41 @@ class Chart extends React.Component {
 
     // controls the boost setting
     handleBoostSwitch(event) {
-        let forceBoost;
-        let menuItems;
-        if (event.currentTarget.checked) {
-            forceBoost = 1;
-            menuItems = ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "separator", "downloadCSV", "downloadXLS"]
-        }
-        else {
-            forceBoost = 0;
-            menuItems = ["viewFullscreen", "printChart", "separator", "downloadPNG", "downloadJPEG", "downloadPDF", "downloadSVG", "separator", "downloadCSV", "downloadXLS"]
-        }
-
+        // ECharts does not have the same boost mode; keep a local toggle only
         this.setState({
-            boostMode: event.currentTarget.checked,
-            options: {
-                navigator: {
-                    boostThreshold: forceBoost,     
-                },
-                plotOptions: {
-                    series: {
-                        boostThreshold: forceBoost,
-                    },
-                },
-                exporting: {
-                    buttons: {
-                        contextButton: {
-                            menuItems: menuItems
-                        }
-                    },
-                },
-            }
-        });
-    }
-
-    // controls the detailed tooltip setting
-    handleDetailedTooltipSwitch(event) {
-        const setDetailedTooltip = event.currentTarget.checked;
-        this.setState({
-            showDetailedTooltip: setDetailedTooltip,
-            options: {
-                tooltip: {
-                    formatter() {
-                        return Chart.formatTooltip(this, setDetailedTooltip);
-                    }
-                }
-            },
+            boostMode: event.currentTarget.checked
         });
     }
 
     // controls the monochrome setting
     handleMonochromeModeSwitch(event) {
-        let setMonochromeMode;
-        if (event.currentTarget.checked) {
-            setMonochromeMode = true;
-        }
-        else {
-            setMonochromeMode = false;
-        }
-        const seriesCount = (this.chartRef.current.chart.series.length - 1) / 2;
+        const setMonochromeMode = !!event.currentTarget.checked;
+        const seriesCount = (this.state.options && this.state.options.series) ? this.state.options.series.length : 0;
         if (seriesCount <= 5) {
             this.generateSeries(this.props.chartData, this.state.smoothing, this.state.shownRuns, this.state.hiddenSeries, this.state.range, setMonochromeMode);
+        } else {
+            this.setState({ monochromeMode: false });
+            alert("Monochrome mode incompatible with more than 5 series.");
         }
-        else {
-            this.setState({
-                monochromeMode: false
-            })  
-            alert("Monochrome mode incompatible with more than 5 series.")
-        }  
+    }
+
+    // controls the line width setting (updates series lineStyle.width)
+    handleSetLineWidth(newLineWidth) { 
+        newLineWidth = parseFloat(newLineWidth);
+        // update current options.series lineStyle width
+        const opts = { ...this.state.options };
+        if (opts.series && Array.isArray(opts.series)) {
+            opts.series = opts.series.map(s => {
+                return {
+                    ...s,
+                    lineStyle: { ...(s.lineStyle || {}), width: newLineWidth }
+                };
+            });
+        }
+        this.setState({
+            chartLineWidth: newLineWidth,
+            options: opts
+        });
     }
 
     // records the range (zoom) setting so it is saved when you download/upload charts
@@ -543,39 +817,110 @@ class Chart extends React.Component {
         this.setState({range: newRange});
     }
 
-    // controls the line width setting
-    handleSetLineWidth(newLineWidth) { 
-        newLineWidth = parseFloat(newLineWidth);
-        this.setState({
-            lineWidth: newLineWidth,
-            options: {
-                plotOptions: {
-                    series: {
-                        lineWidth: newLineWidth
-                    },
-                },
-            },
-        });
+    // NEW: toggle SVG renderer and bump rendererVersion to force ReactECharts remount
+	handleSvgRendererSwitch(event) {
+		const enabled = !!event.currentTarget.checked;
+		this.setState(prev => ({
+			svgRendererEnabled: enabled,
+			rendererVersion: (prev.rendererVersion || 0) + 1
+		}));
+	}
+
+    // NEW helper: download currently visible data from the chart (used by toolbox + visible button)
+    downloadVisibleCsv() {
+        try {
+            const ec = this.ecInstance;
+            const opt = (ec && typeof ec.getOption === 'function') ? ec.getOption() : (this.state && this.state.options) ? this.state.options : null;
+            const seriesList = (opt && opt.series) ? opt.series : [];
+            // detect visible x-axis range (dataZoom startValue/endValue preferred)
+            let visibleStart, visibleEnd;
+            try {
+                if (opt && Array.isArray(opt.dataZoom)) {
+                    const dz = opt.dataZoom.find(d => {
+                        if (d == null) return false;
+                        const xi = d.xAxisIndex;
+                        if (Array.isArray(xi)) return xi.includes(0);
+                        return xi === 0 || xi == null;
+                    }) || opt.dataZoom[0];
+                    if (dz && typeof dz.startValue !== 'undefined' && typeof dz.endValue !== 'undefined') {
+                        visibleStart = Number(dz.startValue);
+                        visibleEnd = Number(dz.endValue);
+                    }
+                }
+            } catch (e) { /* ignore */ }
+
+            const headers = ['workload','runId','runName','metric','timestamp','value'];
+            const rows = [];
+
+            (seriesList || []).forEach(s => {
+                const meta = s.meta || (s.userOptions && s.userOptions.meta) || (s.userOption && s.userOption.meta) || {};
+                const workload = meta.workload || '';
+                const metric = meta.metric || '';
+                const runsMeta = meta.runs || [];
+                (s.data || []).forEach(pt => {
+                    let x, y;
+                    if (Array.isArray(pt)) { x = pt[0]; y = pt[1]; }
+                    else if (pt && pt.value) { x = pt.value[0]; y = pt.value[1]; }
+                    else return;
+                    if (typeof visibleStart !== 'undefined' && typeof visibleEnd !== 'undefined') {
+                        if (Number(x) < visibleStart || Number(x) > visibleEnd) return;
+                    }
+                    let runId = '';
+                    let runName = '';
+                    if (runsMeta.length === 1) {
+                        runId = runsMeta[0].id || '';
+                        runName = runsMeta[0].name || runsMeta[0].runName || runId || s.name || '';
+                    } else {
+                        runName = s.name || '';
+                    }
+                    rows.push([workload, runId, runName, metric, x, y]);
+                });
+            });
+
+            // CSV encode (quote every field, escape quotes)
+            const csvLines = [headers.join(',')].concat(rows.map(r =>
+                r.map(cell => {
+                    const s = cell == null ? '' : String(cell);
+                    return `"${s.replace(/"/g, '""')}"`;
+                }).join(',')
+            ));
+            const csvContent = csvLines.join('\n');
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const baseName = (this.props.chartData && (this.props.chartData.title || this.props.chartData.id)) ? (this.props.chartData.title || this.props.chartData.id).toString().replace(/[^\w\-]/g, '_') : 'chart';
+            a.download = `${baseName}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Failed to export CSV', e);
+        }
     }
 
     render() {
-        const { options, id, workloads, smoothing, shownRuns } = this.state;
+        const { options, id, workloads, smoothing, shownRuns, rendererVersion, svgRendererEnabled } = this.state;
+        const fullHeight = !!this.props.fullHeight;
+        // When fullHeight, set wrapper height; do NOT set paddingBottom here (CSS gives 10px)
+        const wrapperStyle = fullHeight
+            ? { height: 'calc(100vh - 40px)', boxSizing: 'border-box' }
+            : { height: 'calc(45vh - 20px)', boxSizing: 'border-box' };
         return (
-            <div className="chartWrapper">
-                <button 
-                    className="removeChartBtn"
-                    onClick={() => this.props.removeChart(id)}
-                >
-                    X
-                </button>
-                <HighchartsReact 
-                    highcharts={Highcharts} 
-                    constructorType="stockChart"
-                    containerProps={{className: "chart"}}
-                    options={options}         
-                    ref={ this.chartRef }
-                    callback={this.afterChartCreated}
-                />          
+            <div ref={this.wrapperRef} className="chartWrapper" style={wrapperStyle}>
+                <div className="chartArea">
+                     {this.state.wrapperReady ? (
+                         <ReactECharts
+                             key={`ech-${rendererVersion}-${id || 'noid'}`}          // force remount when rendererVersion changes
+                             ref={this.chartRef}
+                             option={options}
+                             style={{ height: '100%', width: '100%' }}
+                             opts={{ renderer: svgRendererEnabled ? 'svg' : 'canvas'}} // set renderer
+                             onChartReady={this.afterChartCreated}
+                         />
+                     ) : null}
+                 </div>
                 <div id="workloadGroupingControlsWrapper" className={workloads.length === 0 ? "hide" : null}>
                     Toggle Runs:
                     {workloads.map(workload => (
@@ -592,64 +937,42 @@ class Chart extends React.Component {
                         </div>        
                     ))}
                 </div>
-                <SmoothnessSlider 
-                    onSetSmoothness={this.handleSetSmoothness.bind(this)}
-                    defaultValue={smoothing}
-                />
                 <div id="exportOptionsWrapper">
-                    <div title="Enable to see more metadata when hovering (slower)">
-                        Detailed Tooltip: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleDetailedTooltipSwitch.bind(this)} 
-                                checked={this.state.showDetailedTooltip}
-                            />
-                            <span className="slider round"></span>
-                        </label>
-                    </div>
-                    <div title="Convert chart to black and white (only supports 5 series)">
-                        Monochrome Mode: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleMonochromeModeSwitch.bind(this)} 
-                                checked={this.state.monochromeMode}
-                            />
-                            <span className="slider round"></span>
-                        </label>
-                    </div>   
-                    <div title="Disable boost to adjust Line Width and PDF/SVG export (slower)">
-                        Boost Chart: <label className="switch">
-                            <input 
-                                type="checkbox" 
-                                onChange={this.handleBoostSwitch.bind(this)} 
-                                checked={this.state.boostMode}
-                            />
-                            <span className="slider round"></span>
-                        </label>         
-                    </div> 
-                    <div title="Adjust series line width (only compatible with unboosted charts)" className={this.state.boostMode ? "frozen" : null}>
-                        <LineWidthSlider 
-                            onSetLineWidth={this.handleSetLineWidth.bind(this)}
-                            defaultValue={this.state.chartLineWidth}
-                        />        
-                    </div>
-                </div>           
-                {/* DEBUGGING: }
-                <div id="chartMetadataWrapper">
-                    {data.map(series => (
-                        <div className="seriesMetadata" key={series.name}>
-                            <span className="label" style={{color: "black"}}>Experiment: </span><span className="metadata">{series.experimentName}</span><br />
-                            <span className="label">Workload: </span>{series.workload}<br />
-                            <span className="label">Letter: </span>{series.letter}<br />
-                            <span className="label">ID: </span>{series.name.substring(0, 6)}<br />
-                            <span className="label">Duration: </span>{milliToMinsSecs(series.duration)}<br />
-                            <span className="label">Model: </span>{series.model}<br />
-                            <span className="label">Source: </span>{series.source}<br />
-                            <span className="label">Params: </span>{series.params}<br />
-                        </div>        
-                    ))}
+                    <SmoothnessSlider 
+                        onSetSmoothness={this.handleSetSmoothness.bind(this)}
+                        defaultValue={smoothing}
+                    />
+                 {/* export controls follow */}
+                     <div title="Convert chart to black and white (only supports 5 series)">
+                         Monochrome Mode: <label className="switch">
+                             <input 
+                                 type="checkbox" 
+                                 onChange={this.handleMonochromeModeSwitch.bind(this)} 
+                                 checked={this.state.monochromeMode}
+                             />
+                             <span className="slider round"></span>
+                         </label>
+                     </div>   
+
+                     {/* REPLACED: Boost toggle -> SVG Renderer toggle */}
+                     <div title="Use SVG renderer (may be slower) - requires remount">
+                         SVG Renderer: <label className="switch">
+                             <input 
+                                 type="checkbox" 
+                                 onChange={this.handleSvgRendererSwitch.bind(this)} 
+                                 checked={this.state.svgRendererEnabled}
+                             />
+                             <span className="slider round"></span>
+                         </label>         
+                     </div>
+
+                     <div title="Adjust series line width (also updates ECharts line width)">
+                         <LineWidthSlider 
+                             onSetLineWidth={this.handleSetLineWidth.bind(this)}
+                             defaultValue={this.state.chartLineWidth}
+                         />        
+                     </div>
                 </div>
-                {*/}
             </div>
         );
     }
@@ -666,11 +989,9 @@ function SmoothnessSlider(props) {
     }, [props.defaultValue]);
 
     useEffect(() => {
-        smoothSlider.current.addEventListener('change', e => onSetSmoothness(e.target.value));
+        if (smoothSlider.current) smoothSlider.current.addEventListener('change', e => onSetSmoothness(e.target.value));
     }, [onSetSmoothness]);
-    const handleShowSmoothness = e => {
-        setSmoothness(e.target.value);
-    };
+    const handleShowSmoothness = e => setSmoothness(e.target.value);
     return (
         <div id="smootherWrapper">
             <label htmlFor="smoother">Smoothness: </label>
@@ -684,21 +1005,16 @@ function LineWidthSlider(props) {
     const { onSetLineWidth } = props;
     const [lineWidth, setLineWidth] = useState(0);
 
+    useEffect(() => setLineWidth(props.defaultValue), [props.defaultValue]);
     useEffect(() => {
-        setLineWidth(props.defaultValue);
-    }, [props.defaultValue]);
-
-    useEffect(() => {
-        lineWidthSlider.current.addEventListener('change', e => onSetLineWidth(e.target.value));
+        if (lineWidthSlider.current) lineWidthSlider.current.addEventListener('change', e => onSetLineWidth(e.target.value));
     }, [onSetLineWidth]);
-    const handleShowLineWidth = e => {
-        setLineWidth(e.target.value);
-    };
+    const handleShowLineWidth = e => setLineWidth(e.target.value);
 
     return (
         <div id="lineWidthWrapper">
             <label htmlFor="lineWidthSetter">Line Width: </label>
-            <input ref={lineWidthSlider} onChange={handleShowLineWidth} value={lineWidth} type="range" name="lineWidthSetter" min="0.1" max="5.0" step="0.1" /> 
+            <input ref={lineWidthSlider} onChange={handleShowLineWidth} value={lineWidth} type="range" name="lineWidthSetter" min="0.5" max="8.0" step="0.1" /> 
             <span>{lineWidth.toString().length === 1 ? lineWidth + ".0" : lineWidth}</span>
         </div>
     );
@@ -722,9 +1038,10 @@ function calcEMA(series, smoothingWeight) {
     // calculate smoothness using the smoothingWeight divided by the max smoothness
     const smoothness = smoothingWeight / 100;
 
-    // separate data from timestamps
-    let time = series.map(a => a[0]); 
-    let data = series.map(a => a[1]);  
+    if (!series || series.length === 0) return series;
+    // separate data from timestamps; support series entries that are either arrays [t,v] or objects { value: [t,v], ...meta}
+    let time = series.map(a => Array.isArray(a) ? a[0] : (a && a.value ? a.value[0] : undefined));
+    let data = series.map(a => Array.isArray(a) ? a[1] : (a && a.value ? a.value[1] : undefined));
 
     // first item is just first data item
     let emaData = [data[0]]; 
@@ -737,8 +1054,18 @@ function calcEMA(series, smoothingWeight) {
 
     // recombine the new EMA array with the timestamp array
     let emaSeries = [];
-    for (let i = 0; i < emaData.length; i++) {           
-        emaSeries.push([time[i], emaData[i]]);
+    for (let i = 0; i < emaData.length; i++) {
+        // preserve input shape: if original was array, output array; if object, output object preserving meta fields
+        const original = series[i];
+        if (Array.isArray(original)) {
+            emaSeries.push([time[i], emaData[i]]);
+        } else if (original && original.value) {
+            // copy meta fields except overwrite value
+            const copy = { ...original, value: [time[i], emaData[i]] };
+            emaSeries.push(copy);
+        } else {
+            emaSeries.push([time[i], emaData[i]]);
+        }
     }
 
     // return final series for highcharts API

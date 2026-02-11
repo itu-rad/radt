@@ -6,7 +6,7 @@
 }
 #chartPickerWrapper #pickChartBtn {
     position: relative;
-    display: block;
+    display: none; /* Remove pickChartBtn */
     width: 80%;
     max-width: 1500px;
     height: 60px;
@@ -32,47 +32,214 @@
     left: 50%;
     transform: translate(-50%, -50%);
 }
-#chartPickerWrapper #metricBtnList {
-    display: block;
-    max-height: 500px;
-    width: 80%;
-    max-width: 1500px;
-    margin: auto;
-    text-align: left;;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none;  /* Firefox */
-    border: 1px solid #34495e;
-    box-sizing: border-box;
 
-    background-color: #f2f2f2;
-    padding: 10px;
+/* MLflow-like palette and spacing */
+:root {
+    --ml-primary: #2272b4;
+    --ml-primary-dark: #0e538b;   /* darker companion for hover/active states */
+    --ml-accent: #18a689;
+    --ml-danger: #e74c3c;
+    --ml-muted: #6b7280;
+    --ml-muted-dark: #5f6b73;
+    --ml-border: #e6e8eb;
+    --ml-surface: #fafafb;
+    --ml-surface-2: #ffffff;
+    --ml-shadow: 0 6px 18px rgba(11,98,163,0.06);
+    --sidebar-width: 260px;
+    --gap-sm: 8px;
+    --gap-md: 12px;
+    --font-base: 13px;
+    --top-controls-height: 64px; /* Utility: explicit top-controls height used across layout */
 }
+
+/* SIDEBAR: softer background, compact, MLflow-like spacing */
+#metricSidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100%;
+    background: linear-gradient(180deg, var(--ml-surface), var(--ml-surface-2));
+    border-right: 1px solid var(--ml-border);
+    box-shadow: var(--ml-shadow);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: #222;
+    z-index: 200;
+    padding-top: 8px; /* ensure padding doesn't prevent layout calculations */
+    padding-bottom: 8px;
+}
+
+/* Top controls: simple horizontal row — buttons side-by-side */
+.toggleDataPickerWrapper {
+	height: var(--top-controls-height);
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	padding: 6px 8px;
+	box-sizing: border-box;
+	flex: 0 0 auto;
+	/* allow overflow to be visible on very narrow screens; we prefer no wrapping */
+	flex-wrap: nowrap;
+	overflow: visible;
+}
+
+/* Buttons inside top controls: do not shrink, width controlled by CSS classes */
+.toggleDataPickerWrapper > button {
+	min-width: 0;
+	margin: 0;
+	white-space: nowrap;
+	position: relative;
+	cursor: pointer; /* ensure pointer cursor for clickable buttons */
+}
+
+/* Data and Multi-axis buttons — size via padding, avoid forcing large min-widths */
+.toggleDataPickerBtn,
+.multiAxisBtn {
+	height: 40px;
+	border-radius: 6px;
+	padding: 6px 12px;
+	box-sizing: border-box;
+	min-width: 0;   /* allow flex container to control layout */
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+}
+
+.multiAxisBtn.active {
+	background-color: var(--ml-primary);
+	color: #ffffff;
+	border: 1px solid var(--ml-primary);
+}
+
+/* container that holds the scrollable metric list */
+#chartPickerWrapper #metricBtnList {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0; /* enable correct flexbox clipping/scrolling */
+    overflow-y: scroll; /* always show scrollbar */
+    -webkit-overflow-scrolling: touch; /* smooth on iOS */
+    padding: 8px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: transparent;
+    border: none; /* rely on sidebar border */
+    padding-bottom: 12px; /* keep some extra space at bottom */
+}
+
+/* smooth thin scrollbar */
 #chartPickerWrapper #metricBtnList::-webkit-scrollbar {
-    /* display: none; */
+    width: 8px;
 }
+#chartPickerWrapper #metricBtnList::-webkit-scrollbar-track {
+    background: transparent;
+}
+#chartPickerWrapper #metricBtnList::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.06);
+    border-radius: 8px;
+}
+
+/* Group body stacks metric buttons vertically and stretches them */
+.metricGroupBody {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch; /* children (buttons) take full width */
+}
+
+/* Metric buttons become stacked list items (full-width, left-aligned) */
 #chartPickerWrapper .metricBtn {
-    width: 48%;
-    font-size: 16px;
-    margin: 5px 0.75% 5px 0.75%;
-    padding: 10px;
-    cursor: pointer;
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--ml-surface-2);
+    color: #111827;
+    border: 1px solid var(--ml-border);
+    border-radius: 6px;
+    font-size: var(--font-base);
     text-align: left;
-    border: none;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-    background-color: white;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease, transform .06s ease, box-shadow .12s ease;
+    box-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
+/* hover & active states for stacked buttons */
 #chartPickerWrapper .metricBtn:hover {
-    background-color: #34495e;
-    color: white;
+    transform: translateY(-1px);
+    border-color: rgba(43,123,185,0.12);
+    box-shadow: 0 6px 18px rgba(43,123,185,0.04);
 }
+
+/* selected metric: filled primary color with subtle glow (adapted for full-width) */
+#chartPickerWrapper .metricBtn.selected {
+    background: var(--ml-primary);
+    color: #fff;
+    border-color: rgba(43,123,185,0.18);
+    box-shadow: 0 8px 24px rgba(43,123,185,0.10);
+}
+#chartPickerWrapper .metricBtn.selected::before {
+    content: "✔";
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 12px;
+    opacity: 0.95;
+}
+
+/* smaller secondary styles preserved for no-data */
 #noData {
     text-align: center;
     padding: 10px;
     font-style: italic;
+    color: var(--ml-muted);
 }
+
+/* ensure charts area sits to the right of the sidebar and is constrained to the viewport */
 #chartsWrapper {
-    margin: 25px 0 0 0;
+    position: absolute;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 10px; /* inner spacing for charts */
+    box-sizing: border-box;
+    overflow-y: auto; /* allow scrolling of charts area */
+    display: block;
+    z-index: 100; /* sit below the sidebar (sidebar uses z-index:200) */
+}
+
+/* ensure individual chart wrappers don't overflow the charts area */
+.chartWrapper {
+    box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
+    margin: 10px 0; /* vertical spacing, horizontal spacing handled by chartsWrapper padding */
+}
+
+/* keep upload/download icons compact and consistent */
+#downloadUploadWrapper {
+    right: 12px;
+    top: 12px;
+}
+#downloadUploadWrapper .upload,
+#downloadUploadWrapper .download {
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /************************************** DATA PICKER */
@@ -100,66 +267,55 @@
     filter: invert(63%) sepia(51%) saturate(1315%) hue-rotate(355deg) brightness(100%) contrast(91%);
 }
 
-/***************************** DOWNLOAD/UPLOAD BUTTONS */
-#downloadUploadWrapper {
-    position: fixed;
-    width: 65px;
-    text-align: center;
-    right: 10px;
-    top: 10px;
-    cursor: pointer;
-    border: none;
-    text-align: center;
+
+.metricGroup {
+	margin-bottom: 15px;
+    padding: 4px 2px;
 }
-#downloadUploadWrapper .upload {
-    display: block;
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    margin: 0 auto 10px auto;
-    background-color: transparent;
-    border: none;
-    background-color: #3498db;
+
+.metricGroupName {
+	font-size: 16px;
+	font-weight: bold;
+	color: #34495e;
+	margin-bottom: 10px;
+	border-bottom: 1px solid #ccc;
+	padding-bottom: 5px;
 }
-.uploadSVG {
-    position: relative;
-    top: 13px;
-    width: 35px;
-    filter: invert(89%) sepia(23%) saturate(0%) hue-rotate(76deg) brightness(108%) contrast(103%); /* white */
+
+
+.loadingOverlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(255, 255, 255, 0.8);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
 }
-#downloadUploadWrapper .upload:hover {
-    background-color: white;
-    border: 2px solid #3498db;
-    box-sizing: border-box;
+
+.loadingSpinner {
+	width: 50px;
+	height: 50px;
+	border: 5px solid #ccc;
+	border-top: 5px solid #3498db;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
 }
-#downloadUploadWrapper .upload:hover .uploadSVG {
-    filter: invert(52%) sepia(98%) saturate(1376%) hue-rotate(177deg) brightness(92%) contrast(86%); /* #3498db */
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
 }
-#downloadUploadWrapper .download {
-    display: block;
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    margin: auto;
-    background-color: transparent;
-    border: none; 
-    background-color: #f1c40f;
-}
-.downloadSVG {
-    position: relative;
-    top: 2px;
-    left: 2px;
-    width: 35px;
-    filter: invert(89%) sepia(23%) saturate(0%) hue-rotate(76deg) brightness(108%) contrast(103%); /* white */
-}
-#downloadUploadWrapper .download:hover {
-    background-color: white;
-    border: 2px solid #f1c40f;
-    box-sizing: border-box;
-}
-#downloadUploadWrapper .download:hover .downloadSVG {
-    filter: invert(76%) sepia(79%) saturate(1490%) hue-rotate(359deg) brightness(104%) contrast(89%); /* #f39c12 */ 
-}
-#downloadUploadWrapper #hiddenUpload {
-    display: none;
+
+body.dataPickerOpen #chartsWrapper,
+body.dataPickerOpen .chartWrapper,
+body.dataPickerOpen .chartArea {
+    filter: blur(4px);
+    transition: filter 0.18s ease;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
 }

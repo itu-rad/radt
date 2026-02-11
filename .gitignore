@@ -145,6 +145,9 @@ _run_temp.csv
 .vscode
 MLproject
 data
+.env
+package-lock.json
+node_modules
 environment.sh
 .radtvenv
 radtlock
