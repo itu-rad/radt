@@ -1,8 +1,8 @@
-Experiment,Workload,Status,Run,Devices,Collocation,    File,    Listeners,Params
-         1,       1,      ,   ,      0,          -,train.py,smi+top,--batch-size 128
-         1,       2,      ,   ,      0,          -,train.py,smi+top,--batch-size 128
-         1,       2,      ,   ,      0,          -,train.py,smi+top,--batch-size 128
-         1,       3,      ,   ,      0,        MPS,train.py,smi+top,--batch-size 128
-         1,       3,      ,   ,      0,        MPS,train.py,smi+top,--batch-size 128
-         1,       4,      ,   ,      2,    3g.20gb,train.py,smi+top,--batch-size 128
-         1,       4,      ,   ,      2,    3g.20gb,train.py,smi+top,--batch-size 128
+Experiment,Workload,Name,Status,Run,Devices,Collocation,File,Listeners,Params
+0,1,no sharing,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 1,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 2,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 1,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 2,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 1,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 2,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128

@@ -1,15 +1,29 @@
 import mlflow
 import subprocess
 import io
+import time
 
 from multiprocessing import Process
 
 
 class IOstatThread(Process):
-    def __init__(self, run_id, experiment_id=88):
+    def __init__(self, run_id, mlflow_buffer=None, experiment_id=88):
         super(IOstatThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
+        self.mlflow_buffer = mlflow_buffer
+
+    def _enqueue_metrics(self, metrics, timestamp_ms=None):
+        if self.mlflow_buffer:
+            ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+            entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
+            try:
+                for e in entries:
+                    self.mlflow_buffer.put(e)
+            except Exception:
+                mlflow.log_metrics(metrics)
+        else:
+            mlflow.log_metrics(metrics)
 
     def run(self):
         mlflow.start_run(run_id=self.run_id).__enter__()  # attach to run
@@ -26,7 +40,10 @@ class IOstatThread(Process):
             m = {}
             line = line.lstrip()
 
-            if line.startswith("nvme") or line.startswith("sd"):
+            if not (line.startswith("nvme") or line.startswith("sd")):
+                continue  # move on to next iostat line
+
+            try:
                 word_vector = line.strip().split()
 
                 device = word_vector[0]  # storage device
@@ -37,22 +54,22 @@ class IOstatThread(Process):
                 mb_read = word_vector[5]  # MB read since last sample
                 mb_written = word_vector[6]  # MB written since last sample
 
-                m[f"iostat - {device} - tps"] = float(tps)
-                m[f"iostat - {device} - MB read/s"] = float(mb_read_s)
-                m[f"iostat - {device} - MB written/s"] = float(mb_written_s)
-                m[f"iostat - {device} - MB read"] = float(mb_read)
-                m[f"iostat - {device} - MB written"] = float(mb_written)
+                m[f"system/iostat - {device} - tps"] = float(tps)
+                m[f"system/iostat - {device} - MB read/s"] = float(mb_read_s)
+                m[f"system/iostat - {device} - MB written/s"] = float(mb_written_s)
+                m[f"system/iostat - {device} - MB read"] = float(mb_read)
+                m[f"system/iostat - {device} - MB written"] = float(mb_written)
 
-                mlflow.log_metrics(m)
+                self._enqueue_metrics(m)
 
                 if device in devices:
-                    mlflow.log_metrics(
+                    self._enqueue_metrics(
                         {
-                            "iostat - Total tps": total_tps,
-                            "iostat - Total MB read/s": total_mb_read_s,
-                            "iostat - Total MB written/s": total_mb_written_s,
-                            "iostat - Total MB read": total_mb_read,
-                            "iostat - Total MB written": total_mb_written,
+                            "system/iostat - Total tps": total_tps,
+                            "system/iostat - Total MB read/s": total_mb_read_s,
+                            "system/iostat - Total MB written/s": total_mb_written_s,
+                            "system/iostat - Total MB read": total_mb_read,
+                            "system/iostat - Total MB written": total_mb_written,
                         }
                     )
                     devices = set()
@@ -65,3 +82,7 @@ class IOstatThread(Process):
                     total_mb_written_s += float(mb_written_s)
                     total_mb_read += float(mb_read)
                     total_mb_written += float(mb_written)
+
+            except Exception as e:
+                print(f"[WARN] Failed to parse or log line: '{line.strip()}' ({e})")
+                continue  # move on to next iostat line

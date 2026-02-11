@@ -55,6 +55,14 @@ def schedule_parse_arguments(args: list):
         help="Devices to run on separated by +, e.g. 0, 1+2",
     )
     parser.add_argument(
+        "-n",
+        "--name",
+        type=str,
+        dest="name",
+        default="",
+        help="Name of the run",
+    )
+    parser.add_argument(
         "-c",
         "--collocation",
         type=str,
@@ -79,34 +87,25 @@ def schedule_parse_arguments(args: list):
         help="Whether to force rerun runs that have previously failed",
     )
     parser.add_argument(
-        "-i",
-        "--epoch",
-        type=int,
-        dest="max_epoch",
-        default=5,
-        help="Maximum number of epochs to train for",
-    )
-    parser.add_argument(
-        "-t",
-        "--time",
-        type=int,
-        dest="max_time",
-        default=2 * 24 * 60,
-        help="Maximum amount of time to train for (minutes)",
-    )
-    parser.add_argument(
         "--conda",
         action="store_true",
         dest="useconda",
-        default=True,
+        default=False,
         help="Use conda.yaml to create a conda environment",
     )
     parser.add_argument(
-        "--local",
-        action="store_false",
-        dest="useconda",
-        default=True,
-        help="Use the current active environment",
+        "--poll_interval",
+        type=float,
+        dest="poll_interval",
+        default=1.0,
+        help="Polling interval in seconds",
+    )
+    parser.add_argument(
+        "--buffered",
+        action="store_true",
+        dest="buffered",
+        default=False,
+        help="Whether to use buffered output (PYTHONUNBUFFERED is true if not set)",
     )
     parser.add_argument(
         "--manual",
@@ -185,3 +184,16 @@ def cli():
         cli_run()
     else:
         cli_schedule()
+
+
+def schedule_external(args, df, group_name=None):
+    """Schedule a dataframe
+
+    Args:
+        entrypoint (str): Path to the entrypoint
+        run_definitions (list): List of run definitions
+    """
+
+    parsed_args = schedule_parse_arguments(args)
+    args_passthrough = []
+    start_schedule(parsed_args, df, args_passthrough, group_name=group_name)

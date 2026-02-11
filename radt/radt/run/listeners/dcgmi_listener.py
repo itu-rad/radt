@@ -2,8 +2,10 @@ import io
 import mlflow
 import os
 import subprocess
+import time
 
 from multiprocessing import Process
+
 
 DCGMI_GROUP_ID = os.getenv("RADT_DCGMI_GROUP")
 
@@ -15,7 +17,7 @@ METRIC_NAMES = [
     "GPU Utilization",
     "Memory Copy Utilization",
     "GR Engine Active",
-    "SN Active",
+    "SM Active",
     "SM Occupancy",
     "Tensor Active",
     "DRAM Active",
@@ -30,10 +32,12 @@ METRIC_NAMES = [
 
 
 class DCGMIThread(Process):
-    def __init__(self, run_id, experiment_id=88):
+    def __init__(self, run_id, mlflow_buffer=None, experiment_id=88):
         super(DCGMIThread, self).__init__()
         self.run_id = run_id
         self.experiment_id = experiment_id
+        self.mlflow_buffer = mlflow_buffer
+
 
         # Hierarchy of metrics to monitor. Fall back in ascending order if certain metrics are not available for collection.
         self.dcgm_fields = [
@@ -79,6 +83,19 @@ class DCGMIThread(Process):
             [155, 156, 200, 201, 203, 204],  # Rest
         ]
 
+
+    def _enqueue_metrics(self, metrics, timestamp_ms=None):
+        if self.mlflow_buffer:
+            ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
+            entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
+            try:
+                for e in entries:
+                    self.mlflow_buffer.put(e)
+            except Exception:
+                mlflow.log_metrics(metrics)
+        else:
+            mlflow.log_metrics(metrics)
+
     def _start_dcgm(self, idx):
         fields = ",".join(map(str, self.dcgm_fields[idx]))
         self.dcgm = subprocess.Popen(
@@ -115,6 +132,6 @@ class DCGMIThread(Process):
                 ):  # [2:] to get rid of gpu name
                     if value.strip() == "N/A":
                         value = 0
-                    m[f"DCGMI - {name}"] = float(value)
+                    m[f"system/DCGMI - {name}"] = float(value)
 
-                mlflow.log_metrics(m)
+                self._enqueue_metrics(m)

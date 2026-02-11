@@ -6,6 +6,7 @@ CSV_FORMAT = np.dtype(
     [
         ("Experiment", int),
         ("Workload", int),
+        ("Name", str),
         ("Status", str),
         ("Run", str),
         ("Devices", str),
@@ -25,7 +26,7 @@ COMMAND = (
     '-P params="-" '
 )
 
-RUN_LISTENERS = ["ps", "smi", "dcgmi", "top", "iostat", "free"]
+RUN_LISTENERS = ["ps", "smi", "dcgmi", "top", "iostat", "free", "macmon"]
 
 WORKLOAD_LISTENERS = {
     "nsys": "nsys profile --capture-range nvtx --nvtx-capture profile --cuda-memory-usage=true --capture-range-end repeat -o nsys_{Experiment}_{Workload}_{Letter} -f true -w true -x true -t cuda,nvtx ",
@@ -54,5 +55,9 @@ entry_points:
 """
 
 MLFLOW_COMMAND = (
-    '''{WorkloadListener}python -m radt run -l {Listeners} -c {File} -p "{Params}"'''
+    '''{WorkloadListener}{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
+)
+
+DIRECT_COMMAND = (
+  '''{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
 )

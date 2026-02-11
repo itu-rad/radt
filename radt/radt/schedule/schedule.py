@@ -1,4 +1,5 @@
 import os
+import shlex
 import sys
 import time
 from argparse import Namespace
@@ -8,13 +9,21 @@ from queue import Empty, Queue
 from string import ascii_uppercase
 from subprocess import PIPE, STDOUT, Popen
 from threading import Thread
+from enum import Enum
 
 import migedit
+import mlflow
 import numpy as np
 import pandas as pd
+
+from mlflow import log_params
 from mlflow.tracking import MlflowClient
 
 from .. import constants
+
+class ExecutionType(Enum):
+    DIRECT = "direct"
+    MLFLOW = "mlflow"
 
 
 def coloured(colour: int, string: str):
@@ -108,8 +117,8 @@ def enqueue_output(out: PIPE, queue: Queue):
 
 
 def process_output(popens, log_runs, log, run_ids):
-    for colour, letter, p, q, _ in popens:
-        while True:  # p.poll() is None:
+    for colour, letter, _, q, _ in popens:
+        while True:
             try:
                 l = q.get_nowait()
                 if not l.strip() and not "\n" in l:
@@ -131,11 +140,11 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(cmds: list, timeout: float):
+def execute_workload(defs: list, group_run_id: str | None = None, execution_type: ExecutionType = ExecutionType.DIRECT, poll_interval=1.0):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
-        cmds (list): Commands to run
+        defs (list): Workload definitions to run
 
     Returns:
         list: Run results to write back to df
@@ -152,19 +161,19 @@ def execute_workload(cmds: list, timeout: float):
     start_time = time.time()
 
     # Remove MLprojects
-    for _, _, _, _, _, _, filepath, _ in cmds:
+    for _, _, _, _, _, _, _, filepath, _ in defs:
         while (Path(filepath) / "MLproject").is_file():
             (Path(filepath) / "MLproject").unlink()
             time.sleep(2)
 
     with ExitStack() as stack:
         try:
-            for id, colour, letter, vars, cmd, mlproject, filepath, _ in cmds:
+            for id, colour, letter, run_name, vars, cmd, param_def, filepath, _ in defs:
                 print(
                     runformat(
                         colour,
                         letter,
-                        f"context: {id}-{colour}-{letter}-{vars}-{cmd}-{filepath}",
+                        f"context: {id}-{colour}-{letter}-{run_name}-{vars}-{cmd}-{filepath}",
                     )
                 )
 
@@ -177,8 +186,12 @@ def execute_workload(cmds: list, timeout: float):
                     lock.write("")
 
                 # Write mlflow mlproject
+                # This is used even when not using MLflow managed runs (as a blocker)
                 with open(Path(filepath) / "MLproject", "w") as project_file:
-                    project_file.write(mlproject)
+                    if execution_type == ExecutionType.MLFLOW:
+                        project_file.write(param_def)
+                    else:
+                        project_file.write("")
 
                 stack.enter_context(
                     p := Popen(
@@ -188,6 +201,7 @@ def execute_workload(cmds: list, timeout: float):
                         bufsize=1,
                         env=env,
                         universal_newlines=True,
+                        # shell=True,  # TODO: remove shell
                     )
                 )
 
@@ -212,31 +226,48 @@ def execute_workload(cmds: list, timeout: float):
             # Group runs into workload children
             # And add experiment/workload to name
             parent_id = ""
-            for _, _, letter, _, _, _, filepath, _ in cmds:
+            for _, _, letter, run_name, _, _, _, filepath, _ in defs:
                 if run_id := run_ids[letter]:
                     client = MlflowClient()
                     if run := client.get_run(run_id):
+                        
+                        # MLFlow: params are set, we grab workload name from there
+                        if execution_type == ExecutionType.MLFLOW:
+                            workload_name = run.data.params["workload"]
+                        else:
+                            # Direct: set the params in param_def
+                            log_params(param_def, run_id=run_id)
+                            workload_name = param_def["workload"]
+
+                        run_name = (
+                            run_name
+                            if (str(run_name).strip() not in ("", "nan"))
+                            else run.info.run_name
+                        )
                         client.set_tag(
                             run_id,
                             "mlflow.runName",
-                            f"({run.data.params['workload']} {letter}) {run.info.run_name}",
+                            f"({workload_name} {letter}) {run_name}",  # todo: rename this to be less ambigious with the other name
                         )
 
                         if not parent_id:
                             parent_id = run_id
+
+                            # If using a group, parents should fall under that
+                            if group_run_id:
+                                client.set_tag(
+                                    run_id, "mlflow.parentRunId", group_run_id
+                                )
+
                         elif parent_id != run_id:
                             client.set_tag(run_id, "mlflow.parentRunId", parent_id)
 
             # Remove run blockers to start synchronised runs
-            for _, _, _, _, _, _, filepath, _ in cmds:
+            for _, _, _, _, _, _, _, filepath, _ in defs:
                 if (Path(filepath) / "radtlock").is_file():
                     (Path(filepath) / "radtlock").unlink()
 
             while True:
-
-                # Stop on timeout (failsafe)
-                if time.time() - start_time > timeout + 60:
-                    break
 
                 # Stop once all processes have finished
                 for _, _, p, _, _ in popens:
@@ -247,6 +278,7 @@ def execute_workload(cmds: list, timeout: float):
                     break
 
                 process_output(popens, log_runs, log, run_ids)
+                time.sleep(poll_interval)
 
         except KeyboardInterrupt:
             try:
@@ -268,6 +300,7 @@ def execute_workload(cmds: list, timeout: float):
                             log_runs[letter].append(l)
                             log.append(runformat(None, letter, l))
                             print(runformat(colour, letter, l), end="")
+                        time.sleep(poll_interval)
             except KeyboardInterrupt:
                 pass
 
@@ -277,7 +310,7 @@ def execute_workload(cmds: list, timeout: float):
     sysprint("Sending logs to server.")
     results = []
 
-    for id, _, letter, _, _, _, filepath, row in cmds:
+    for id, _, letter, _, _, _, _, filepath, row in defs:
         if run_id := run_ids[letter]:
             client = MlflowClient()
             if run := client.get_run(run_id):
@@ -314,13 +347,16 @@ def get_gpu_ids():
     """Get UUIDs of all gpus
 
     Returns:
-        dict: GPU indices and UUIDs
+        dict: GPU indices and UUIDs or empty if nvidia-smi not found
     """
     gpus = {}
-    for line in execute_command("nvidia-smi -L"):
-        if "UUID: GPU" in line:
-            gpu = line.split("GPU")[1].split(":")[0].strip()
-            gpus[gpu] = line.split("UUID:")[1].split(")")[0].strip()
+    try:
+        for line in execute_command("nvidia-smi -L"):
+            if "UUID: GPU" in line:
+                gpu = line.split("GPU")[1].split(":")[0].strip()
+                gpus[gpu] = line.split("UUID:")[1].split(")")[0].strip()
+    except FileNotFoundError as e:
+        sysprint(f"SMI not found or unreachable. Continuing without SMI. ({e})")
     return gpus
 
 
@@ -363,7 +399,7 @@ def make_dcgm_groups(dev_table: pd.DataFrame):
                 raise ValueError("DCGMI group could not be created.")
             group_id = int(result.split("group id of ")[1].split()[0])
 
-            gpu_ids = ",".join(list(s))
+            gpu_ids = ",".join(str(int(float(x))) for x in s)
 
             # Add the gpu ids to the new group
             result = "".join(
@@ -425,7 +461,7 @@ def remove_mps():
 
 def clear_page_cache():
     """Clears OS page cache"""
-    return # TODO: re-enable
+    return  # TODO: re-enable
     execute_command(['sudo sh -c "/bin/echo 3 > /proc/sys/vm/drop_caches"'], shell=True)
 
 
@@ -442,7 +478,10 @@ def determine_operating_mode(
     Returns:
         pd.DataFrame, pd.Dataframe: Dataframe to run, copy
     """
-    if file.suffix == ".py":
+    if isinstance(file, pd.DataFrame):
+        df_raw = None
+        df = file
+    elif file.suffix == ".py":
         df_raw = None
         df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
 
@@ -455,6 +494,7 @@ def determine_operating_mode(
             {
                 "Experiment": parsed_args.experiment,
                 "Workload": parsed_args.workload,
+                "Name": parsed_args.name,
                 "Status": "",
                 "Run": "",
                 "Devices": parsed_args.devices,
@@ -468,18 +508,32 @@ def determine_operating_mode(
     elif file.suffix == ".csv":
         df_raw = pd.read_csv(file, delimiter=",", header=0, skipinitialspace=True)
         df_raw["Collocation"] = df_raw["Collocation"].astype(str)
+        # Ensure a Name column exists immediately after Workload
+        cols = list(df_raw.columns)
+        if "Name" not in df_raw.columns:
+            try:
+                widx = cols.index("Workload")
+                df_raw.insert(widx + 1, "Name", "")
+            except ValueError:
+                raise ValueError("CSV file must contain a 'Workload' column")
         df = df_raw.copy()
 
     return df, df_raw
 
 
-def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
+def start_schedule(
+    parsed_args: Namespace,
+    file: Path,
+    args_passthrough: list,
+    group_name: str | None = None,
+):
     """Schedule (execute) a .py or .csv file via RADT
 
     Args:
         parsed_args (Namespace): Schedule arguments
         file (Path): Path to file
         args_passthrough (list): Run arguments
+        group_name (str | None): Group name
     """
     df, df_raw = determine_operating_mode(parsed_args, file, args_passthrough)
 
@@ -559,7 +613,21 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
 
         make_mps(df_workload, gpu_uuids)
 
-        commands = []
+        workload_definitions = []
+
+        # Check if python or python3 is the correct command -- only when not using conda
+        if parsed_args.useconda:
+            python_command = "python"
+        else:
+            py_check = execute_command(
+                "command -v python || command -v python3", shell=True
+            )
+
+            # if ends on python3, use that
+            if py_check and py_check[-1].strip()[-7:] == "python3":
+                python_command = "python3"
+            else:
+                python_command = "python"
 
         for i, (id, row) in enumerate(df_workload.iterrows()):
             row = row.copy()
@@ -585,43 +653,83 @@ def start_schedule(parsed_args: Namespace, file: Path, args_passthrough: list):
 
             listeners = "+".join(listeners)
 
-            commands.append(
-                (
-                    id,
-                    constants.COLOURS[i % 6],
-                    row["Letter"],
-                    {
-                        "MLFLOW_EXPERIMENT_ID": str(row["Experiment"]).strip(),
-                        "CUDA_VISIBLE_DEVICES": ",".join(map(str, mig_table[id])),
-                        "RADT_DCGMI_GROUP": str(dcgmi_table[id]),
-                        "SMI_GPU_ID": str(row["Devices"]),
-                        "RADT_MAX_EPOCH": str(parsed_args.max_epoch),
-                        "RADT_MAX_TIME": str(parsed_args.max_time * 60),
-                        "RADT_MANUAL_MODE": "True" if parsed_args.manual else "False",
-                    }
-                    | listener_env_vars,
-                    constants.COMMAND.format(**row).split()
-                    + ["-P", f"workload_listener={row['WorkloadListener']}"],
-                    constants.MLPROJECT_CONTENTS.replace(
+            # Determine the actual command to run
+            # This differs for CONDA mode (using mlflow wrapping) vs using a direct python command
+            if parsed_args.useconda:
+                # CONDA mode (using mlflow wrapping)
+                command = (constants.COMMAND.format(**row).split()
+                    + ["-P", f"workload_listener={row['WorkloadListener']}"])
+                param_def = (constants.MLPROJECT_CONTENTS.replace(
                         "<REPLACE_COMMAND>",
                         constants.MLFLOW_COMMAND.format(
                             WorkloadListener=row["WorkloadListener"],
                             Listeners=listeners,
                             File=row["File"],
                             Params=row["Params"] or '""',
+                            PythonCommand=python_command,
                         ),
                     ).replace(
                         "<REPLACE_ENV>",
                         "conda_env: conda.yaml" if parsed_args.useconda else "",
-                    ),
+                    ))
+            else:
+                # Direct mode (using direct python command)
+                command = shlex.split(constants.DIRECT_COMMAND.format(
+                        Listeners=listeners,
+                        File=row["File"],
+                        Params=row["Params"] or '""',
+                        PythonCommand=python_command,
+                    ))
+                param_def = {"letter": row["Letter"],
+                             "workload": row["Workload"],
+                             "listeners": listeners,
+                             "params": row["Params"] or "",
+                             "file": row["File"],
+                             "workload_listener": row["WorkloadListener"]
+                             }
+
+            workload_definitions.append(
+                (
+                    id,
+                    constants.COLOURS[i % 6],
+                    row["Letter"],
+                    row["Name"],
+                    {
+                        "MLFLOW_EXPERIMENT_ID": str(row["Experiment"]).strip(),
+                        "CUDA_VISIBLE_DEVICES": ",".join(map(str, mig_table[id])),
+                        "RADT_DCGMI_GROUP": str(dcgmi_table[id]),
+                        "SMI_GPU_ID": str(row["Devices"]),
+                        "RADT_PRESENT": "True",
+                        "RADT_MANUAL_MODE": "True" if parsed_args.manual else "False",
+                        "PYTHONUNBUFFERED": "1" if not parsed_args.buffered else "",
+                    }
+                    | listener_env_vars,
+                    command,
+                    param_def,
                     row["Filepath"],
                     row,
                 )
             )
 
-        # Format and run the row
-        sysprint(f"RUNNING WORKLOAD: {workload}")
-        results = execute_workload(commands, parsed_args.max_time * 60)
+        execution_type = ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
+        
+        # If group name is set, start a run to group all workloads into
+        if group_name is not None:
+            with mlflow.start_run(
+                run_name=group_name,
+                experiment_id=str(df_workload.loc[:, "Experiment"].iloc[0]).strip(),
+            ) as parent_run:
+                sysprint(
+                    f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run.info.run_id} in {execution_type.value} mode"
+                )
+                results = execute_workload(
+                    workload_definitions, group_run_id=parent_run.info.run_id, execution_type=execution_type, poll_interval=parsed_args.poll_interval
+                )
+        else:
+            # Format and run the row
+            sysprint(f"RUNNING WORKLOAD: {workload} in {execution_type.value} mode")
+            results = execute_workload(workload_definitions, execution_type=execution_type, poll_interval=parsed_args.poll_interval)
+
         remove_mps()
 
         # Write if .csv
