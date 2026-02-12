@@ -202,6 +202,7 @@ def execute_workload(
                 stack.enter_context(
                     p := Popen(
                         cmd,
+                        cwd=filepath,
                         stdout=PIPE,
                         stderr=STDOUT,
                         bufsize=1,
