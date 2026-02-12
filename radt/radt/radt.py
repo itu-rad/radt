@@ -16,11 +16,16 @@ def schedule_split_arguments(parser):
     sysargs = sys.argv[1:]
 
     for i, arg in enumerate(sysargs):
-        if arg.strip()[-3:] == ".py" or arg.strip()[-4:] == ".csv":
+        if (
+            arg.strip()[-3:] == ".py"
+            or arg.strip()[-4:] == ".csv"
+            or arg.strip()[-4:] == ".yml"
+            or arg.strip()[-5:] == ".yaml"
+        ):
             return sysargs[:i], Path(arg), sysargs[i + 1 :]
     else:
         parser.print_help()
-        print("\nPlease supply a python or csv file.")
+        print("\nPlease supply a python, csv, or yaml file.")
         exit()
 
 

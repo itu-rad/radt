@@ -519,6 +519,46 @@ def determine_operating_mode(
                 raise ValueError("CSV file must contain a 'Workload' column")
         df = df_raw.copy()
 
+    elif file.suffix in [".yml", ".yaml"]:
+        df_raw = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
+        import yaml
+        from itertools import product
+        import random
+
+        with open(file, "r") as infile:
+            file_yaml = yaml.safe_load(infile)
+        print(file_yaml)
+
+        keys = []
+        values = []
+        for k, v in file_yaml["parameters"].items():
+            keys.append(k)
+            values.append(v["values"])
+
+        combinations = product(*values)
+
+        if file_yaml["method"] == "random":
+            random.shuffle(combinations)
+
+        for i, c in enumerate(combinations):
+            params = " ".join([f"--{k} {v}" for (k, v) in zip(keys, c)])
+            new_row = {
+                "Experiment": file_yaml["experiment"],
+                "Workload": f"{i:03}",
+                "Name": file_yaml["name"],
+                "Status": "",
+                "Run": "",
+                "Devices": file_yaml["devices"],
+                "Collocation": file_yaml["collocation"],
+                "Listeners": file_yaml["listeners"],
+                "File": file_yaml["file"],
+                "Params": params,
+            }
+            df_raw.loc[len(df_raw)] = new_row
+
+        df = df_raw.copy()
+        df.to_csv("test.csv")
+
     return df, df_raw
 
 
