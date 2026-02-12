@@ -33,7 +33,9 @@ def execute_command(cmd: str):
     env = os.environ.copy()
 
     result = []
-    with Popen(cmd, stdout=PIPE, bufsize=1, universal_newlines=True, env=env, shell=True) as p:
+    with Popen(
+        cmd, stdout=PIPE, bufsize=1, universal_newlines=True, env=env, shell=True
+    ) as p:
         result.extend(p.stdout)
 
         if p.returncode != 0:
@@ -46,7 +48,10 @@ class _MLFlowLogger(multiprocessing.Process):
     """
     Background process that periodically flushes metrics from a queue to MLflow
     """
-    def __init__(self, run_id, buffers, lock=None, flush_interval=5.0, max_batch_size=1000):
+
+    def __init__(
+        self, run_id, buffers, lock=None, flush_interval=5.0, max_batch_size=1000
+    ):
         super().__init__(daemon=True)
         self.run_id = run_id
         self._buffers = buffers
@@ -97,12 +102,14 @@ class _MLFlowLogger(multiprocessing.Process):
         # Normalize items to dicts for conversion / requeue on failure
         metric_dicts = []
         for m in to_flush:
-            metric_dicts.append({
-                "key": m.get("key") or m.get("name"),
-                "value": float(m.get("value")),
-                "timestamp": int(m.get("timestamp")),
-                "step": int(m.get("step", 0)),
-            })
+            metric_dicts.append(
+                {
+                    "key": m.get("key") or m.get("name"),
+                    "value": float(m.get("value")),
+                    "timestamp": int(m.get("timestamp")),
+                    "step": int(m.get("step", 0)),
+                }
+            )
 
         # Send in chunks if needed because mlflow has a max batch size
         try:
@@ -110,11 +117,14 @@ class _MLFlowLogger(multiprocessing.Process):
                 return True
             # convert to Mlflow Metric entities and send in chunks
             for i in range(0, len(metric_dicts), self._max_batch_size):
-                batch_dicts = metric_dicts[i:i + self._max_batch_size]
+                batch_dicts = metric_dicts[i : i + self._max_batch_size]
                 batch_entities = [
-                    MlflowMetric(d["key"], d["value"], d["timestamp"], d["step"]) for d in batch_dicts
+                    MlflowMetric(d["key"], d["value"], d["timestamp"], d["step"])
+                    for d in batch_dicts
                 ]
-                self._client._tracking_client.store.log_batch(run_id=self.run_id, metrics=batch_entities, params=[], tags=[])
+                self._client._tracking_client.store.log_batch(
+                    run_id=self.run_id, metrics=batch_entities, params=[], tags=[]
+                )
             return True
         except Exception:
             # On failure, requeue the metrics at the front of the current write buffer
@@ -133,6 +143,7 @@ class _MLFlowLogger(multiprocessing.Process):
 
 _benchmark_instance = None
 
+
 def _get_benchmark_instance():
     """Get or create the singleton RADTBenchmark instance"""
     global _benchmark_instance
@@ -141,12 +152,14 @@ def _get_benchmark_instance():
         _benchmark_instance.__enter__()
     return _benchmark_instance
 
+
 def log_metric(name, value, epoch=0):
     """Module-level log_metric"""
     if "RADT_PRESENT" not in os.environ:
         return
     instance = _get_benchmark_instance()
     instance.log_metric(name, value, epoch)
+
 
 def log_metrics(metrics, epoch=0):
     """Module-level log_metrics"""
@@ -155,14 +168,16 @@ def log_metrics(metrics, epoch=0):
     instance = _get_benchmark_instance()
     instance.log_metrics(metrics, epoch)
 
+
 class RADTBenchmark:
     """Context manager wrapper that returns the singleton"""
+
     def __enter__(self):
         return _get_benchmark_instance()
-    
+
     def __exit__(self, type, value, traceback):
-        # TODO: check if this should terminate
-        pass
+        return _get_benchmark_instance().__exit__(type, value, traceback)
+
 
 class _RADTBenchmark:
     def __init__(self):
@@ -224,7 +239,7 @@ class _RADTBenchmark:
     def __enter__(self):
         if "RADT_PRESENT" not in os.environ:
             return self
-        
+
         # TODO: store whether we have been initialised
 
         self.processes = []
@@ -243,7 +258,7 @@ class _RADTBenchmark:
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
                 inst = listener_class(self.run_id, self._buffer_listeners)
-                self.processes.append(inst)    
+                self.processes.append(inst)
 
         for process in self.processes:
             process.start()
@@ -256,11 +271,11 @@ class _RADTBenchmark:
         """
         if "RADT_PRESENT" not in os.environ:
             return
-        
+
         # Terminate listeners before loggers so the logger can flush remaining items.
         for process in reversed(self.processes):
             process.terminate()
-        
+
         mlflow.end_run()
 
     def log_metric(self, name, value, epoch=0):
@@ -278,7 +293,12 @@ class _RADTBenchmark:
         if "RADT_PRESENT" not in os.environ:
             return
 
-        entry = {"key": name, "value": value, "timestamp": int(time() * 1000), "step": int(epoch)}
+        entry = {
+            "key": name,
+            "value": value,
+            "timestamp": int(time() * 1000),
+            "step": int(epoch),
+        }
         self._buffer_main.put(entry)
 
     def log_metrics(self, metrics, epoch=0):
@@ -292,6 +312,9 @@ class _RADTBenchmark:
         if "RADT_PRESENT" not in os.environ:
             return
 
-        entries = [{"key": k, "value": v, "timestamp": int(time() * 1000), "step": int(epoch)} for k, v in metrics.items()]
+        entries = [
+            {"key": k, "value": v, "timestamp": int(time() * 1000), "step": int(epoch)}
+            for k, v in metrics.items()
+        ]
         for entry in entries:
             self._buffer_main.put(entry)
