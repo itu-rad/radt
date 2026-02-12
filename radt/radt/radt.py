@@ -7,7 +7,7 @@ from .run import start_run
 from .schedule import start_schedule
 
 
-def schedule_split_arguments():
+def schedule_split_arguments(parser):
     """Split arguments for `radt` into parsed arguments and passthrough arguments
 
     Returns:
@@ -19,18 +19,16 @@ def schedule_split_arguments():
         if arg.strip()[-3:] == ".py" or arg.strip()[-4:] == ".csv":
             return sysargs[:i], Path(arg), sysargs[i + 1 :]
     else:
-        print("Please supply a python or csv file.")
+        parser.print_help()
+        print("\nPlease supply a python or csv file.")
         exit()
 
 
-def schedule_parse_arguments(args: list):
-    """Argparse for `radt`
-
-    Args:
-        args (list): List of raw arguments
+def schedule_parser():
+    """Argparser for `radt`
 
     Returns:
-        argparse.Namespace: Parsed arguments
+        argparse.Parser: arg parser
     """
     parser = argparse.ArgumentParser(
         description="RADt Automatic Tracking and Benchmarking"
@@ -115,7 +113,7 @@ def schedule_parse_arguments(args: list):
         help="Only start tracking run when context is initialised",
     )
 
-    return parser.parse_args(args)
+    return parser
 
 
 def run_parse_arguments(args: list):
@@ -165,8 +163,9 @@ def check_run_listeners(l):
 
 
 def cli_schedule():
-    args, file, args_passthrough = schedule_split_arguments()
-    parsed_args = schedule_parse_arguments(args)
+    parser = schedule_parser()
+    args, file, args_passthrough = schedule_split_arguments(parser)
+    parsed_args = parser.parse_args(args)
 
     start_schedule(parsed_args, file, args_passthrough)
 
@@ -180,7 +179,7 @@ def cli_run():
 
 def cli():
     """Entrypoint for `radt` and `radt run`"""
-    if sys.argv[1].strip() == "run":
+    if len(sys.argv) > 1 and sys.argv[1].strip() == "run":
         cli_run()
     else:
         cli_schedule()
@@ -194,6 +193,6 @@ def schedule_external(args, df, group_name=None):
         run_definitions (list): List of run definitions
     """
 
-    parsed_args = schedule_parse_arguments(args)
+    parsed_args = schedule_parser(args)
     args_passthrough = []
     start_schedule(parsed_args, df, args_passthrough, group_name=group_name)
