@@ -1,9 +1,12 @@
 import os
+import random
 import shlex
 import sys
 import time
+import yaml
 from argparse import Namespace
 from contextlib import ExitStack
+from itertools import product
 from pathlib import Path
 from queue import Empty, Queue
 from string import ascii_uppercase
@@ -477,13 +480,13 @@ def determine_operating_mode(
         args_passthrough (list): Run arguments
 
     Returns:
-        pd.DataFrame, pd.Dataframe: Dataframe to run, copy
+        pd.DataFrame, pd.Dataframe | Dict (yaml): Dataframe to run, copy/write
     """
     if isinstance(file, pd.DataFrame):
-        df_raw = None
+        raw_file_contents = None
         df = file
     elif file.suffix == ".py":
-        df_raw = None
+        raw_file_contents = None
         df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
 
         if len(args_passthrough):
@@ -507,59 +510,68 @@ def determine_operating_mode(
         )
 
     elif file.suffix == ".csv":
-        df_raw = pd.read_csv(file, delimiter=",", header=0, skipinitialspace=True)
-        df_raw["Collocation"] = df_raw["Collocation"].astype(str)
+        raw_file_contents = pd.read_csv(
+            file, delimiter=",", header=0, skipinitialspace=True
+        )
+        raw_file_contents["Collocation"] = raw_file_contents["Collocation"].astype(str)
         # Ensure a Name column exists immediately after Workload
-        cols = list(df_raw.columns)
-        if "Name" not in df_raw.columns:
+        cols = list(raw_file_contents.columns)
+        if "Name" not in raw_file_contents.columns:
             try:
                 widx = cols.index("Workload")
-                df_raw.insert(widx + 1, "Name", "")
+                raw_file_contents.insert(widx + 1, "Name", "")
             except ValueError:
                 raise ValueError("CSV file must contain a 'Workload' column")
-        df = df_raw.copy()
+        df = raw_file_contents.copy()
 
     elif file.suffix in [".yml", ".yaml"]:
-        df_raw = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
-        import yaml
-        from itertools import product
-        import random
+        df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
 
         with open(file, "r") as infile:
-            file_yaml = yaml.safe_load(infile)
-        print(file_yaml)
+            raw_file_contents = yaml.safe_load(infile)
 
         keys = []
         values = []
-        for k, v in file_yaml["parameters"].items():
+        for k, v in raw_file_contents["parameters"].items():
             keys.append(k)
             values.append(v["values"])
 
         combinations = product(*values)
 
-        if file_yaml["method"] == "random":
+        if raw_file_contents["method"] == "random":
             random.shuffle(combinations)
+
+        finished_runs = []
+        for status in raw_file_contents.get("status", {}).values():
+            if "FINISHED" in str(status).strip():
+                finished_runs.append(" ".join(status.split()[2:]).strip()[1:-1])
+
+        max_status = (
+            max(raw_file_contents["status"].keys())
+            if len(raw_file_contents["status"]) > 0
+            else -1
+        )
 
         for i, c in enumerate(combinations):
             params = " ".join([f"--{k} {v}" for (k, v) in zip(keys, c)])
+
+            workload = f"{(max_status+i+1):03}"
+
             new_row = {
-                "Experiment": file_yaml["experiment"],
-                "Workload": f"{i:03}",
-                "Name": file_yaml["name"],
-                "Status": "",
+                "Experiment": raw_file_contents["experiment"],
+                "Workload": workload,
+                "Name": raw_file_contents["name"],
+                "Status": ("FINISHED" if params in finished_runs else ""),
                 "Run": "",
-                "Devices": file_yaml["devices"],
-                "Collocation": file_yaml["collocation"],
-                "Listeners": file_yaml["listeners"],
-                "File": file_yaml["file"],
+                "Devices": raw_file_contents["devices"],
+                "Collocation": raw_file_contents["collocation"],
+                "Listeners": raw_file_contents["listeners"],
+                "File": raw_file_contents["file"],
                 "Params": params,
             }
-            df_raw.loc[len(df_raw)] = new_row
+            df.loc[len(df)] = new_row
 
-        df = df_raw.copy()
-        df.to_csv("test.csv")
-
-    return df, df_raw
+    return df, raw_file_contents
 
 
 def start_schedule(
@@ -576,7 +588,9 @@ def start_schedule(
         args_passthrough (list): Run arguments
         group_name (str | None): Group name
     """
-    df, df_raw = determine_operating_mode(parsed_args, file, args_passthrough)
+    df, raw_file_contents = determine_operating_mode(
+        parsed_args, file, args_passthrough
+    )
 
     df["Workload_Unique"] = (
         df["Experiment"].astype(str) + "+" + df["Workload"].astype(str)
@@ -787,13 +801,31 @@ def start_schedule(
         remove_mps()
 
         # Write if .csv
-        if isinstance(df_raw, pd.DataFrame):
+        if isinstance(raw_file_contents, pd.DataFrame):
             for id, letter, returncode, run_id, run_name, status in results:
-                df_raw.loc[id, "Run"] = run_id
-                df_raw.loc[id, "Status"] = f"{status} {run_name} ({letter})"
+                raw_file_contents.loc[id, "Run"] = run_id
+                raw_file_contents.loc[id, "Status"] = f"{status} {run_name} ({letter})"
 
             # Write the result of the run to the csv
             target = Path("result.csv")
-            df_raw.to_csv(target, index=False)
+            raw_file_contents.to_csv(target, index=False)
+            file.unlink()
+            target.rename(file)
+
+        # Write if .yaml
+        elif isinstance(raw_file_contents, dict):
+
+            if "status" not in raw_file_contents:
+                raw_file_contents["status"] = {}
+
+            for id, letter, returncode, run_id, run_name, status in results:
+                raw_file_contents["status"][
+                    df_workload.loc[id, "Workload"]
+                ] = f"{status} {run_id} ({df_workload.loc[id, 'Params']})"
+
+            # Write the result of the run to the yaml file
+            target = Path("result.yaml")
+            with open(target, "w") as f:
+                yaml.dump(raw_file_contents, f)
             file.unlink()
             target.rename(file)
