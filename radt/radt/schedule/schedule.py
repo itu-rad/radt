@@ -542,15 +542,11 @@ def determine_operating_mode(
             random.shuffle(combinations)
 
         finished_runs = []
-        for status in raw_file_contents.get("status", {}).values():
+        max_status = -1
+        for key, status in raw_file_contents.get("status", {}).items():
             if "FINISHED" in str(status).strip():
                 finished_runs.append(" ".join(status.split()[2:]).strip()[1:-1])
-
-        max_status = (
-            max(raw_file_contents["status"].keys())
-            if len(raw_file_contents["status"]) > 0
-            else -1
-        )
+            max_status = max(max_status, int(key))
 
         for i, c in enumerate(combinations):
             params = " ".join([f"--{k} {v}" for (k, v) in zip(keys, c)])
