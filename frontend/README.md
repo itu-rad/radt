@@ -1,41 +1,50 @@
-# Data Management and Visualization for Benchmarking Deep Learning Training Systems Frontend
-This is the frontend for the framework. Keep in mind that without the backend this service might not work properly.
-The frontend is a react app that can be hosted on a separate server or on the same server.
+# Data Management and Visualization Frontend
+This frontend is a React app served behind nginx and paired with a small Node API.
+The recommended way to deploy is via the repository-level Docker Compose stack.
 
-## Before building
+## Quick start (Docker Compose)
 
-You should specify the location of the REST api in the `.env` file for the visualization environment to work. This will ordinarily be the `3000` port on the server
-you are running docker compose on and should be the outward facing address. Setting this to localhost will limit functionality to that machine. E.g.:
-
-```
-REACT_APP_API_URL=http://localhost:3000/
-```
-## Docker
-
-Run the following command in this directory to build the container:
+From the repository root:
 
 ```bash
-docker build . -t radt-frontend
+docker compose up -d
 ```
 
-## Manually
+The stack exposes nginx on port 80. Endpoints:
 
-In the project directory, you can run:
+- Frontend UI: http://<host>/radt/
+- API: http://<host>/api/
+- MLflow: http://<host>/mlflow/
+- MinIO console: http://<host>/minio/
 
-### `npm start`
+The nginx service uses basic auth. The credentials live in `.htpasswd` at the repo root.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## How the frontend is built
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+The Compose service named `visual` uses `node:25-alpine` and builds the app at container start:
 
-### `npm test`
+```bash
+npm install && REACT_APP_API_URL=/api PUBLIC_URL=/radt npm run build && npx serve -s build -l 80
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Notes:
 
-### `npm run build`
+- `REACT_APP_API_URL=/api` location for the API that is used by the UI
+- `PUBLIC_URL=/radt` ensures correct asset paths when served under `/radt/`.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+If you change these values, rebuild the `visual` service:
+
+```bash
+docker compose up -d --force-recreate visual
+```
+
+## Development (optional)
+
+For local development without Docker:
+
+```bash
+npm install
+REACT_APP_API_URL=http://localhost:3000 npm start
+```
+
+This runs the React dev server on port 3000 and expects the API to be available at the same host.

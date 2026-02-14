@@ -51,7 +51,7 @@ services:
       - -c
       - |
         pip install psycopg2-binary boto3
-        mlflow server --backend-store-uri postgresql+psycopg2://mlflow_user:mlflow_password@postgres:5432/mlflow_db --host 0.0.0.0 --default-artifact-root s3://mlflow-storage/
+        mlflow server --backend-store-uri postgresql+psycopg2://mlflow_user:mlflow_password@postgres:5432/mlflow_db --host 0.0.0.0 --artifacts-destination s3://mlflow-storage/
     restart: always
     depends_on:
       - postgres

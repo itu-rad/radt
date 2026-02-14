@@ -7,9 +7,9 @@
 Running RADT requires some infrastructure to be set up, namely:
 
 - **MLFlow instance** for workflow and experiment management. The current version of RADT is designed as an extension on [**MLFlow**](https://mlflow.org/).
-- **Relational database** for experiment and metric storage. We recommend [**PostgreSQL**](https://www.postgresql.org/) with [**PostgREST**](https://postgrest.org/en/stable/) due to data scalability and ease of use.
-- **S3 database** for artifact tracking, such as log files and traces. We recommend [**MinIO**](https://min.io/).
-- **Visualisation server** for the visualisation front-end.
+- **Relational database** for experiment and metric storage. We use [**PostgreSQL**](https://www.postgresql.org/).
+- **S3 database** for artifact tracking, such as log files and traces. We use [**MinIO**](https://min.io/).
+- **Visualisation server** for the visualisation front-end (React) plus a small Node API.
 
 We provide two options for deploying these requirements:
 
@@ -20,14 +20,22 @@ The easiest way of deploying RADT, including the MLFlow instance and data storag
 In order to deploy RADT using docker: 
 
 1. Clone this repo to your server
-2. Build the [frontend visualization container](/frontend/)
-3. Run docker compose:
+2. From the repo root, start the stack:
 
 ```bash
 docker compose up
 ```
 
-4. Run the SQL commands found in the [queries]{/queries} folder to prepare the database.
+The nginx service exposes port 80 with the following routes:
+
+- Frontend UI: http://<host>/radt/
+- API for frontend: http://<host>/api/
+- MLflow: http://<host>/mlflow/
+- MinIO console: http://<host>/minio/
+
+The nginx service uses basic auth. Credentials are stored in `.htpasswd` at the repo root.
+
+4. Run the SQL commands found in the [frontend/server/queries](/frontend/server/queries) folder to prepare the database.
 
 ### **2. Docker containers**
 
@@ -36,13 +44,14 @@ The containers can also be deployed manually/individually if desired:
 - [MLFlow](https://mlflow.org/docs/latest/docker.html)
 - [MinIO](https://hub.docker.com/r/minio/minio/)
 - [PostgreSQL](https://hub.docker.com/_/postgres)
-- [PostgREST](https://hub.docker.com/r/postgrest/postgrest/)
-- [RADT Visualisation](/frontend/)
+- [RADT Frontend](/frontend/)
+- [RADT Frontend API](/frontend/server/)
 
 ### **3. From source**
 
-If you do not want to use containers, you can deploy the software manually.
-Clone this repository and follow the instructions in [visualization](/visualization) to build the visualization environment manually.
+If you do not want to use containers, you can deploy the frontend manually.
+Clone this repository and follow the instructions in [frontend](/frontend) to build the visualization environment manually.
+Keep in mind that in this case you will need to set up the rest of the services(MLFlow, database etc.) manually as well.
 
 ## Client configuration
 
@@ -57,9 +66,6 @@ Furthermore, MLFlow requires a selection of environment variables to be set in t
 ```bash
 conda env config vars set MLFLOW_TRACKING_USERNAME=
 conda env config vars set MLFLOW_TRACKING_PASSWORD=
-conda env config vars set MLFLOW_S3_ENDPOINT_URL=
-conda env config vars set AWS_ACCESS_KEY_ID=
-conda env config vars set AWS_SECRET_ACCESS_KEY=
 conda env config vars set MLFLOW_TRACKING_URI=
 ```
 
