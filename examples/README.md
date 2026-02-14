@@ -105,7 +105,7 @@ All methods and functions under `mlflow` are accessible this way. These function
 ## Running Examples
 
 All examples should run via `radt <script>.py` unless specified.
-radT will automatically supply MLproject files for MLFlow to function correctly.
+radT will automatically supply MLproject files for MLFlow to function correctly (under MLFlow mode) or launch MLFlow directly (under direct mode).
 
 **Examples should work out of the box using the supplied conda environment!**
 

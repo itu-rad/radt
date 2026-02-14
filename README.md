@@ -101,6 +101,17 @@ with radt.run.RADTBenchmark() as run:
 ```
 All methods and functions under `mlflow` are accessible this way. These functions are disabled when running the codebase without `radt`, ensuring code flexibility.
 
+Alternatively, it is also possible to log metrics manually via a radt import directly. In this case, other logging requires an mlflow import.
+
+```py
+import radt
+import mlflow
+
+# training loop
+radt.log_metric("Metric A", amount)
+mlflow.log_artifact("artifact.file")
+```
+
 ## CSV syntax for larger experiments
 
 RADT can take the hassle of large experiments off you by training multiple models in succession. Models can even be trained at the same time on different gpus or at the same gpu using a range of collocation schemes.

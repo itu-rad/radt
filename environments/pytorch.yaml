@@ -12,6 +12,7 @@ dependencies:
   - boto3
   - pip:
       - mlflow>=1.0
+      - radt
       - tensorflow
       - tensorboardX
       - psutil
