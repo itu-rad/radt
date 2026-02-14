@@ -534,6 +534,19 @@ def determine_operating_mode(
         with open(file, "r") as infile:
             raw_file_contents = yaml.safe_load(infile)
 
+        for key in [
+            "name",
+            "experiment",
+            "collocation",
+            "devices",
+            "listeners",
+            "file",
+            "method",
+            "parameters",
+        ]:
+            if key not in raw_file_contents:
+                raise ValueError(f"YAML file must contain a '{key}' field")
+
         yaml_group_name = raw_file_contents.get(
             "parent", None
         ) or raw_file_contents.get("name", None)

@@ -24,37 +24,7 @@ The current release is `0.2.26`. radT has been recently released and is frequent
 
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
-### Changelog
-- 0.2.26: Added .yaml support, resolved issue with runs sometimes not terminating
-- 0.2.25: Changed logging behaviour to run via two asynchronous logging threads, improving performance on slow networks. Improved support for running without MLFlow mode.
-- 0.2.24: Added `macmon` listener for MacOS.
-- 0.2.23: Added external scheduling, removed `max_epoch` and `max_time`.
-- 0.2.22: Removed default conda dependency
-- 0.2.21: Listeners now export system metrics, added name column.
-- 0.2.20: Resolve runs being closed when listeners exit.
-- 0.2.19: Add free listener, add pytorch data workers to top.
-- 0.2.18: Resolved issue of listeners duplicating runs under new mlflow versions.
-- 0.2.17: Removed sudo requirement for iostat, renamed iostat fields.
-- 0.2.16: Fixed an issue that could lock the process under extreme levels of collocation.
-- 0.2.15: RADT now runs correctly on machines that have a corrupt DCGMI installation.
-- 0.2.14: Automatically disable the DCGMI listener when DCGMI is not found.
-- 0.2.13: Enable RADT on systems without DCGMI.
-- 0.2.12: Fixed an issue with dependencies.
-- 0.2.11: Workloads are now nested to group them together. Run names include the workload and letter. Improved flexibility of param passthrough.
-- 0.2.10: Workload listeners now upload logs when `file` points to a different folder. `rerun` argument now works correctly.
-- 0.2.9: Allow text printing while env is setting up.
-- 0.2.8: Resolved issue preventing logs from being collected.
-- 0.2.7: Resolved race condition that could sometimes disrupt collocated model execution.
-- 0.2.6: Resolved synchronisation issues with `.csv` runs.
-- 0.2.5: Automatically log `pip`, `conda` package lists and `nvidia-smi` driver info for reproducability.
-- 0.2.4: Fixed `rerun` flag, added run names to status
-- 0.2.3: Reintroduced manual mode, fixed issue with context attributes, `max_epoch`, `max_time`, and `manual` are now logged as parameters
-- 0.2.2: Reintroduced contexts, fixed issue of not having `migedit` as a formal requirement
-- 0.2.1: Removed legacy print-statements
-- 0.2.0: Moved `radtrun` to be a subcommand in `radt`, reintroduced workload listeners, use `migedit` for mig management, local mode
-- 0.1.4: Fixed several minor issues
-- 0.1.3: Fixed several bugs that prevented correct logging
-- 0.1.0: Initial
+
 
 ## Features
 
@@ -67,7 +37,7 @@ If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open 
 
 ## Sample usage & getting started
 
-Replace `python` in your training script by `radt`, e.g.:
+For running the client, replace `python` in your training script by `radt`, e.g.:
 
 ```py
 >>> radt train.py --batch-size 256
@@ -78,6 +48,8 @@ or, when using virtual environments/conda:
 ```py
 >>> python -m radt train.py --batch-size 256
 ```
+
+## Deployment
 
 For a complete getting started guide and examples please visit the [Examples](https://github.com/Resource-Aware-Data-systems-RAD/radt/tree/master/examples/#readme).
 
@@ -129,10 +101,79 @@ Experiment,Workload,Status,Run,Devices,Collocation,    File,    Listeners,Params
 
 When interrupted by any means, a csv experiment can be rescheduled to continue from where it left off.
 
+Example files live in [examples/csv](examples/csv)
+
+## YAML/YML syntax for experiment specs
+
+RADT supports YAML/YML experiment specs for parameter sweeps. These experiments are automatically nested in a top-level run. A minimal example:
+
+```yaml
+name: Sweep name
+experiment: 0
+collocation: "-"
+devices: 0
+listeners: smi+top
+file: ../pytorch/cifar10_context.py
+method: grid
+parameters:
+  batch-size:
+    values: [8, 16, 32, 64, 128]
+  learning-rate:
+    values: [0.001, 0.0015, 0.002]
+```
+
+Required fields:
+
+- `name`: Human-readable sweep name.
+- `experiment`: Experiment id used for grouping runs.
+- `collocation`: Collocation specification
+- `devices`: GPU devices to run on
+- `listeners`: Listeners to use
+- `file`: Script to run.
+- `method`: Sweep strategy, e.g. `grid` or `random`.
+- `parameters`: Map of argument names to value lists.
+
+When interrupted by any means, a yaml experiment can be rescheduled to continue from where it left off.
+
+Example files live in [examples/yaml](examples/yaml).
+
+
 ## Supported platforms
 
 - [x] Linux
 
+
+### Changelog
+- 0.2.26: Added .yaml support, resolved issue with runs sometimes not terminating
+- 0.2.25: Changed logging behaviour to run via two asynchronous logging threads, improving performance on slow networks. Improved support for running without MLFlow mode.
+- 0.2.24: Added `macmon` listener for MacOS.
+- 0.2.23: Added external scheduling, removed `max_epoch` and `max_time`.
+- 0.2.22: Removed default conda dependency
+- 0.2.21: Listeners now export system metrics, added name column.
+- 0.2.20: Resolve runs being closed when listeners exit.
+- 0.2.19: Add free listener, add pytorch data workers to top.
+- 0.2.18: Resolved issue of listeners duplicating runs under new mlflow versions.
+- 0.2.17: Removed sudo requirement for iostat, renamed iostat fields.
+- 0.2.16: Fixed an issue that could lock the process under extreme levels of collocation.
+- 0.2.15: RADT now runs correctly on machines that have a corrupt DCGMI installation.
+- 0.2.14: Automatically disable the DCGMI listener when DCGMI is not found.
+- 0.2.13: Enable RADT on systems without DCGMI.
+- 0.2.12: Fixed an issue with dependencies.
+- 0.2.11: Workloads are now nested to group them together. Run names include the workload and letter. Improved flexibility of param passthrough.
+- 0.2.10: Workload listeners now upload logs when `file` points to a different folder. `rerun` argument now works correctly.
+- 0.2.9: Allow text printing while env is setting up.
+- 0.2.8: Resolved issue preventing logs from being collected.
+- 0.2.7: Resolved race condition that could sometimes disrupt collocated model execution.
+- 0.2.6: Resolved synchronisation issues with `.csv` runs.
+- 0.2.5: Automatically log `pip`, `conda` package lists and `nvidia-smi` driver info for reproducability.
+- 0.2.4: Fixed `rerun` flag, added run names to status
+- 0.2.3: Reintroduced manual mode, fixed issue with context attributes, `max_epoch`, `max_time`, and `manual` are now logged as parameters
+- 0.2.2: Reintroduced contexts, fixed issue of not having `migedit` as a formal requirement
+- 0.2.1: Removed legacy print-statements
+- 0.2.0: Moved `radtrun` to be a subcommand in `radt`, reintroduced workload listeners, use `migedit` for mig management, local mode
+- 0.1.4: Fixed several minor issues
+- 0.1.3: Fixed several bugs that prevented correct logging
+- 0.1.0: Initial
 
 ## Citation
 
