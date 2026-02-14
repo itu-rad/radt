@@ -20,11 +20,12 @@ pip install radt
 
 ## Releases
 
-The current release is `0.2.16`. radT has been recently released and is frequently receiving updates.
+The current release is `0.2.26`. radT has been recently released and is frequently receiving updates.
 
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
 ### Changelog
+- 0.2.26: Added .yaml support, resolved issue with runs sometimes not terminating
 - 0.2.25: Changed logging behaviour to run via two asynchronous logging threads, improving performance on slow networks. Improved support for running without MLFlow mode.
 - 0.2.24: Added `macmon` listener for MacOS.
 - 0.2.23: Added external scheduling, removed `max_epoch` and `max_time`.
