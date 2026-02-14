@@ -480,8 +480,12 @@ def determine_operating_mode(
         args_passthrough (list): Run arguments
 
     Returns:
-        pd.DataFrame, pd.Dataframe | Dict (yaml): Dataframe to run, copy/write
+        pd.DataFrame: Dataframe to run
+        pd.DataFrame or dict or None: Raw file contents if .csv or .yaml, None if .py
+        None or str: Group name override if .yaml, None otherwise
+
     """
+    yaml_group_name = None
     if isinstance(file, pd.DataFrame):
         raw_file_contents = None
         df = file
@@ -530,6 +534,10 @@ def determine_operating_mode(
         with open(file, "r") as infile:
             raw_file_contents = yaml.safe_load(infile)
 
+        yaml_group_name = raw_file_contents.get(
+            "parent", None
+        ) or raw_file_contents.get("name", None)
+
         keys = []
         values = []
         for k, v in raw_file_contents["parameters"].items():
@@ -540,6 +548,11 @@ def determine_operating_mode(
 
         if raw_file_contents["method"] == "random":
             random.shuffle(combinations)
+
+        if "status" not in raw_file_contents or not isinstance(
+            raw_file_contents["status"], dict
+        ):
+            raw_file_contents["status"] = {}
 
         finished_runs = []
         max_status = -1
@@ -567,7 +580,7 @@ def determine_operating_mode(
             }
             df.loc[len(df)] = new_row
 
-    return df, raw_file_contents
+    return df, raw_file_contents, yaml_group_name
 
 
 def start_schedule(
@@ -584,13 +597,31 @@ def start_schedule(
         args_passthrough (list): Run arguments
         group_name (str | None): Group name
     """
-    df, raw_file_contents = determine_operating_mode(
+    df, raw_file_contents, yaml_group_name = determine_operating_mode(
         parsed_args, file, args_passthrough
     )
+
+    if group_name is None and yaml_group_name is not None:
+        group_name = yaml_group_name
 
     df["Workload_Unique"] = (
         df["Experiment"].astype(str) + "+" + df["Workload"].astype(str)
     )
+
+    if group_name is not None:
+        try:
+            mlflow.get_run(group_name)
+            parent_run_id = group_name
+            c = mlflow.MlflowClient()
+            c.set_terminated(parent_run_id, status="FINISHED")
+            sysprint(f"Using existing parent run {parent_run_id}")
+        except mlflow.exceptions.MlflowException as e:
+            with mlflow.start_run(
+                run_name=group_name,
+                experiment_id=str(df.iloc[0]["Experiment"]),
+            ) as run:
+                sysprint(f"Opening new parent run {run.info.run_id}")
+                parent_run_id = run.info.run_id
 
     for workload in df["Workload_Unique"].unique():
         df_workload = df[df["Workload_Unique"] == workload].copy()
@@ -770,21 +801,22 @@ def start_schedule(
             ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
         )
 
-        # If group name is set, start a run to group all workloads into
+        # If group name is set, run in that group
         if group_name is not None:
-            with mlflow.start_run(
-                run_name=group_name,
-                experiment_id=str(df_workload.loc[:, "Experiment"].iloc[0]).strip(),
-            ) as parent_run:
-                sysprint(
-                    f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run.info.run_id} in {execution_type.value} mode"
-                )
-                results = execute_workload(
-                    workload_definitions,
-                    group_run_id=parent_run.info.run_id,
-                    execution_type=execution_type,
-                    poll_interval=parsed_args.poll_interval,
-                )
+            sysprint(
+                f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run_id} in {execution_type.value} mode"
+            )
+            results = execute_workload(
+                workload_definitions,
+                group_run_id=parent_run_id,
+                execution_type=execution_type,
+                poll_interval=parsed_args.poll_interval,
+            )
+            try:
+                c = mlflow.MlflowClient()
+                c.set_terminated(parent_run_id, status="FINISHED")
+            except mlflow.exceptions.MlflowException as e:
+                pass
         else:
             # Format and run the row
             sysprint(f"RUNNING WORKLOAD: {workload} in {execution_type.value} mode")
@@ -811,12 +843,16 @@ def start_schedule(
         # Write if .yaml
         elif isinstance(raw_file_contents, dict):
 
-            if "status" not in raw_file_contents:
+            if "status" not in raw_file_contents or not isinstance(
+                raw_file_contents["status"], dict
+            ):
                 raw_file_contents["status"] = {}
+
+            raw_file_contents["parent"] = parent_run_id
 
             for id, letter, returncode, run_id, run_name, status in results:
                 raw_file_contents["status"][
-                    df_workload.loc[id, "Workload"]
+                    int(df_workload.loc[id, "Workload"])
                 ] = f"{status} {run_id} ({df_workload.loc[id, 'Params']})"
 
             # Write the result of the run to the yaml file
