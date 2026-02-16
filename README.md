@@ -20,11 +20,131 @@ pip install radt
 
 ## Releases
 
-The current release is `0.2.16`. radT has been recently released and is frequently receiving updates.
+The current release is `0.2.26`. radT has been recently released and is frequently receiving updates.
 
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
+
+
+## Features
+
+- Wide configuration support including collocation
+- Track hardware and software metrics, including Nsight
+- Handle continuous streams of data
+- Support multiple visualization use-cases
+- Filter large amounts of inconsequential data
+- Minimal code impact
+
+## Sample usage & getting started
+
+For running the client, replace `python` in your training script by `radt`, e.g.:
+
+```py
+>>> radt train.py --batch-size 256
+```
+
+or, when using virtual environments/conda:
+
+```py
+>>> python -m radt train.py --batch-size 256
+```
+
+## Deployment
+
+For a complete getting started guide and examples please visit the [Examples](https://github.com/Resource-Aware-Data-systems-RAD/radt/tree/master/examples/#readme).
+
+## Easy to use via automated tracking
+
+radT will automatically track hardware metrics for your application. The listeners will start tracking your application on invocation.
+
+As radT extends MLFlow, you can either use the advanced tracking or use MLFlow to track software metrics (e.g. loss).
+
+## Advanced tracking options via context
+
+If you want to have more control over what is logged, you can encapsulate your training loop in the RADT context. This allows for logging of ML metrics among other MLFlow functions:
+
+```py
+import radt
+
+with radt.run.RADTBenchmark() as run:
+  # training loop
+  run.log_metric("Metric A", amount)
+  run.log_artifact("artifact.file")
+```
+All methods and functions under `mlflow` are accessible this way. These functions are disabled when running the codebase without `radt`, ensuring code flexibility.
+
+Alternatively, it is also possible to log metrics manually via a radt import directly. In this case, other logging requires an mlflow import.
+
+```py
+import radt
+import mlflow
+
+# training loop
+radt.log_metric("Metric A", amount)
+mlflow.log_artifact("artifact.file")
+```
+
+## CSV syntax for larger experiments
+
+RADT can take the hassle of large experiments off you by training multiple models in succession. Models can even be trained at the same time on different gpus or at the same gpu using a range of collocation schemes.
+
+```csv
+Experiment,Workload,Status,Run,Devices,Collocation,    File,    Listeners,Params
+0,1,no sharing,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 1,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,2,shared gpu 2,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 1,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,3,MPS shared gpu 2,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 1,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+0,4,MIG shared gpu 2,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
+```
+
+When interrupted by any means, a csv experiment can be rescheduled to continue from where it left off.
+
+Example files live in [examples/csv](examples/csv)
+
+## YAML/YML syntax for experiment specs
+
+RADT supports YAML/YML experiment specs for parameter sweeps. These experiments are automatically nested in a top-level run. A minimal example:
+
+```yaml
+name: Sweep name
+experiment: 0
+collocation: "-"
+devices: 0
+listeners: smi+top
+file: ../pytorch/cifar10_context.py
+method: grid
+parameters:
+  batch-size:
+    values: [8, 16, 32, 64, 128]
+  learning-rate:
+    values: [0.001, 0.0015, 0.002]
+```
+
+Required fields:
+
+- `name`: Human-readable sweep name.
+- `experiment`: Experiment id used for grouping runs.
+- `collocation`: Collocation specification
+- `devices`: GPU devices to run on
+- `listeners`: Listeners to use
+- `file`: Script to run.
+- `method`: Sweep strategy, e.g. `grid` or `random`.
+- `parameters`: Map of argument names to value lists.
+
+When interrupted by any means, a yaml experiment can be rescheduled to continue from where it left off.
+
+Example files live in [examples/yaml](examples/yaml).
+
+
+## Supported platforms
+
+- [x] Linux
+
+
 ### Changelog
+- 0.2.26: Added .yaml support, resolved issue with runs sometimes not terminating
 - 0.2.25: Changed logging behaviour to run via two asynchronous logging threads, improving performance on slow networks. Improved support for running without MLFlow mode.
 - 0.2.24: Added `macmon` listener for MacOS.
 - 0.2.23: Added external scheduling, removed `max_epoch` and `max_time`.
@@ -54,73 +174,6 @@ If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open 
 - 0.1.4: Fixed several minor issues
 - 0.1.3: Fixed several bugs that prevented correct logging
 - 0.1.0: Initial
-
-## Features
-
-- Wide configuration support including collocation
-- Track hardware and software metrics, including Nsight
-- Handle continuous streams of data
-- Support multiple visualization use-cases
-- Filter large amounts of inconsequential data
-- Minimal code impact
-
-## Sample usage & getting started
-
-Replace `python` in your training script by `radt`, e.g.:
-
-```py
->>> radt train.py --batch-size 256
-```
-
-or, when using virtual environments/conda:
-
-```py
->>> python -m radt train.py --batch-size 256
-```
-
-For a complete getting started guide and examples please visit the [Examples](https://github.com/Resource-Aware-Data-systems-RAD/radt/tree/master/examples/#readme).
-
-## Easy to use via automated tracking
-
-radT will automatically track hardware metrics for your application. The listeners will start tracking your application on invocation.
-
-As radT extends MLFlow, you can either use the advanced tracking or use MLFlow to track software metrics (e.g. loss).
-
-## Advanced tracking options via context
-
-If you want to have more control over what is logged, you can encapsulate your training loop in the RADT context. This allows for logging of ML metrics among other MLFlow functions:
-
-```py
-import radt
-
-with radt.run.RADTBenchmark() as run:
-  # training loop
-  run.log_metric("Metric A", amount)
-  run.log_artifact("artifact.file")
-```
-All methods and functions under `mlflow` are accessible this way. These functions are disabled when running the codebase without `radt`, ensuring code flexibility.
-
-## CSV syntax for larger experiments
-
-RADT can take the hassle of large experiments off you by training multiple models in succession. Models can even be trained at the same time on different gpus or at the same gpu using a range of collocation schemes.
-
-```csv
-Experiment,Workload,Status,Run,Devices,Collocation,    File,    Listeners,Params
-0,1,no sharing,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,2,shared gpu 1,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,2,shared gpu 2,,,0,-,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,3,MPS shared gpu 1,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,3,MPS shared gpu 2,,,0,MPS,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,4,MIG shared gpu 1,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-0,4,MIG shared gpu 2,,,2,3g.20gb,../pytorch/cifar10_context.py,smi+top,--batch-size 128
-```
-
-When interrupted by any means, a csv experiment can be rescheduled to continue from where it left off.
-
-## Supported platforms
-
-- [x] Linux
-
 
 ## Citation
 

@@ -1,9 +1,12 @@
 import os
+import random
 import shlex
 import sys
 import time
+import yaml
 from argparse import Namespace
 from contextlib import ExitStack
+from itertools import product
 from pathlib import Path
 from queue import Empty, Queue
 from string import ascii_uppercase
@@ -20,6 +23,7 @@ from mlflow import log_params
 from mlflow.tracking import MlflowClient
 
 from .. import constants
+
 
 class ExecutionType(Enum):
     DIRECT = "direct"
@@ -140,7 +144,12 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
-def execute_workload(defs: list, group_run_id: str | None = None, execution_type: ExecutionType = ExecutionType.DIRECT, poll_interval=1.0):
+def execute_workload(
+    defs: list,
+    group_run_id: str | None = None,
+    execution_type: ExecutionType = ExecutionType.DIRECT,
+    poll_interval=1.0,
+):
     """Executes a workload. Handles run halting and collecting of run status.
 
     Args:
@@ -196,6 +205,7 @@ def execute_workload(defs: list, group_run_id: str | None = None, execution_type
                 stack.enter_context(
                     p := Popen(
                         cmd,
+                        cwd=filepath,
                         stdout=PIPE,
                         stderr=STDOUT,
                         bufsize=1,
@@ -230,7 +240,7 @@ def execute_workload(defs: list, group_run_id: str | None = None, execution_type
                 if run_id := run_ids[letter]:
                     client = MlflowClient()
                     if run := client.get_run(run_id):
-                        
+
                         # MLFlow: params are set, we grab workload name from there
                         if execution_type == ExecutionType.MLFLOW:
                             workload_name = run.data.params["workload"]
@@ -459,12 +469,6 @@ def remove_mps():
     execute_command(["echo quit | nvidia-cuda-mps-control"], shell=True)
 
 
-def clear_page_cache():
-    """Clears OS page cache"""
-    return  # TODO: re-enable
-    execute_command(['sudo sh -c "/bin/echo 3 > /proc/sys/vm/drop_caches"'], shell=True)
-
-
 def determine_operating_mode(
     parsed_args: Namespace, file: Path, args_passthrough: list
 ):
@@ -476,13 +480,17 @@ def determine_operating_mode(
         args_passthrough (list): Run arguments
 
     Returns:
-        pd.DataFrame, pd.Dataframe: Dataframe to run, copy
+        pd.DataFrame: Dataframe to run
+        pd.DataFrame or dict or None: Raw file contents if .csv or .yaml, None if .py
+        None or str: Group name override if .yaml, None otherwise
+
     """
+    yaml_group_name = None
     if isinstance(file, pd.DataFrame):
-        df_raw = None
+        raw_file_contents = None
         df = file
     elif file.suffix == ".py":
-        df_raw = None
+        raw_file_contents = None
         df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
 
         if len(args_passthrough):
@@ -506,19 +514,86 @@ def determine_operating_mode(
         )
 
     elif file.suffix == ".csv":
-        df_raw = pd.read_csv(file, delimiter=",", header=0, skipinitialspace=True)
-        df_raw["Collocation"] = df_raw["Collocation"].astype(str)
+        raw_file_contents = pd.read_csv(
+            file, delimiter=",", header=0, skipinitialspace=True
+        )
+        raw_file_contents["Collocation"] = raw_file_contents["Collocation"].astype(str)
         # Ensure a Name column exists immediately after Workload
-        cols = list(df_raw.columns)
-        if "Name" not in df_raw.columns:
+        cols = list(raw_file_contents.columns)
+        if "Name" not in raw_file_contents.columns:
             try:
                 widx = cols.index("Workload")
-                df_raw.insert(widx + 1, "Name", "")
+                raw_file_contents.insert(widx + 1, "Name", "")
             except ValueError:
                 raise ValueError("CSV file must contain a 'Workload' column")
-        df = df_raw.copy()
+        df = raw_file_contents.copy()
 
-    return df, df_raw
+    elif file.suffix in [".yml", ".yaml"]:
+        df = pd.DataFrame(np.empty(0, dtype=constants.CSV_FORMAT))
+
+        with open(file, "r") as infile:
+            raw_file_contents = yaml.safe_load(infile)
+
+        for key in [
+            "name",
+            "experiment",
+            "collocation",
+            "devices",
+            "listeners",
+            "file",
+            "method",
+            "parameters",
+        ]:
+            if key not in raw_file_contents:
+                raise ValueError(f"YAML file must contain a '{key}' field")
+
+        yaml_group_name = raw_file_contents.get(
+            "parent", None
+        ) or raw_file_contents.get("name", None)
+
+        keys = []
+        values = []
+        for k, v in raw_file_contents["parameters"].items():
+            keys.append(k)
+            values.append(v["values"])
+
+        combinations = product(*values)
+
+        if raw_file_contents["method"] == "random":
+            random.shuffle(combinations)
+
+        if "status" not in raw_file_contents or not isinstance(
+            raw_file_contents["status"], dict
+        ):
+            raw_file_contents["status"] = {}
+
+        finished_runs = []
+        max_status = -1
+        for key, status in raw_file_contents.get("status", {}).items():
+            if "FINISHED" in str(status).strip():
+                finished_runs.append(" ".join(status.split()[2:]).strip()[1:-1])
+            max_status = max(max_status, int(key))
+
+        for i, c in enumerate(combinations):
+            params = " ".join([f"--{k} {v}" for (k, v) in zip(keys, c)])
+
+            workload = f"{(max_status+i+1):03}"
+
+            new_row = {
+                "Experiment": raw_file_contents["experiment"],
+                "Workload": workload,
+                "Name": raw_file_contents["name"],
+                "Status": ("FINISHED" if params in finished_runs else ""),
+                "Run": "",
+                "Devices": raw_file_contents["devices"],
+                "Collocation": raw_file_contents["collocation"],
+                "Listeners": raw_file_contents["listeners"],
+                "File": raw_file_contents["file"],
+                "Params": params,
+            }
+            df.loc[len(df)] = new_row
+
+    return df, raw_file_contents, yaml_group_name
 
 
 def start_schedule(
@@ -535,11 +610,31 @@ def start_schedule(
         args_passthrough (list): Run arguments
         group_name (str | None): Group name
     """
-    df, df_raw = determine_operating_mode(parsed_args, file, args_passthrough)
+    df, raw_file_contents, yaml_group_name = determine_operating_mode(
+        parsed_args, file, args_passthrough
+    )
+
+    if group_name is None and yaml_group_name is not None:
+        group_name = yaml_group_name
 
     df["Workload_Unique"] = (
         df["Experiment"].astype(str) + "+" + df["Workload"].astype(str)
     )
+
+    if group_name is not None:
+        try:
+            mlflow.get_run(group_name)
+            parent_run_id = group_name
+            c = mlflow.MlflowClient()
+            c.set_terminated(parent_run_id, status="FINISHED")
+            sysprint(f"Using existing parent run {parent_run_id}")
+        except mlflow.exceptions.MlflowException as e:
+            with mlflow.start_run(
+                run_name=group_name,
+                experiment_id=str(df.iloc[0]["Experiment"]),
+            ) as run:
+                sysprint(f"Opening new parent run {run.info.run_id}")
+                parent_run_id = run.info.run_id
 
     for workload in df["Workload_Unique"].unique():
         df_workload = df[df["Workload_Unique"] == workload].copy()
@@ -590,7 +685,6 @@ def start_schedule(
 
         for i, row in df_workload.iterrows():
             remove_mps()
-            clear_page_cache()
 
             if "g" in str(row["Collocation"]):  # TODO: fix
                 result = migedit.make_mig_devices(
@@ -657,36 +751,41 @@ def start_schedule(
             # This differs for CONDA mode (using mlflow wrapping) vs using a direct python command
             if parsed_args.useconda:
                 # CONDA mode (using mlflow wrapping)
-                command = (constants.COMMAND.format(**row).split()
-                    + ["-P", f"workload_listener={row['WorkloadListener']}"])
-                param_def = (constants.MLPROJECT_CONTENTS.replace(
-                        "<REPLACE_COMMAND>",
-                        constants.MLFLOW_COMMAND.format(
-                            WorkloadListener=row["WorkloadListener"],
-                            Listeners=listeners,
-                            File=row["File"],
-                            Params=row["Params"] or '""',
-                            PythonCommand=python_command,
-                        ),
-                    ).replace(
-                        "<REPLACE_ENV>",
-                        "conda_env: conda.yaml" if parsed_args.useconda else "",
-                    ))
-            else:
-                # Direct mode (using direct python command)
-                command = shlex.split(constants.DIRECT_COMMAND.format(
+                command = constants.COMMAND.format(**row).split() + [
+                    "-P",
+                    f"workload_listener={row['WorkloadListener']}",
+                ]
+                param_def = constants.MLPROJECT_CONTENTS.replace(
+                    "<REPLACE_COMMAND>",
+                    constants.MLFLOW_COMMAND.format(
+                        WorkloadListener=row["WorkloadListener"],
                         Listeners=listeners,
                         File=row["File"],
                         Params=row["Params"] or '""',
                         PythonCommand=python_command,
-                    ))
-                param_def = {"letter": row["Letter"],
-                             "workload": row["Workload"],
-                             "listeners": listeners,
-                             "params": row["Params"] or "",
-                             "file": row["File"],
-                             "workload_listener": row["WorkloadListener"]
-                             }
+                    ),
+                ).replace(
+                    "<REPLACE_ENV>",
+                    "conda_env: conda.yaml" if parsed_args.useconda else "",
+                )
+            else:
+                # Direct mode (using direct python command)
+                command = shlex.split(
+                    constants.DIRECT_COMMAND.format(
+                        Listeners=listeners,
+                        File=row["File"],
+                        Params=row["Params"] or '""',
+                        PythonCommand=python_command,
+                    )
+                )
+                param_def = {
+                    "letter": row["Letter"],
+                    "workload": row["Workload"],
+                    "listeners": listeners,
+                    "params": row["Params"] or "",
+                    "file": row["File"],
+                    "workload_listener": row["WorkloadListener"],
+                }
 
             workload_definitions.append(
                 (
@@ -711,35 +810,67 @@ def start_schedule(
                 )
             )
 
-        execution_type = ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
-        
-        # If group name is set, start a run to group all workloads into
+        execution_type = (
+            ExecutionType.MLFLOW if parsed_args.useconda else ExecutionType.DIRECT
+        )
+
+        # If group name is set, run in that group
         if group_name is not None:
-            with mlflow.start_run(
-                run_name=group_name,
-                experiment_id=str(df_workload.loc[:, "Experiment"].iloc[0]).strip(),
-            ) as parent_run:
-                sysprint(
-                    f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run.info.run_id} in {execution_type.value} mode"
-                )
-                results = execute_workload(
-                    workload_definitions, group_run_id=parent_run.info.run_id, execution_type=execution_type, poll_interval=parsed_args.poll_interval
-                )
+            sysprint(
+                f"RUNNING WORKLOAD: {workload} with group run '{group_name}' with ID {parent_run_id} in {execution_type.value} mode"
+            )
+            results = execute_workload(
+                workload_definitions,
+                group_run_id=parent_run_id,
+                execution_type=execution_type,
+                poll_interval=parsed_args.poll_interval,
+            )
+            try:
+                c = mlflow.MlflowClient()
+                c.set_terminated(parent_run_id, status="FINISHED")
+            except mlflow.exceptions.MlflowException as e:
+                pass
         else:
             # Format and run the row
             sysprint(f"RUNNING WORKLOAD: {workload} in {execution_type.value} mode")
-            results = execute_workload(workload_definitions, execution_type=execution_type, poll_interval=parsed_args.poll_interval)
+            results = execute_workload(
+                workload_definitions,
+                execution_type=execution_type,
+                poll_interval=parsed_args.poll_interval,
+            )
 
         remove_mps()
 
         # Write if .csv
-        if isinstance(df_raw, pd.DataFrame):
+        if isinstance(raw_file_contents, pd.DataFrame):
             for id, letter, returncode, run_id, run_name, status in results:
-                df_raw.loc[id, "Run"] = run_id
-                df_raw.loc[id, "Status"] = f"{status} {run_name} ({letter})"
+                raw_file_contents.loc[id, "Run"] = run_id
+                raw_file_contents.loc[id, "Status"] = f"{status} {run_name} ({letter})"
 
             # Write the result of the run to the csv
             target = Path("result.csv")
-            df_raw.to_csv(target, index=False)
+            raw_file_contents.to_csv(target, index=False)
+            file.unlink()
+            target.rename(file)
+
+        # Write if .yaml
+        elif isinstance(raw_file_contents, dict):
+
+            if "status" not in raw_file_contents or not isinstance(
+                raw_file_contents["status"], dict
+            ):
+                raw_file_contents["status"] = {}
+
+            raw_file_contents["parent"] = parent_run_id
+
+            for id, letter, returncode, run_id, run_name, status in results:
+                raw_file_contents["status"][
+                    int(df_workload.loc[id, "Workload"])
+                ] = f"{status} {run_id} ({df_workload.loc[id, 'Params']})"
+
+            # Write the result of the run to the yaml file
+            target = Path("result.yaml")
+            with open(target, "w") as f:
+                yaml.dump(raw_file_contents, f)
             file.unlink()
             target.rename(file)

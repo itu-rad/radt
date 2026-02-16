@@ -1,0 +1,12 @@
+name: Sweep name
+experiment: 0
+collocation: "-"
+devices: 0
+listeners: smi+top
+file: ../pytorch/cifar10_context.py
+method: grid
+parameters:
+  batch-size:
+    values: [8, 16, 32, 64, 128]
+  learning-rate: 
+    values: [0.001, 0.0015, 0.002]

@@ -1,3 +1,0 @@
-Experiment,Workload,Status,Run,Devices,Collocation,File,Listeners,Params
-2,22,,,2,1g.5gb,cifar10.py,smi+top,--batch-size 8
-2,22,,,2,3g.20gb,cifar10.py,smi+top,--batch-size 8

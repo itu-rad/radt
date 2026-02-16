@@ -22,6 +22,17 @@ parser.add_argument(
     metavar="N",
     help="Input batch size for training (default: 8)",
 )
+parser.add_argument(
+    "-lr",
+    "--learning-rate",
+    type=float,
+    default=0.001,
+    metavar="N",
+    help="Learning rate (default: 0.001)",
+)
+
+
+learning_rate = parser.parse_args().learning_rate
 batch_size = parser.parse_args().batch_size
 
 trainset = torchvision.datasets.CIFAR10(
@@ -85,11 +96,11 @@ net.to(device)
 import torch.optim as optim
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+optimizer = optim.SGD(net.parameters(), lr=learning_rate, momentum=0.9)
 
 print("Training Cifar10 with batch size ", batch_size)
 with radt.run.RADTBenchmark() as run:
-    for epoch in range(100):  # loop over the dataset multiple times
+    for epoch in range(20):  # loop over the dataset multiple times
         run.log_metric("ML - epoch", epoch, epoch)
 
         running_loss = 0.0
@@ -108,9 +119,12 @@ with radt.run.RADTBenchmark() as run:
 
             # print statistics
             running_loss += loss.item()
-            if True:#i % 20 == 19:  # print every 20 mini-batches
+            if i % 20 == 19:  # print every 20 mini-batches
                 print(f"[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}")
                 run.log_metric("ML - loss", running_loss / 2000, epoch)
                 running_loss = 0.0
+
+            if i > 50:
+                break
 
 print("Finished Training")

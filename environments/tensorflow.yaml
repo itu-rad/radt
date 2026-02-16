@@ -10,5 +10,6 @@ dependencies:
   - pip:
       - tensorflow
       - mlflow>=1.0
+      - radt
       - tensorboardX
       - psutil
