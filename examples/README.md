@@ -33,10 +33,6 @@ The nginx service exposes port 80 with the following routes:
 - MLflow: http://<host>/mlflow/
 - MinIO console: http://<host>/minio/
 
-The nginx service uses basic auth. Credentials are stored in `.htpasswd` at the repo root.
-
-4. Run the SQL commands found in the [frontend/server/queries](/frontend/server/queries) folder to prepare the database.
-
 ### **2. Docker containers**
 
 The containers can also be deployed manually/individually if desired:
