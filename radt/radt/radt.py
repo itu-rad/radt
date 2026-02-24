@@ -198,6 +198,7 @@ def schedule_external(args, df, group_name=None):
         run_definitions (list): List of run definitions
     """
 
-    parsed_args = schedule_parser(args)
+    parser = schedule_parser()
+    parsed_args = parser.parse_args(args)
     args_passthrough = []
     start_schedule(parsed_args, df, args_passthrough, group_name=group_name)
