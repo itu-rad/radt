@@ -56,7 +56,10 @@ class SMIThread(Process):
                         m["system/SMI - Mem Util"] = float(line[3]) / 100
                     except ValueError:
                         m["system/SMI - Mem Util"] = float(-1)
-                    m["system/SMI - Mem Used"] = float(line[4])
+                    try:
+                        m["system/SMI - Mem Used"] = float(line[4])
+                    except ValueError:
+                        m["system/SMI - Mem Used"] = float(-1)
                     m["system/SMI - Performance State"] = int(line[5][1:])
                     # enqueue using parsed timestamp in ms
                     self._enqueue_metrics(m)
