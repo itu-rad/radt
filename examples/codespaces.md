@@ -4,7 +4,7 @@ GitHub Codespaces provides a zero-provisioning way to run the radT server stack 
 
 ## 1. Open the repository in a Codespace
 
-Select **4-core / 16 GB** for the machine type. The 2-core tier works but is slow during the initial React build of the `visual` service.
+The **2-core / 8 GB** machine type is sufficient. Expect the initial React build of the `visual` service to take several minutes on first start; subsequent starts reuse the built artifacts.
 
 The browser-based VS Code workspace opens with the repository checked out.
 
@@ -17,7 +17,7 @@ docker compose up -d
 docker compose ps
 ```
 
-All services should report a healthy state within one to two minutes. The `visual` service performs an `npm install` and a React build on first start; this is the slowest step.
+All services should eventually report a healthy state. The `visual` service is the slowest to come up on first start because of the React build noted above.
 
 nginx listens on port **80**, which Codespaces forwards automatically.
 
