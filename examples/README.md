@@ -11,7 +11,7 @@ Running RADT requires some infrastructure to be set up, namely:
 - **S3 database** for artifact tracking, such as log files and traces. We use [**MinIO**](https://min.io/).
 - **Visualisation server** for the visualisation front-end (React) plus a small Node API.
 
-We provide two options for deploying these requirements:
+We provide three options for deploying these requirements:
 
 ### **1. Docker Compose (Recommended)**
 
@@ -33,7 +33,21 @@ The nginx service exposes port 80 with the following routes:
 - MLflow: http://<host>/mlflow/
 - MinIO console: http://<host>/minio/
 
-### **2. Docker containers**
+### **2. GitHub Codespaces**
+
+For a zero-setup trial (no local Docker, no VM), open the repo in a free GitHub Codespace:
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/itu-rad/radt?quickstart=1)
+
+Then inside the Codespace:
+
+```bash
+docker compose up -d
+```
+
+Make port 80 public in the **PORTS** tab and share the `https://<codespace>-80.app.github.dev` URL. Full walkthrough, including idle-timeout and credential-hardening tips, in [codespaces.md](codespaces.md).
+
+### **3. Docker containers**
 
 The containers can also be deployed manually/individually if desired:
 
@@ -43,7 +57,7 @@ The containers can also be deployed manually/individually if desired:
 - [RADT Frontend](/frontend/)
 - [RADT Frontend API](/frontend/server/)
 
-### **3. From source**
+### **4. From source**
 
 If you do not want to use containers, you can deploy the frontend manually.
 Clone this repository and follow the instructions in [frontend](/frontend) to build the visualization environment manually.
