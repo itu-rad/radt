@@ -22,8 +22,13 @@ services:
       - minio
     container_name: mc
     entrypoint: >
-      /bin/sh -c " /usr/bin/mc alias set minio http://minio:9000 minio_user minio_password && /usr/bin/mc mb minio/mlflow-storage; exit 0; "
-
+        /bin/sh -c "
+        until /usr/bin/mc alias set minio http://minio:9000 minio_user minio_password; do
+          echo 'waiting for minio...'; sleep 1;
+        done;
+        /usr/bin/mc mb --ignore-existing minio/mlflow-storage;
+        exit 0;
+        "
   postgres:
     image: postgres:17
     ports:
