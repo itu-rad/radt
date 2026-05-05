@@ -41,25 +41,40 @@ class SMIThread(Process):
         for line in io.TextIOWrapper(self.smi.stdout, encoding="utf-8"):
             line = line.split(", ")
             if len(line) > 1 and line[0] != "#":
-                try:
                     m = {}
-                    m["system/SMI - Power Draw"] = float(line[0])
+
+                    try:
+                        m["system/SMI - Power Draw"] = float(line[0])
+                    except ValueError:
+                        m["system/SMI - Power Draw"] = float(-1)
+
+                    try:
                     m["system/SMI - Timestamp"] = datetime.strptime(
-                        line[1] + "000", r"%Y/%m/%d %H:%M:%S.%f"
-                    ).timestamp()
+                            line[1] + "000", r"%Y/%m/%d %H:%M:%S.%f"
+                        ).timestamp()
+                    except ValueError:
+                        m["system/SMI - Timestamp"] = float(-1)
 
                     try:
                         m["system/SMI - GPU Util"] = float(line[2]) / 100
                     except ValueError:
                         m["system/SMI - GPU Util"] = float(-1)
+                    
                     try:
                         m["system/SMI - Mem Util"] = float(line[3]) / 100
                     except ValueError:
                         m["system/SMI - Mem Util"] = float(-1)
-                    m["system/SMI - Mem Used"] = float(line[4])
-                    m["system/SMI - Performance State"] = int(line[5][1:])
+                    
+                    try:
+                        m["system/SMI - Mem Used"] = float(line[4])
+                    except ValueError:
+                        m["system/SMI - Mem Used"] = float(-1)
+                    
+                    try:
+                        m["system/SMI - Performance State"] = int(line[5][1:])
+                    except ValueError:
+                        m["system/SMI - Performance State"] = int(-1)
+                    
                     # enqueue using parsed timestamp in ms
-                    self._enqueue_metrics(m)
-                except ValueError as e:
-                    print("SMI Listener failed to report metrics")
-                    break
+                    if m:
+                        self._enqueue_metrics(m)
