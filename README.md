@@ -9,6 +9,26 @@ radT (Resource Aware Data science Tracker) is an extension to MLFlow that simpli
 This work has been published at the SIGMOD workshop DEEM 2023: [Data Management and Visualization for Benchmarking
 Deep Learning Training Systems](https://itu-dasyalab.github.io/RAD/publication/papers/DEEM2023.pdf)
 
+## Try radT now
+
+Spin up the full server stack (MLflow + Postgres + MinIO + dashboards) in a free GitHub Codespace — no local Docker, no VM, no setup:
+
+<div align="center">
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/itu-rad/radt?quickstart=1)
+
+</div>
+
+Then, in the Codespace terminal:
+
+```bash
+docker compose up -d
+```
+
+Make port **80** public in the **PORTS** tab and you have a live tracking server you can point clients at. Full walkthrough in [examples/codespaces.md](examples/codespaces.md).
+
+## Install the client
+
 ```sh
 pip install radt
 ```
