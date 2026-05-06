@@ -40,7 +40,7 @@ pip install radt
 
 ## Releases
 
-The current release is `0.2.28`. radT has been recently released and is frequently receiving updates.
+The current release is `0.2.29`. radT has been recently released and is frequently receiving updates.
 
 If you find any issues or bugs, feel free to message `titr (at) itu.dk` or open an issue in this repository.
 
@@ -164,6 +164,7 @@ Example files live in [examples/yaml](examples/yaml).
 
 
 ### Changelog
+- 0.2.29: Resolved an issue with listeners not reporting exceptions
 - 0.2.28: Resolved an issue with the SMI listener
 - 0.2.27: Fixed an issue with external scheduling
 - 0.2.26: Added .yaml support, resolved issue with runs sometimes not terminating
