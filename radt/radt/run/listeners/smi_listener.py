@@ -18,8 +18,15 @@ class SMIThread(Process):
 
     def _enqueue_metrics(self, metrics, timestamp_ms=None):
         if self.mlflow_buffer:
-            ts = int(timestamp_ms) if timestamp_ms is not None else int(time.time() * 1000)
-            entries = [{"key": k, "value": v, "timestamp": ts, "step": 0} for k, v in metrics.items()]
+            ts = (
+                int(timestamp_ms)
+                if timestamp_ms is not None
+                else int(time.time() * 1000)
+            )
+            entries = [
+                {"key": k, "value": v, "timestamp": ts, "step": 0}
+                for k, v in metrics.items()
+            ]
             try:
                 for e in entries:
                     self.mlflow_buffer.put(e)
@@ -41,40 +48,40 @@ class SMIThread(Process):
         for line in io.TextIOWrapper(self.smi.stdout, encoding="utf-8"):
             line = line.split(", ")
             if len(line) > 1 and line[0] != "#":
-                    m = {}
+                m = {}
 
-                    try:
-                        m["system/SMI - Power Draw"] = float(line[0])
-                    except ValueError:
-                        m["system/SMI - Power Draw"] = float(-1)
+                try:
+                    m["system/SMI - Power Draw"] = float(line[0])
+                except ValueError:
+                    m["system/SMI - Power Draw"] = float(-1)
 
-                    try:
+                try:
                     m["system/SMI - Timestamp"] = datetime.strptime(
-                            line[1] + "000", r"%Y/%m/%d %H:%M:%S.%f"
-                        ).timestamp()
-                    except ValueError:
-                        m["system/SMI - Timestamp"] = float(-1)
+                        line[1] + "000", r"%Y/%m/%d %H:%M:%S.%f"
+                    ).timestamp()
+                except ValueError:
+                    m["system/SMI - Timestamp"] = float(-1)
 
-                    try:
-                        m["system/SMI - GPU Util"] = float(line[2]) / 100
-                    except ValueError:
-                        m["system/SMI - GPU Util"] = float(-1)
-                    
-                    try:
-                        m["system/SMI - Mem Util"] = float(line[3]) / 100
-                    except ValueError:
-                        m["system/SMI - Mem Util"] = float(-1)
-                    
-                    try:
-                        m["system/SMI - Mem Used"] = float(line[4])
-                    except ValueError:
-                        m["system/SMI - Mem Used"] = float(-1)
-                    
-                    try:
-                        m["system/SMI - Performance State"] = int(line[5][1:])
-                    except ValueError:
-                        m["system/SMI - Performance State"] = int(-1)
-                    
-                    # enqueue using parsed timestamp in ms
-                    if m:
-                        self._enqueue_metrics(m)
+                try:
+                    m["system/SMI - GPU Util"] = float(line[2]) / 100
+                except ValueError:
+                    m["system/SMI - GPU Util"] = float(-1)
+
+                try:
+                    m["system/SMI - Mem Util"] = float(line[3]) / 100
+                except ValueError:
+                    m["system/SMI - Mem Util"] = float(-1)
+
+                try:
+                    m["system/SMI - Mem Used"] = float(line[4])
+                except ValueError:
+                    m["system/SMI - Mem Used"] = float(-1)
+
+                try:
+                    m["system/SMI - Performance State"] = int(line[5][1:])
+                except ValueError:
+                    m["system/SMI - Performance State"] = int(-1)
+
+                # enqueue using parsed timestamp in ms
+                if m:
+                    self._enqueue_metrics(m)
