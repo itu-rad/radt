@@ -1,13 +1,9 @@
 import atexit
 import logging
-import multiprocessing
 import queue
-from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+import threading
+
 from mlflow.tracing.export.async_export_queue import Task
-from mlflow.tracing import provider
-from mlflow.entities.span import Span
-from mlflow.entities.trace import Trace
 
 _logger = logging.getLogger(__name__)
 
@@ -19,8 +15,9 @@ def _patch_mlflow_async_export_queue():
         import mlflow.tracing.export.async_export_queue as mlflow_async_module
 
         mlflow_async_module.AsyncTraceExportQueue = AsyncTraceExportQueueV2
-        print(
-            "Patched mlflow.tracing.export.async_export_queue.AsyncTraceExportQueue with AsyncTraceExportQueueV2"
+        _logger.info(
+            "Patched mlflow.tracing.export.async_export_queue.AsyncTraceExportQueue "
+            "with AsyncTraceExportQueueV2"
         )
     except Exception as e:
         _logger.warning(
@@ -28,236 +25,169 @@ def _patch_mlflow_async_export_queue():
         )
 
 
-class _TraceExportLogger(multiprocessing.Process):
-    """
-    Background process that batches and flushes trace export tasks from a queue.
-    Batches spans by merging lists from tasks with the same callable.
-    """
-
-    def __init__(self, buffer, flush_interval=1.0):
-        super().__init__(daemon=True)
-
-        self._exporter = provider._get_trace_exporter()
-        self._buffer = buffer
-        self._flush_interval = float(flush_interval)
-        self._stop_event = multiprocessing.Event()
-
-    def run(self):
-        """Periodically flush tasks from the queue until stopped."""
-        while not self._stop_event.is_set():
-            try:
-                self._flush_once()
-            except Exception as e:
-                _logger.error(f"TraceExportLogger error during flush: {e}")
-            self._stop_event.wait(self._flush_interval)
-
-        # On stop: repeatedly flush until no remaining tasks
-        while True:
-            try:
-                flushed_any = self._flush_once(final=True)
-            except Exception as e:
-                _logger.error(f"TraceExportLogger final flush error: {e}")
-                flushed_any = False
-            if not flushed_any:
-                break
-
-    def _drain_queue(self):
-        """Drain all currently queued items into a list without blocking."""
-        drained = []
-        try:
-            while True:
-                item = self._buffer.get_nowait()
-                drained.append(item)
-        except queue.Empty:
-            pass
-        return drained
-
-    def _flush_once(self, final=False):
-        """Drain, batch, and execute tasks from the queue."""
-        to_flush = self._drain_queue()
-        if not to_flush:
-            return False
-
-        SEQUENCE_MODE = False  # for debugging
-        if SEQUENCE_MODE:
-            for task in to_flush:
-                if task[0] == 0:
-                    self._exporter._log_trace(t := Trace.from_dict(task[1]), [])
-                    print("Logged trace:", t)
-                else:
-                    self._exporter._log_spans(
-                        0, sl := [Span.from_dict(span) for span in task[1]]
-                    )  # TODO: need support for custom exp ids
-                    print("Logged spans:", sl)
-
-            # Group tasks by handler, merging span lists from the second argument
-            return True
-
-        trace_list = []
-        span_list = []
-
-        for task in to_flush:
-            if task[0] == 0:
-                trace_list.append(Trace.from_dict(task[1]))
-            else:
-                span_list.extend(Span.from_dict(span) for span in task[1])
-
-        # Execute batched trace uploads
-        # failed_traces = []
-        for trace in trace_list:
-            # try:
-            # print(self._exporter._client.store)
-            self._exporter._log_trace(trace, [])  # TODO: support custom prompts
-            print("Logged trace:", trace)
-            # except Exception as e:
-            #     _logger.error(f"Failed to log trace {trace.info.trace_id}: {e}")
-            #     failed_traces.append((0, trace.to_dict()))
-
-            #     # Requeue failed traces
-            #     for failed_task in failed_traces:
-            #         try:
-            #             self._buffer.put(failed_task)
-            #         except Exception as e:
-            #             _logger.error(f"Failed to requeue trace: {e}")
-
-        # Execute batched span uploads
-        # try:
-        # print(self._exporter._client.store)
-        self._exporter._log_spans(0, span_list)  # TODO: need support for custom exp ids
-        print("Logged:", len(span_list))
-        # except Exception as e:
-        #     _logger.error(f"Failed to log spans batch: {e}")
-        #     # On failure, requeue the span tasks
-        #     span_dicts = [span.to_dict() for span in span_list]
-        #     try:
-        #         self._buffer.put((1, span_dicts))
-        #     except Exception as requeue_error:
-        #         _logger.error(f"Failed to requeue spans: {requeue_error}")
-
-        return True
-
-    def terminate(self):
-        """Stop the process and wait for it to finish."""
-        self._stop_event.set()
-        self.join()
-
-
 class AsyncTraceExportQueueV2:
-    """
-    A queue-based asynchronous tracing export processor.
+    """A thread-based asynchronous tracing export processor.
 
-    Queues tasks for batch processing. Tasks with the same callable and list-based
-    spans arguments are automatically batched together for efficient export.
+    ``put()`` is non-blocking: it appends the live ``Task`` onto an in-process
+    queue and returns immediately. A single daemon thread drains the queue and
+    forwards tasks to the mlflow exporter, coalescing every queued span into one
+    ``_log_spans`` call per experiment per flush. This is the key win over native
+    mlflow on a high-latency link: native fires ~one request per span, while this
+    collapses a whole flush window into a single batched request.
+
+    The flusher wakes on whichever comes first:
+      * ``flush_interval`` seconds elapsing (latency bound), or
+      * the queue reaching ``max_batch_size`` (throughput bound).
+
+    Trace export is network (I/O) bound, so a thread - not a process - is the
+    right tool: no per-span serialization, no IPC, and the GIL is released
+    during the network call.
     """
 
-    def __init__(self, flush_interval=5.0):
-        self._buffer = None
-        self._manager = None
+    def __init__(self, flush_interval=0.2, max_batch_size=100):
+        self._queue = queue.Queue()
         self._flush_interval = float(flush_interval)
-        self._process = None
+        self._max_batch_size = int(max_batch_size)
+
+        self._thread = None
         self._is_active = False
+
+        self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
+        self._state_lock = threading.Lock()
+        self._flush_lock = threading.Lock()
         self._atexit_registered = False
 
-        self._exporter = provider._get_trace_exporter()
-        self.spans_to_publish = []
-
     def put(self, task: Task):
-        """Put a new task to the queue for processing."""
+        """Queue a task for export. Non-blocking."""
         if not self.is_active():
             self.activate()
 
-        if self._exporter is None:
-            self._exporter = provider._get_trace_exporter()
+        self._queue.put(task)
 
-        if "trace" in str(task.handler).lower():
-            print("Putting trace task")
-            self._exporter._log_trace(task.args[0], task.args[1])
-        else:
-            # spans
-            print("Putting spans task ", len(self.spans_to_publish))
-            span_dicts = [span.to_immutable_span().to_dict() for span in task.args[1]]
-            self.spans_to_publish.extend([Span.from_dict(span) for span in span_dicts])
-
-            # self._exporter._log_spans(task.args[0], self.spans_to_publish)
-
-        if len(self.spans_to_publish) >= 30:
-            print("Auto-flushing spans, count:", len(self.spans_to_publish))
-            self._exporter._log_spans(0, self.spans_to_publish)
-            self.spans_to_publish = []
-
-        # try:
-        #     # Non-blocking put to avoid blocking the main application
-        #     if "trace" in str(task.handler).lower():
-        #         task = (0, task.args[0].to_dict())
-        #     else:
-        #         # spans
-        #         task = (
-        #             1,
-        #             [span.to_immutable_span().to_dict() for span in task.args[1]],
-        #         )
-
-        #     # for a in task.args:
-        #     #     print("Putting task arg:", a)
-        #     # print("Putting task arg", task.args[0])  # span.to_dict()
-        #     self._buffer.put(task, block=False)
-        # except queue.Full:
-        #     _logger.warning(
-        #         "Trace export queue is full, trace will be discarded. "
-        #         "Consider increasing the queue size or reducing trace volume."
-        #     )
+        # Wake the flusher early once enough work has accumulated.
+        if self._queue.qsize() >= self._max_batch_size:
+            self._wake_event.set()
 
     def activate(self) -> None:
-        """Activate the async queue to start processing tasks."""
-        if self._is_active:
-            return
+        """Start the background flush thread."""
+        with self._state_lock:
+            if self._is_active:
+                return
 
-        # Create queue here (lazy) so it's created in the parent process context
-        if self._buffer is None:
-            self._manager = multiprocessing.Manager()
-            self._buffer = self._manager.Queue()
+            self._stop_event.clear()
+            self._thread = threading.Thread(
+                target=self._run, name="radt-trace-export", daemon=True
+            )
+            self._thread.start()
+            self._is_active = True
 
-        self._process = _TraceExportLogger(self._buffer, self._flush_interval)
-        self._process.start()
-        self._is_active = True
-
-        # Register atexit callback to ensure flush on program exit
-        if not self._atexit_registered:
-            atexit.register(self._atexit_callback)
-            self._atexit_registered = True
+            if not self._atexit_registered:
+                atexit.register(self._atexit_callback)
+                self._atexit_registered = True
 
     def is_active(self) -> bool:
         """Check if the queue is actively processing tasks."""
         return self._is_active
 
+    def _run(self):
+        """Drain and flush the queue until stopped."""
+        while not self._stop_event.is_set():
+            # Wait for the interval to elapse or an early wake (batch full).
+            self._wake_event.wait(self._flush_interval)
+            self._wake_event.clear()
+            try:
+                self._flush_once()
+            except Exception as e:
+                _logger.error(f"TraceExportLogger error during flush: {e}")
+
+        # Final drain on stop.
+        try:
+            self._flush_once()
+        except Exception as e:
+            _logger.error(f"TraceExportLogger final flush error: {e}")
+
+    def _drain_queue(self):
+        """Drain all currently queued tasks without blocking."""
+        drained = []
+        try:
+            while True:
+                drained.append(self._queue.get_nowait())
+        except queue.Empty:
+            pass
+        return drained
+
+    @staticmethod
+    def _is_trace_task(task: Task) -> bool:
+        # mlflow enqueues either exporter._log_trace or exporter._log_spans as the handler.
+        return getattr(task.handler, "__name__", "") == "_log_trace"
+
+    def _flush_once(self):
+        """Export everything currently queued, batching spans per experiment.
+
+        Span tasks carry ``args == (experiment_id, spans)``; we merge the spans
+        of every queued task that shares an ``experiment_id`` into a single
+        ``_log_spans(experiment_id, spans)`` call. Trace-info tasks are infrequent
+        and forwarded individually.
+
+        Guarded by ``_flush_lock`` so a synchronous ``flush()`` from another
+        thread never exports concurrently with the worker thread. Each task's
+        bound handler is invoked directly, so this never has to resolve (and
+        possibly mismatch) the global exporter instance.
+        """
+        with self._flush_lock:
+            tasks = self._drain_queue()
+            if not tasks:
+                return
+
+            trace_tasks = []
+            spans_by_experiment = {}
+            log_spans_handler = None
+
+            for task in tasks:
+                if self._is_trace_task(task):
+                    trace_tasks.append(task)
+                else:
+                    experiment_id, spans = task.args[0], task.args[1]
+                    log_spans_handler = task.handler  # bound exporter._log_spans
+                    spans_by_experiment.setdefault(experiment_id, []).extend(spans)
+
+            # Trace-info uploads first; mlflow's _log_trace already swallows its
+            # own network errors, so a failure here won't sink the batch.
+            for task in trace_tasks:
+                task.handler(*task.args)
+
+            # One batched request per experiment.
+            if log_spans_handler is not None:
+                for experiment_id, spans in spans_by_experiment.items():
+                    log_spans_handler(experiment_id, spans)
+
+    def flush(self, terminate=False) -> None:
+        """Synchronously export all queued tasks.
+
+        Args:
+            terminate: If True, stop the worker thread after flushing.
+        """
+        if not self.is_active():
+            return
+
+        try:
+            self._flush_once()
+        except Exception as e:
+            _logger.error(f"Error during synchronous flush: {e}")
+
+        if terminate:
+            self._stop_event.set()
+            self._wake_event.set()
+            if self._thread is not None:
+                self._thread.join(timeout=30)
+            self._is_active = False
+
     def _atexit_callback(self) -> None:
-        """Callback executed on program exit to ensure all traces are flushed."""
+        """Flush remaining traces on program exit."""
         try:
             _logger.info("Flushing trace export queue on program exit...")
             self.flush(terminate=True)
             _logger.info("Trace export queue flushed successfully.")
         except Exception as e:
             _logger.error(f"Error flushing trace export queue on exit: {e}")
-
-    def flush(self, terminate=False) -> None:
-        """
-        Flush the async queue by waiting for all tasks to be processed.
-
-        Args:
-            terminate: If True, shut down the process after flushing.
-        """
-        if not self.is_active():
-            return
-
-        self._exporter._log_spans(0, self.spans_to_publish)
-        self.spans_to_publish = []
-
-        if self._process is not None:
-            # Signal the process to stop, which will trigger final flush
-            self._process.terminate()
-            # Wait for the process to finish flushing
-            self._process.join(timeout=30)  # Give it up to 30 seconds to finish
-            self._is_active = False
-
-        # Restart if not terminating
-        if not terminate:
-            self.activate()
