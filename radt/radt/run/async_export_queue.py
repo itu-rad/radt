@@ -1,3 +1,4 @@
+import atexit
 import logging
 import multiprocessing
 import queue
@@ -77,7 +78,7 @@ class _TraceExportLogger(multiprocessing.Process):
         if not to_flush:
             return False
 
-        SEQUENCE_MODE = True  # for debugging
+        SEQUENCE_MODE = False  # for debugging
         if SEQUENCE_MODE:
             for task in to_flush:
                 if task[0] == 0:
@@ -102,35 +103,36 @@ class _TraceExportLogger(multiprocessing.Process):
                 span_list.extend(Span.from_dict(span) for span in task[1])
 
         # Execute batched trace uploads
-        failed_traces = []
+        # failed_traces = []
         for trace in trace_list:
-            try:
-                self._exporter._log_trace(trace, [])  # TODO: support custom prompts
-            except Exception as e:
-                _logger.error(f"Failed to log trace {trace.info.trace_id}: {e}")
-                failed_traces.append((0, trace.to_dict()))
+            # try:
+            # print(self._exporter._client.store)
+            self._exporter._log_trace(trace, [])  # TODO: support custom prompts
+            print("Logged trace:", trace)
+            # except Exception as e:
+            #     _logger.error(f"Failed to log trace {trace.info.trace_id}: {e}")
+            #     failed_traces.append((0, trace.to_dict()))
 
-            # Requeue failed traces
-            for failed_task in failed_traces:
-                try:
-                    self._buffer.put(failed_task)
-                except Exception as e:
-                    _logger.error(f"Failed to requeue trace: {e}")
+            #     # Requeue failed traces
+            #     for failed_task in failed_traces:
+            #         try:
+            #             self._buffer.put(failed_task)
+            #         except Exception as e:
+            #             _logger.error(f"Failed to requeue trace: {e}")
 
         # Execute batched span uploads
-        try:
-            self._exporter._log_spans(
-                0, span_list
-            )  # TODO: need support for custom exp ids
-            print("Logged:", span_list)
-        except Exception as e:
-            _logger.error(f"Failed to log spans batch: {e}")
-            # On failure, requeue the span tasks
-            span_dicts = [span.to_dict() for span in span_list]
-            try:
-                self._buffer.put((1, span_dicts))
-            except Exception as requeue_error:
-                _logger.error(f"Failed to requeue spans: {requeue_error}")
+        # try:
+        # print(self._exporter._client.store)
+        self._exporter._log_spans(0, span_list)  # TODO: need support for custom exp ids
+        print("Logged:", len(span_list))
+        # except Exception as e:
+        #     _logger.error(f"Failed to log spans batch: {e}")
+        #     # On failure, requeue the span tasks
+        #     span_dicts = [span.to_dict() for span in span_list]
+        #     try:
+        #         self._buffer.put((1, span_dicts))
+        #     except Exception as requeue_error:
+        #         _logger.error(f"Failed to requeue spans: {requeue_error}")
 
         return True
 
@@ -154,29 +156,55 @@ class AsyncTraceExportQueueV2:
         self._flush_interval = float(flush_interval)
         self._process = None
         self._is_active = False
+        self._atexit_registered = False
+
+        self._exporter = provider._get_trace_exporter()
+        self.spans_to_publish = []
 
     def put(self, task: Task):
         """Put a new task to the queue for processing."""
         if not self.is_active():
             self.activate()
 
-        try:
-            # Non-blocking put to avoid blocking the main application
-            if "trace" in str(task.handler).lower():
-                task = (0, task.args[0].to_dict())
-            else:
-                # spans
-                task = (1, [span.to_dict() for span in task.args[1]])
+        if self._exporter is None:
+            self._exporter = provider._get_trace_exporter()
 
-            # for a in task.args:
-            #     print("Putting task arg:", a)
-            # print("Putting task arg", task.args[0])  # span.to_dict()
-            self._buffer.put(task, block=False)
-        except queue.Full:
-            _logger.warning(
-                "Trace export queue is full, trace will be discarded. "
-                "Consider increasing the queue size or reducing trace volume."
-            )
+        if "trace" in str(task.handler).lower():
+            print("Putting trace task")
+            self._exporter._log_trace(task.args[0], task.args[1])
+        else:
+            # spans
+            print("Putting spans task ", len(self.spans_to_publish))
+            span_dicts = [span.to_immutable_span().to_dict() for span in task.args[1]]
+            self.spans_to_publish.extend([Span.from_dict(span) for span in span_dicts])
+
+            # self._exporter._log_spans(task.args[0], self.spans_to_publish)
+
+        if len(self.spans_to_publish) >= 30:
+            print("Auto-flushing spans, count:", len(self.spans_to_publish))
+            self._exporter._log_spans(0, self.spans_to_publish)
+            self.spans_to_publish = []
+
+        # try:
+        #     # Non-blocking put to avoid blocking the main application
+        #     if "trace" in str(task.handler).lower():
+        #         task = (0, task.args[0].to_dict())
+        #     else:
+        #         # spans
+        #         task = (
+        #             1,
+        #             [span.to_immutable_span().to_dict() for span in task.args[1]],
+        #         )
+
+        #     # for a in task.args:
+        #     #     print("Putting task arg:", a)
+        #     # print("Putting task arg", task.args[0])  # span.to_dict()
+        #     self._buffer.put(task, block=False)
+        # except queue.Full:
+        #     _logger.warning(
+        #         "Trace export queue is full, trace will be discarded. "
+        #         "Consider increasing the queue size or reducing trace volume."
+        #     )
 
     def activate(self) -> None:
         """Activate the async queue to start processing tasks."""
@@ -192,9 +220,23 @@ class AsyncTraceExportQueueV2:
         self._process.start()
         self._is_active = True
 
+        # Register atexit callback to ensure flush on program exit
+        if not self._atexit_registered:
+            atexit.register(self._atexit_callback)
+            self._atexit_registered = True
+
     def is_active(self) -> bool:
         """Check if the queue is actively processing tasks."""
         return self._is_active
+
+    def _atexit_callback(self) -> None:
+        """Callback executed on program exit to ensure all traces are flushed."""
+        try:
+            _logger.info("Flushing trace export queue on program exit...")
+            self.flush(terminate=True)
+            _logger.info("Trace export queue flushed successfully.")
+        except Exception as e:
+            _logger.error(f"Error flushing trace export queue on exit: {e}")
 
     def flush(self, terminate=False) -> None:
         """
@@ -205,6 +247,9 @@ class AsyncTraceExportQueueV2:
         """
         if not self.is_active():
             return
+
+        self._exporter._log_spans(0, self.spans_to_publish)
+        self.spans_to_publish = []
 
         if self._process is not None:
             # Signal the process to stop, which will trigger final flush
