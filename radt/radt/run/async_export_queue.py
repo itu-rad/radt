@@ -61,9 +61,13 @@ class AsyncTraceExportQueueV2:
         # Hard upper bound on how long shutdown will wait for the final drain, so
         # the process always auto-stops even if the network has stalled.
         self._shutdown_timeout = _env_float("RADT_TRACE_SHUTDOWN_TIMEOUT", shutdown_timeout)
+        # Concurrency for the per-flush uploads (trace blobs are latency-bound and
+        # independent, so overlapping them is the main throughput lever).
+        self._upload_workers = max(1, int(_env_float("RADT_TRACE_UPLOAD_WORKERS", 8)))
         # Set RADT_TRACE_DEBUG=1 for a per-flush breakdown of where time goes.
         self._debug = os.environ.get("RADT_TRACE_DEBUG") == "1"
 
+        self._stats_lock = threading.Lock()
         # Cumulative diagnostics (trace tasks vs span tasks, spans, seconds).
         self._stat_trace_tasks = 0
         self._stat_trace_seconds = 0.0
@@ -143,10 +147,11 @@ class AsyncTraceExportQueueV2:
         # One-line shutdown summary so the bottleneck is visible without debug mode.
         leftover = self._queue.qsize()
         print(
-            f"radt[trace]: exported {self._stat_trace_tasks} trace upload(s) in "
-            f"{self._stat_trace_seconds:.1f}s + {self._stat_spans} span(s) "
-            f"({self._stat_span_tasks} task(s)) in {self._stat_span_seconds:.1f}s; "
-            f"errors={self._stat_errors}; not-flushed={leftover}",
+            f"radt[trace]: exported {self._stat_trace_tasks} trace upload(s) "
+            f"[{self._stat_trace_seconds:.1f}s work across {self._upload_workers} "
+            f"worker(s)] + {self._stat_spans} span(s) in {self._stat_span_tasks} req "
+            f"[{self._stat_span_seconds:.1f}s]; errors={self._stat_errors}; "
+            f"not-flushed={leftover}",
             file=sys.stderr, flush=True,
         )
 
@@ -173,70 +178,102 @@ class AsyncTraceExportQueueV2:
         except BaseException as e:
             _logger.warning(f"Inline trace export failed during shutdown: {e}")
 
-    def _flush_once(self):
-        """Export everything currently queued, batching spans per experiment.
+    def _timed_call(self, fn, args, n_spans):
+        """Run one upload (a _log_trace or a batched _log_spans), recording stats."""
+        is_trace = n_spans == 0
+        t0 = time.monotonic()
+        err = 0
+        try:
+            fn(*args)
+        except BaseException as e:
+            err = 1
+            _logger.warning(f"trace export call failed: {e}")
+        dt = time.monotonic() - t0
+        with self._stats_lock:
+            if is_trace:
+                self._stat_trace_tasks += 1
+                self._stat_trace_seconds += dt
+            else:
+                self._stat_span_tasks += 1
+                self._stat_spans += n_spans
+                self._stat_span_seconds += dt
+            self._stat_errors += err
 
-        Span tasks carry ``args == (experiment_id, spans)``; we merge the spans
-        of every queued task that shares an ``experiment_id`` into a single
-        ``_log_spans(experiment_id, spans)`` call. Trace-info tasks are infrequent
-        and forwarded individually.
+    def _run_parallel(self, work):
+        """Execute upload work items concurrently on a pool of daemon threads.
+
+        Trace-data uploads are independent, network-latency-bound round-trips, so
+        overlapping them is a large win on a slow link. Daemon threads (not a
+        ThreadPoolExecutor, whose non-daemon threads register an atexit join) so a
+        stalled upload can never block interpreter shutdown.
+        """
+        n_workers = min(self._upload_workers, len(work))
+        if n_workers <= 1:
+            for fn, args, n_spans in work:
+                self._timed_call(fn, args, n_spans)
+            return
+
+        local_q = queue.Queue()
+        for item in work:
+            local_q.put(item)
+
+        def worker():
+            while True:
+                try:
+                    fn, args, n_spans = local_q.get_nowait()
+                except queue.Empty:
+                    return
+                self._timed_call(fn, args, n_spans)
+
+        threads = [
+            threading.Thread(target=worker, name="radt-trace-upload", daemon=True)
+            for _ in range(n_workers)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    def _flush_once(self):
+        """Export everything currently queued.
+
+        Spans are coalesced per experiment into one ``_log_spans`` call; each
+        trace's data upload is a separate ``_log_trace`` call. All resulting
+        uploads for this flush are dispatched concurrently (``_run_parallel``).
 
         Guarded by ``_flush_lock`` so a synchronous ``flush()`` from another
-        thread never exports concurrently with the worker thread. Each task's
-        bound handler is invoked directly, so this never has to resolve (and
-        possibly mismatch) the global exporter instance.
+        thread never exports concurrently with the worker thread.
         """
         with self._flush_lock:
             tasks = self._drain_queue()
             if not tasks:
                 return
 
-            trace_tasks = []
             spans_by_experiment = {}
             log_spans_handler = None
+            work = []  # (fn, args, n_spans); n_spans == 0 marks a trace upload
 
             for task in tasks:
                 if self._is_trace_task(task):
-                    trace_tasks.append(task)
+                    work.append((task.handler, task.args, 0))
                 else:
                     experiment_id, spans = task.args[0], task.args[1]
                     log_spans_handler = task.handler  # bound exporter._log_spans
                     spans_by_experiment.setdefault(experiment_id, []).extend(spans)
 
-            # Trace-info uploads first; mlflow's _log_trace already swallows its
-            # own network errors, so a failure here won't sink the batch.
-            t0 = time.monotonic()
-            for task in trace_tasks:
-                try:
-                    task.handler(*task.args)
-                except BaseException as e:
-                    self._stat_errors += 1
-                    _logger.warning(f"trace task export failed: {e}")
-            self._stat_trace_tasks += len(trace_tasks)
-            self._stat_trace_seconds += time.monotonic() - t0
+            # One batched request per experiment (n_spans > 0 marks a span upload).
+            for experiment_id, spans in spans_by_experiment.items():
+                work.append((log_spans_handler, (experiment_id, spans), len(spans)))
 
-            # One batched request per experiment.
-            t0 = time.monotonic()
-            n_spans = 0
-            if log_spans_handler is not None:
-                for experiment_id, spans in spans_by_experiment.items():
-                    n_spans += len(spans)
-                    try:
-                        log_spans_handler(experiment_id, spans)
-                    except BaseException as e:
-                        self._stat_errors += 1
-                        _logger.warning(f"span task export failed: {e}")
-            self._stat_span_tasks += sum(
-                1 for t in tasks if not self._is_trace_task(t)
-            )
-            self._stat_spans += n_spans
-            self._stat_span_seconds += time.monotonic() - t0
+            n_trace = sum(1 for w in work if w[2] == 0)
+            self._run_parallel(work)
 
             if self._debug:
                 print(
-                    f"radt[trace]: flush {len(trace_tasks)} trace-task(s) in "
-                    f"{self._stat_trace_seconds:.1f}s cum | {n_spans} span(s) in "
-                    f"{len(spans_by_experiment)} req | errors={self._stat_errors}",
+                    f"radt[trace]: flushed {n_trace} trace upload(s) + "
+                    f"{len(spans_by_experiment)} span req across "
+                    f"{min(self._upload_workers, len(work))} worker(s); "
+                    f"cum errors={self._stat_errors}",
                     file=sys.stderr, flush=True,
                 )
 
