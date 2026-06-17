@@ -176,8 +176,11 @@ class RADTBenchmark:
         return _get_benchmark_instance()
 
     def __exit__(self, type, value, traceback):
-        # TODO: check if this should terminate
-        pass
+        # Delegate to the singleton so listeners/loggers are actually torn down
+        # and the mlflow run is ended. Without this the listener processes are
+        # left running and the interpreter hangs at exit joining them.
+        if _benchmark_instance is not None:
+            return _benchmark_instance.__exit__(type, value, traceback)
 
 
 class _RADTBenchmark:
@@ -259,6 +262,12 @@ class _RADTBenchmark:
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
                 inst = listener_class(self.run_id, self._buffer_listeners)
+                # Listeners run unbounded read loops over a subprocess (e.g.
+                # `nvidia-smi -l 1`) that never return on their own. Mark them
+                # daemonic so the interpreter terminates them at exit instead of
+                # blocking forever in multiprocessing's atexit join() if __exit__
+                # was bypassed (exception, manual mode, etc.).
+                inst.daemon = True
                 self.processes.append(inst)
 
         for process in self.processes:
