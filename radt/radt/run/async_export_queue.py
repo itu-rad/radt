@@ -1,12 +1,21 @@
 import atexit
 import logging
+import os
 import queue
 import sys
 import threading
+import time
 
 from mlflow.tracing.export.async_export_queue import Task
 
 _logger = logging.getLogger(__name__)
+
+
+def _env_float(name, default):
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
 
 
 # Monkey-patch mlflow's AsyncTraceExportQueue with our V2 implementation
@@ -47,11 +56,21 @@ class AsyncTraceExportQueueV2:
 
     def __init__(self, flush_interval=0.2, max_batch_size=100, shutdown_timeout=30.0):
         self._queue = queue.Queue()
-        self._flush_interval = float(flush_interval)
-        self._max_batch_size = int(max_batch_size)
+        self._flush_interval = _env_float("RADT_TRACE_FLUSH_INTERVAL", flush_interval)
+        self._max_batch_size = int(_env_float("RADT_TRACE_MAX_BATCH_SIZE", max_batch_size))
         # Hard upper bound on how long shutdown will wait for the final drain, so
         # the process always auto-stops even if the network has stalled.
-        self._shutdown_timeout = float(shutdown_timeout)
+        self._shutdown_timeout = _env_float("RADT_TRACE_SHUTDOWN_TIMEOUT", shutdown_timeout)
+        # Set RADT_TRACE_DEBUG=1 for a per-flush breakdown of where time goes.
+        self._debug = os.environ.get("RADT_TRACE_DEBUG") == "1"
+
+        # Cumulative diagnostics (trace tasks vs span tasks, spans, seconds).
+        self._stat_trace_tasks = 0
+        self._stat_trace_seconds = 0.0
+        self._stat_span_tasks = 0
+        self._stat_spans = 0
+        self._stat_span_seconds = 0.0
+        self._stat_errors = 0
 
         self._thread = None
         self._is_active = False
@@ -121,6 +140,16 @@ class AsyncTraceExportQueueV2:
                 _logger.error(f"TraceExportLogger final flush error: {e}")
                 break
 
+        # One-line shutdown summary so the bottleneck is visible without debug mode.
+        leftover = self._queue.qsize()
+        print(
+            f"radt[trace]: exported {self._stat_trace_tasks} trace upload(s) in "
+            f"{self._stat_trace_seconds:.1f}s + {self._stat_spans} span(s) "
+            f"({self._stat_span_tasks} task(s)) in {self._stat_span_seconds:.1f}s; "
+            f"errors={self._stat_errors}; not-flushed={leftover}",
+            file=sys.stderr, flush=True,
+        )
+
     def _drain_queue(self):
         """Drain all currently queued tasks without blocking."""
         drained = []
@@ -176,13 +205,40 @@ class AsyncTraceExportQueueV2:
 
             # Trace-info uploads first; mlflow's _log_trace already swallows its
             # own network errors, so a failure here won't sink the batch.
+            t0 = time.monotonic()
             for task in trace_tasks:
-                task.handler(*task.args)
+                try:
+                    task.handler(*task.args)
+                except BaseException as e:
+                    self._stat_errors += 1
+                    _logger.warning(f"trace task export failed: {e}")
+            self._stat_trace_tasks += len(trace_tasks)
+            self._stat_trace_seconds += time.monotonic() - t0
 
             # One batched request per experiment.
+            t0 = time.monotonic()
+            n_spans = 0
             if log_spans_handler is not None:
                 for experiment_id, spans in spans_by_experiment.items():
-                    log_spans_handler(experiment_id, spans)
+                    n_spans += len(spans)
+                    try:
+                        log_spans_handler(experiment_id, spans)
+                    except BaseException as e:
+                        self._stat_errors += 1
+                        _logger.warning(f"span task export failed: {e}")
+            self._stat_span_tasks += sum(
+                1 for t in tasks if not self._is_trace_task(t)
+            )
+            self._stat_spans += n_spans
+            self._stat_span_seconds += time.monotonic() - t0
+
+            if self._debug:
+                print(
+                    f"radt[trace]: flush {len(trace_tasks)} trace-task(s) in "
+                    f"{self._stat_trace_seconds:.1f}s cum | {n_spans} span(s) in "
+                    f"{len(spans_by_experiment)} req | errors={self._stat_errors}",
+                    file=sys.stderr, flush=True,
+                )
 
     def flush(self, terminate=False) -> None:
         """Export queued tasks.
