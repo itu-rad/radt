@@ -56,11 +56,22 @@ class AsyncTraceExportQueueV2:
         self._wake_event = threading.Event()
         self._state_lock = threading.Lock()
         self._flush_lock = threading.Lock()
-        self._atexit_registered = False
+
+        # Register at construction (NOT lazily in activate()) so our flush runs in
+        # the correct atexit LIFO order: AFTER mlflow's tracer-provider shutdown
+        # force-flushes its final buffered spans into us. Registering on first
+        # put() reverses that order and silently drops the shutdown spans.
+        atexit.register(self._atexit_callback)
 
     def put(self, task: Task):
         """Queue a task for export. Non-blocking."""
         if not self.is_active():
+            # Already terminated (shutdown in progress): don't revive the worker -
+            # nothing would ever drain it again. Export inline so late spans (e.g.
+            # from the tracer provider's shutdown force-flush) are not lost.
+            if self._stop_event.is_set():
+                self._handle_inline(task)
+                return
             self.activate()
 
         self._queue.put(task)
@@ -82,10 +93,6 @@ class AsyncTraceExportQueueV2:
             self._thread.start()
             self._is_active = True
 
-            if not self._atexit_registered:
-                atexit.register(self._atexit_callback)
-                self._atexit_registered = True
-
     def is_active(self) -> bool:
         """Check if the queue is actively processing tasks."""
         return self._is_active
@@ -101,11 +108,14 @@ class AsyncTraceExportQueueV2:
             except Exception as e:
                 _logger.error(f"TraceExportLogger error during flush: {e}")
 
-        # Final drain on stop.
-        try:
-            self._flush_once()
-        except Exception as e:
-            _logger.error(f"TraceExportLogger final flush error: {e}")
+        # Final drain on stop: loop until the queue stays empty, to catch tasks
+        # enqueued while we were stopping.
+        while not self._queue.empty():
+            try:
+                self._flush_once()
+            except BaseException as e:
+                _logger.error(f"TraceExportLogger final flush error: {e}")
+                break
 
     def _drain_queue(self):
         """Drain all currently queued tasks without blocking."""
@@ -121,6 +131,14 @@ class AsyncTraceExportQueueV2:
     def _is_trace_task(task: Task) -> bool:
         # mlflow enqueues either exporter._log_trace or exporter._log_spans as the handler.
         return getattr(task.handler, "__name__", "") == "_log_trace"
+
+    @staticmethod
+    def _handle_inline(task: Task) -> None:
+        """Export a single task synchronously (used for late shutdown spans)."""
+        try:
+            task.handler(*task.args)
+        except BaseException as e:
+            _logger.warning(f"Inline trace export failed during shutdown: {e}")
 
     def _flush_once(self):
         """Export everything currently queued, batching spans per experiment.
@@ -173,21 +191,30 @@ class AsyncTraceExportQueueV2:
 
         try:
             self._flush_once()
-        except Exception as e:
+        except BaseException as e:
             _logger.error(f"Error during synchronous flush: {e}")
 
         if terminate:
             self._stop_event.set()
             self._wake_event.set()
             if self._thread is not None:
-                self._thread.join(timeout=30)
+                try:
+                    self._thread.join(timeout=30)
+                except BaseException:
+                    pass
             self._is_active = False
 
     def _atexit_callback(self) -> None:
-        """Flush remaining traces on program exit."""
+        """Flush remaining traces on program exit.
+
+        Must never raise: atexit callbacks that propagate an exception (notably
+        KeyboardInterrupt on Ctrl+C, which is a BaseException) print an ugly
+        "Exception ignored in atexit callback" traceback.
+        """
         try:
-            _logger.info("Flushing trace export queue on program exit...")
             self.flush(terminate=True)
-            _logger.info("Trace export queue flushed successfully.")
-        except Exception as e:
-            _logger.error(f"Error flushing trace export queue on exit: {e}")
+        except BaseException as e:
+            try:
+                _logger.error(f"Error flushing trace export queue on exit: {e}")
+            except Exception:
+                pass
