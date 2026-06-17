@@ -66,14 +66,16 @@ class AsyncTraceExportQueueV2:
         self._upload_workers = max(1, int(_env_float("RADT_TRACE_UPLOAD_WORKERS", 8)))
         # Set RADT_TRACE_DEBUG=1 for a per-flush breakdown of where time goes.
         self._debug = os.environ.get("RADT_TRACE_DEBUG") == "1"
+        if self._debug:
+            # Surface mlflow's own swallowed export failures - notably _log_spans,
+            # which logs failures at DEBUG (invisible by default), so a server that
+            # silently drops spans looks like a clean run with empty traces.
+            logging.getLogger("mlflow").setLevel(logging.DEBUG)
 
         self._stats_lock = threading.Lock()
-        # Cumulative diagnostics (trace tasks vs span tasks, spans, seconds).
-        self._stat_trace_tasks = 0
-        self._stat_trace_seconds = 0.0
-        self._stat_span_tasks = 0
-        self._stat_spans = 0
-        self._stat_span_seconds = 0.0
+        # Cumulative diagnostics.
+        self._stat_tasks = 0
+        self._stat_seconds = 0.0
         self._stat_errors = 0
 
         self._thread = None
@@ -147,11 +149,9 @@ class AsyncTraceExportQueueV2:
         # One-line shutdown summary so the bottleneck is visible without debug mode.
         leftover = self._queue.qsize()
         print(
-            f"radt[trace]: exported {self._stat_trace_tasks} trace upload(s) "
-            f"[{self._stat_trace_seconds:.1f}s work across {self._upload_workers} "
-            f"worker(s)] + {self._stat_spans} span(s) in {self._stat_span_tasks} req "
-            f"[{self._stat_span_seconds:.1f}s]; errors={self._stat_errors}; "
-            f"not-flushed={leftover}",
+            f"radt[trace]: exported {self._stat_tasks} task(s) "
+            f"[{self._stat_seconds:.1f}s work across {self._upload_workers} "
+            f"worker(s)]; errors={self._stat_errors}; not-flushed={leftover}",
             file=sys.stderr, flush=True,
         )
 
@@ -166,11 +166,6 @@ class AsyncTraceExportQueueV2:
         return drained
 
     @staticmethod
-    def _is_trace_task(task: Task) -> bool:
-        # mlflow enqueues either exporter._log_trace or exporter._log_spans as the handler.
-        return getattr(task.handler, "__name__", "") == "_log_trace"
-
-    @staticmethod
     def _handle_inline(task: Task) -> None:
         """Export a single task synchronously (used for late shutdown spans)."""
         try:
@@ -178,52 +173,50 @@ class AsyncTraceExportQueueV2:
         except BaseException as e:
             _logger.warning(f"Inline trace export failed during shutdown: {e}")
 
-    def _timed_call(self, fn, args, n_spans):
-        """Run one upload (a _log_trace or a batched _log_spans), recording stats."""
-        is_trace = n_spans == 0
+    def _timed_call(self, task: Task):
+        """Run one task exactly as native mlflow would, recording stats."""
         t0 = time.monotonic()
         err = 0
         try:
-            fn(*args)
+            task.handler(*task.args)
         except BaseException as e:
             err = 1
             _logger.warning(f"trace export call failed: {e}")
         dt = time.monotonic() - t0
         with self._stats_lock:
-            if is_trace:
-                self._stat_trace_tasks += 1
-                self._stat_trace_seconds += dt
-            else:
-                self._stat_span_tasks += 1
-                self._stat_spans += n_spans
-                self._stat_span_seconds += dt
+            self._stat_tasks += 1
+            self._stat_seconds += dt
             self._stat_errors += err
 
-    def _run_parallel(self, work):
-        """Execute upload work items concurrently on a pool of daemon threads.
+    def _run_parallel(self, tasks):
+        """Execute tasks concurrently on a pool of daemon threads.
 
-        Trace-data uploads are independent, network-latency-bound round-trips, so
-        overlapping them is a large win on a slow link. Daemon threads (not a
-        ThreadPoolExecutor, whose non-daemon threads register an atexit join) so a
-        stalled upload can never block interpreter shutdown.
+        Each task is run verbatim (``task.handler(*task.args)``) - we do NOT
+        batch, reorder, or rewrite args. Merging spans across traces into one
+        ``_log_spans`` call diverged from native mlflow and made the 3.5.x server
+        fall back to artifact storage (empty SQL ``spans`` table). The throughput
+        win comes purely from overlapping these latency-bound uploads.
+
+        Daemon threads (not a ThreadPoolExecutor, whose non-daemon threads
+        register an atexit join) so a stalled upload can never block shutdown.
         """
-        n_workers = min(self._upload_workers, len(work))
+        n_workers = min(self._upload_workers, len(tasks))
         if n_workers <= 1:
-            for fn, args, n_spans in work:
-                self._timed_call(fn, args, n_spans)
+            for task in tasks:
+                self._timed_call(task)
             return
 
         local_q = queue.Queue()
-        for item in work:
-            local_q.put(item)
+        for task in tasks:
+            local_q.put(task)
 
         def worker():
             while True:
                 try:
-                    fn, args, n_spans = local_q.get_nowait()
+                    task = local_q.get_nowait()
                 except queue.Empty:
                     return
-                self._timed_call(fn, args, n_spans)
+                self._timed_call(task)
 
         threads = [
             threading.Thread(target=worker, name="radt-trace-upload", daemon=True)
@@ -237,9 +230,10 @@ class AsyncTraceExportQueueV2:
     def _flush_once(self):
         """Export everything currently queued.
 
-        Spans are coalesced per experiment into one ``_log_spans`` call; each
-        trace's data upload is a separate ``_log_trace`` call. All resulting
-        uploads for this flush are dispatched concurrently (``_run_parallel``).
+        Every queued task is run exactly as native mlflow would
+        (``task.handler(*task.args)``); the only change from native is that the
+        uploads for this flush are overlapped across a daemon-thread pool. See
+        ``_run_parallel`` for why we no longer batch/reorder.
 
         Guarded by ``_flush_lock`` so a synchronous ``flush()`` from another
         thread never exports concurrently with the worker thread.
@@ -249,30 +243,12 @@ class AsyncTraceExportQueueV2:
             if not tasks:
                 return
 
-            spans_by_experiment = {}
-            log_spans_handler = None
-            work = []  # (fn, args, n_spans); n_spans == 0 marks a trace upload
-
-            for task in tasks:
-                if self._is_trace_task(task):
-                    work.append((task.handler, task.args, 0))
-                else:
-                    experiment_id, spans = task.args[0], task.args[1]
-                    log_spans_handler = task.handler  # bound exporter._log_spans
-                    spans_by_experiment.setdefault(experiment_id, []).extend(spans)
-
-            # One batched request per experiment (n_spans > 0 marks a span upload).
-            for experiment_id, spans in spans_by_experiment.items():
-                work.append((log_spans_handler, (experiment_id, spans), len(spans)))
-
-            n_trace = sum(1 for w in work if w[2] == 0)
-            self._run_parallel(work)
+            self._run_parallel(tasks)
 
             if self._debug:
                 print(
-                    f"radt[trace]: flushed {n_trace} trace upload(s) + "
-                    f"{len(spans_by_experiment)} span req across "
-                    f"{min(self._upload_workers, len(work))} worker(s); "
+                    f"radt[trace]: flushed {len(tasks)} task(s) across "
+                    f"{min(self._upload_workers, len(tasks))} worker(s); "
                     f"cum errors={self._stat_errors}",
                     file=sys.stderr, flush=True,
                 )
