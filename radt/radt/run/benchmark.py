@@ -136,9 +136,12 @@ class _MLFlowLogger(multiprocessing.Process):
                     pass
             raise
 
-    def terminate(self):
+    def terminate(self, timeout=30.0):
+        # Bounded join: the final metric flush sends over the (possibly slow)
+        # network. The process is daemonic, so if it overruns we let it be
+        # abandoned at interpreter exit rather than blocking shutdown forever.
         self._stop_event.set()
-        self.join()
+        self.join(timeout=timeout)
 
 
 _benchmark_instance = None

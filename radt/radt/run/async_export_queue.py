@@ -1,6 +1,7 @@
 import atexit
 import logging
 import queue
+import sys
 import threading
 
 from mlflow.tracing.export.async_export_queue import Task
@@ -44,10 +45,13 @@ class AsyncTraceExportQueueV2:
     during the network call.
     """
 
-    def __init__(self, flush_interval=0.2, max_batch_size=100):
+    def __init__(self, flush_interval=0.2, max_batch_size=100, shutdown_timeout=30.0):
         self._queue = queue.Queue()
         self._flush_interval = float(flush_interval)
         self._max_batch_size = int(max_batch_size)
+        # Hard upper bound on how long shutdown will wait for the final drain, so
+        # the process always auto-stops even if the network has stalled.
+        self._shutdown_timeout = float(shutdown_timeout)
 
         self._thread = None
         self._is_active = False
@@ -181,28 +185,49 @@ class AsyncTraceExportQueueV2:
                     log_spans_handler(experiment_id, spans)
 
     def flush(self, terminate=False) -> None:
-        """Synchronously export all queued tasks.
+        """Export queued tasks.
 
         Args:
-            terminate: If True, stop the worker thread after flushing.
+            terminate: If True, stop the worker thread after the final drain.
         """
         if not self.is_active():
             return
 
-        try:
-            self._flush_once()
-        except BaseException as e:
-            _logger.error(f"Error during synchronous flush: {e}")
+        if not terminate:
+            # Best-effort synchronous drain of the current backlog.
+            try:
+                self._flush_once()
+            except BaseException as e:
+                _logger.error(f"Error during synchronous flush: {e}")
+            return
 
-        if terminate:
-            self._stop_event.set()
-            self._wake_event.set()
-            if self._thread is not None:
-                try:
-                    self._thread.join(timeout=30)
-                except BaseException:
-                    pass
-            self._is_active = False
+        # Terminating: hand the final drain to the worker thread and just wait on
+        # it. We deliberately do NOT call _flush_once() here too - two threads
+        # contending on _flush_lock over a slow/stalled socket can wedge shutdown.
+        # The join timeout guarantees the process auto-stops regardless.
+        pending = self._queue.qsize()
+        if pending:
+            print(
+                f"radt: flushing {pending} pending trace task(s) to server "
+                f"(up to {self._shutdown_timeout:.0f}s; Ctrl+C to skip)...",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        self._stop_event.set()
+        self._wake_event.set()
+        if self._thread is not None:
+            try:
+                self._thread.join(timeout=self._shutdown_timeout)
+            except BaseException:
+                pass
+            if self._thread.is_alive():
+                _logger.warning(
+                    "radt trace export did not finish within "
+                    f"{self._shutdown_timeout:.0f}s; abandoning remaining traces "
+                    "to avoid blocking shutdown."
+                )
+        self._is_active = False
 
     def _atexit_callback(self) -> None:
         """Flush remaining traces on program exit.
