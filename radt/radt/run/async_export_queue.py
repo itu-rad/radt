@@ -69,8 +69,10 @@ class AsyncTraceExportQueueV2:
         if self._debug:
             # Surface mlflow's own swallowed export failures - notably _log_spans,
             # which logs failures at DEBUG (invisible by default), so a server that
-            # silently drops spans looks like a clean run with empty traces.
-            logging.getLogger("mlflow").setLevel(logging.DEBUG)
+            # silently drops spans looks like a clean run with empty traces. Scope
+            # this to the export logger only; enabling DEBUG on all of mlflow floods
+            # the output with unrelated chatter (e.g. mlflow.tracking.fluent).
+            logging.getLogger("mlflow.tracing.export").setLevel(logging.DEBUG)
 
         self._stats_lock = threading.Lock()
         # Cumulative diagnostics.
