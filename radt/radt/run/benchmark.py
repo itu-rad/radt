@@ -220,6 +220,28 @@ def log_metrics(metrics, epoch=0):
     instance.log_metrics(metrics, epoch)
 
 
+def shutdown():
+    """Cleanly tear down radt tracking before a hard exit.
+
+    Terminates the listener/logger child processes (so they can't orphan) and
+    marks the active mlflow run FINISHED. Intended to be called right before
+    ``os._exit()`` in workloads that hard-exit to skip slow interpreter
+    shutdown - ``os._exit`` otherwise skips ``_RADTBenchmark.__exit__``, leaving
+    the run stuck RUNNING and the children orphaned.
+
+    Order matters and is handled by ``_RADTBenchmark.__exit__``: listeners are
+    terminated before the loggers do their final flush and the run is ended, so
+    no in-flight metric writes land on an already-closed run. Idempotent.
+    """
+    global _benchmark_instance
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _benchmark_instance
+    _benchmark_instance = None
+    if instance is not None:
+        instance.__exit__(None, None, None)
+
+
 class RADTBenchmark:
     """Context manager wrapper that returns the singleton"""
 
