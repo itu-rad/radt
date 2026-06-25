@@ -1,6 +1,62 @@
 import React from 'react'
 import { HTTP } from '../api';
 import '../styles/DataPicker.css';
+import 'antd/dist/antd.css'; // added
+import { Table, Input } from 'antd'; // added
+import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'; // <-- added icons
+
+const RUNS_COLOR_PALETTE = [
+  '#a6630c', // Brown
+  '#c83243', // Coral
+  '#b45091', // Pink
+  '#8a63bf', // Purple
+  '#434a93', // Indigo
+  '#137dae', // Turquoise
+  '#04867d', // Teal
+  '#308613', // Lime
+  '#facb66', // Lemon
+
+  // Colors list, intensities 700-400:
+  '#1f272d', // Grey 700
+  '#445461', // Grey 600
+  '#5f7281', // Grey 500
+  '#8396a5', // Grey 400
+
+  '#93320b', // Yellow 700
+  '#be501e', // Yellow 600
+  '#de7921', // Yellow 500
+  '#f2be88', // Yellow 400
+
+  '#115026', // Green 700
+  '#277c43', // Green 600
+  '#3caa60', // Green 500
+  '#8ddda8', // Green 400
+
+  '#9e102c', // Red 700
+  '#c82d4c', // Red 600
+  '#e65b77', // Red 500
+  '#f792a6', // Red 400
+
+  '#0e538b', // Blue 700
+  '#2272b4', // Blue 600
+  '#4299e0', // Blue 500
+  '#8acaff', // Blue 400
+];
+
+// based on: https://github.com/mlflow/mlflow/blob/31bec963dbcc2e164e4614b756e8d0e401548659/mlflow/server/js/src/experiment-tracking/utils/RunNameUtils.ts#L4
+function getStableColorIndex(runUuid) {
+  let a = 0,
+    b = 0;
+
+  // Let's use super simple hashing method
+  for (let i = 0; i < runUuid.length; i++) {
+    a = (a + runUuid.charCodeAt(i)) % 255;
+    b = (b + a) % 255;
+  }
+
+  // eslint-disable-next-line no-bitwise
+  return RUNS_COLOR_PALETTE[(a | (b << 8)) % RUNS_COLOR_PALETTE.length];
+}
 
 class DataPicker extends React.Component {
 
@@ -16,33 +72,100 @@ class DataPicker extends React.Component {
 			visibleRuns: [],
 			selectedWorkloads: [],
 			selectedRuns: [],
+			selectionsVisible: true, // New state to toggle Selections visibility
+			setSelectedRuns: (newSelectedRuns) => {
+				this.setState({ selectedRuns: newSelectedRuns });
+				this.props.pullSelectedRuns(newSelectedRuns);
+				submitToLocalStorage(this.state.selectedWorkloads, newSelectedRuns);
+			}
 		};
 
 		this.bottomOfScrollRef = React.createRef();
+
+		// NEW: bind scroll helpers
+		this.scrollToExperiment = this.scrollToExperiment.bind(this);
+		this.scrollToRun = this.scrollToRun.bind(this);
 	}
 
 	componentDidMount() {
+		// ensure body has dataPickerOpen while this picker is visible
+		// this.props.toHide === true means picker is hidden; add class only when visible
+		if (!this.props.toHide) document.body.classList.add('dataPickerOpen');
 
-		// fetch data to populate pickers
+		// Fetch data to populate pickers
 		this.fetchExperiments();
 		this.fetchRuns();
 
-		// check if any selected runs are in local storage
-		const localRunsAndWorkloadData = pullFromLocalStorage();
-		if (localRunsAndWorkloadData.runData !== undefined && localRunsAndWorkloadData.workloadData !== undefined) {
-			this.setState({
-				selectedWorkloads: localRunsAndWorkloadData.workloadData,
-				selectedRuns: localRunsAndWorkloadData.runData
-			});
-			this.props.pullSelectedRuns(localRunsAndWorkloadData.runData);
+		// Check if `runs` exists in the URL parameters
+		const urlParams = new URLSearchParams(window.location.search);
+		const runsParam = urlParams.get('runs');
+		const chartsParam = urlParams.get('charts'); // Check for charts in the URL
+
+		if (runsParam) {
+			try {
+				// Parse the `runs` parameter as a JSON array
+				const runIds = JSON.parse(runsParam);
+				if (Array.isArray(runIds)) {
+					console.log("Parsed run IDs from URL:", runIds);
+					this.setState({ isFetching: true }); // Indicate fetching state
+					this.fetchRuns().then(() => {
+						const selectedRuns = this.state.runData.filter(run => runIds.includes(run.name));
+						this.setState({ selectedRuns, isFetching: false }, () => {
+							this.props.pullSelectedRuns(this.state.selectedRuns);
+
+							// Mark URL sync as complete if charts are empty
+							if (!chartsParam || JSON.parse(chartsParam).length === 0) {
+								this.props.markUrlSyncComplete();
+							}
+						});
+					});
+				} else {
+					console.error("Invalid `runs` parameter format. Expected a JSON array.");
+				}
+			} catch (error) {
+				console.error("Failed to parse `runs` parameter:", error);
+			}
+		} else {
+			// Only read from local storage if `runs` is not in the URL
+			const localRunsAndWorkloadData = pullFromLocalStorage();
+			if (localRunsAndWorkloadData.runData !== undefined && localRunsAndWorkloadData.workloadData !== undefined) {
+				this.setState({
+					selectedWorkloads: localRunsAndWorkloadData.workloadData,
+					selectedRuns: localRunsAndWorkloadData.runData
+				}, () => {
+					this.props.pullSelectedRuns(this.state.selectedRuns);
+
+					// Mark URL sync as complete if no runs or charts are available
+					if (this.state.selectedRuns.length === 0 && (!chartsParam || JSON.parse(chartsParam).length === 0)) {
+						this.props.markUrlSyncComplete();
+					}
+				});
+			} else {
+				// Mark URL sync as complete if no data is found
+				this.props.markUrlSyncComplete();
+			}
 		}
 	}
 
 	componentDidUpdate(prevProps, prevState) {
+		// maintain body.dataPickerOpen according to visibility prop
+		if (prevProps.toHide !== this.props.toHide) {
+			if (!this.props.toHide) {
+				document.body.classList.add('dataPickerOpen');
+			} else {
+				document.body.classList.remove('dataPickerOpen');
+			}
+		}
+
 		// scroll to bottom of list when adding selections, but not removing
 		if (this.state.selectedWorkloads.length > prevState.selectedWorkloads.length) {
 			this.bottomOfScrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
 		}
+	}
+
+	// Clean up body class when DataPicker unmounts
+	componentWillUnmount() {
+		document.body.classList.remove('dataPickerOpen');
 	}
 
 	// fetch all experiemnts 
@@ -53,119 +176,97 @@ class DataPicker extends React.Component {
 
 	// fetch all runs 
 	async fetchRuns() {
+		this.setState({ isFetching: true }); // Indicate fetching state
 		const data = await HTTP.fetchRuns();
-		this.setState({ runData: data });
+		console.log("Fetched runs:", data);
+		this.setState({ runData: data, isFetching: false }, () => {
+			// Sync selected runs from URL using runData
+			if (this.props.syncRunsFromUrl) {
+				console.log("Syncing selected runs from URL...", this.state.runData);
+				this.props.syncRunsFromUrl(this.state.runData);
+				const selectedRuns = this.props.pushSelectedRuns;
+				this.setState({ selectedRuns: selectedRuns });
+				this.props.pullSelectedRuns(this.state.selectedRuns);
+				submitToLocalStorage(this.state.selectedWorkloads, selectedRuns);
+			}
+		});
 	};
 
-	// select experiment and render its workloads to the workloads component 
+	// select experiment and render its runs to the runs component 
 	setVisibleWorkloads(experimentId) {
 		const { runData } = this.state;
-		let filteredWorkloads = [];
+		let filteredRuns = [];
 		for (let i = 0; i < runData.length; i++) {
 			const run = runData[i];
 			if (run.experimentId === experimentId) {
-				if (filteredWorkloads.indexOf(run.workload) === -1) {
-					filteredWorkloads.push(run.workload);
-				}
+				filteredRuns.push(run);
 			}
 		}
 		this.setState({
-			visibleWorkloads: filteredWorkloads,
-			visibleRuns: [],
+			visibleWorkloads: [], // removed conceptually
+			visibleRuns: filteredRuns,
 			activeExperimentId: experimentId,
 			activeWorkload: null
 		});
 	}
 
-	// select workload and render its runs to the runs component 
-	setVisibleRuns(workload) {
-		const { runData } = this.state;
-		let filteredRuns = [];
-		for (let i = 0; i < runData.length; i++) {
-			const run = runData[i];
-			if (run.workload === workload) {
-				filteredRuns.push(run);
-			}
-		}
-		this.setState({
-			visibleRuns: filteredRuns,
-			activeWorkload: workload
-		});
-	}
-
 	// adds or removes runs and workloads to a selection array 
-	toggleRunWorkloadSelection(workload, run = null) {
+	toggleRunWorkloadSelection(groupKey, run = null) {
 
-		// grab current state and clone it for changes
+		// treat `groupKey` as the canonical parent grouping (parent || name)
 		const { selectedWorkloads, selectedRuns, runData, experimentData } = this.state;
 		let newSelectedWorkloads = [...selectedWorkloads];
 		let newSelectedRuns = [...selectedRuns];
 
-		// five different ways the user can add/remove data to selection
-		if (workload === "null" && run === null) {
-			newSelectedRuns.forEach(run => {
-				if (run.workload.substring(run.workload.indexOf("-") + 1) === "null") {
-					const runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
-					newSelectedRuns = newSelectedRuns.slice(0, runIndex).concat(newSelectedRuns.slice(runIndex + 1));
-				}
-			});
-		}
-		else if (run === null) {
-			// add all runs from this workload to selection if they are not already added
-			let workloadIndex = newSelectedWorkloads.indexOf(workload);
-			if (workloadIndex === -1) {
-				runData.forEach(run => {
-					if (run.workload === workload) {
-						let runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
-						if (runIndex === -1) {
-							newSelectedRuns.push(run);
-						}
-					}
+		// If run === null -> toggle entire group (add/remove all runs in that group)
+		if (run === null) {
+			const groupRuns = runData.filter(r => (r.parent || r.name) === groupKey);
+			// if none of the group's runs are selected -> add them, otherwise remove them
+			const anySelected = groupRuns.some(gr => newSelectedRuns.findIndex(el => el.name === gr.name) > -1);
+
+			if (!anySelected) {
+				// add all runs from group that are not already selected
+				groupRuns.forEach(gr => {
+					if (newSelectedRuns.findIndex(el => el.name === gr.name) === -1) newSelectedRuns.push(gr);
 				});
-			}
-			else {
-				// remove all runs from this workload from selection
-				newSelectedRuns = newSelectedRuns.filter(el => el.workload !== workload);
+			} else {
+				// remove all runs belonging to this group
+				newSelectedRuns = newSelectedRuns.filter(el => (el.parent || el.name) !== groupKey);
 			}
 		}
+		// toggle single run
 		else {
 			let runIndex = newSelectedRuns.findIndex(el => el.name === run.name);
 			if (runIndex === -1) {
-				// add run to selection if it is not already added
+				// add run to selection
 				newSelectedRuns.push(run);
-			}
-			else {
-				// remove run from selection if it is already added
+			} else {
+				// remove run from selection
 				newSelectedRuns = newSelectedRuns.slice(0, runIndex).concat(newSelectedRuns.slice(runIndex + 1));
 			}
 		}
 
-		// update list of selected workloads based on new selected runs, and add experiment name to data 
+		// Recompute selectedWorkloads as unique parent/group keys of selected runs
 		newSelectedWorkloads = [];
-		newSelectedRuns.forEach(run => {
-			let workloadIndex = newSelectedWorkloads.indexOf(run.workload);
-			if (workloadIndex === -1) {
-				newSelectedWorkloads.push(run.workload);
-			}
+		newSelectedRuns.forEach(r => {
+			const gk = r.parent || r.name;
+			if (newSelectedWorkloads.indexOf(gk) === -1) newSelectedWorkloads.push(gk);
 
 			experimentData.forEach(experiment => {
-				if (run.experimentId === experiment.id) {
-					run.experimentName = experiment.name;
+				if (r.experimentId === experiment.id) {
+					r.experimentName = experiment.name;
 				}
-			})
+			});
 		});
 
-		// update state
+		// update state and notify parent
 		this.setState({
 			selectedWorkloads: newSelectedWorkloads,
 			selectedRuns: newSelectedRuns
+		}, () => {
+			this.props.pullSelectedRuns(this.state.selectedRuns);
+			submitToLocalStorage(this.state.selectedWorkloads, this.state.selectedRuns);
 		});
-
-		// pull copy of selected runs up to parent
-		this.props.pullSelectedRuns(newSelectedRuns);
-
-		// add selected runs and workloads to local storage to persist through refresh
-		submitToLocalStorage(newSelectedWorkloads, newSelectedRuns);
 	}
 
 	// clear all selections
@@ -186,52 +287,119 @@ class DataPicker extends React.Component {
 		}
 	}
 
-	render() {
+	toggleSelectionsVisibility = () => {
+		this.setState((prevState) => ({
+			selectionsVisible: !prevState.selectionsVisible,
+		}));
+	};
 
+	// NEW: scroll to experiment row in Experiments table and briefly highlight it
+	scrollToExperiment(experimentId) {
+		try {
+			const el = document.getElementById(`experiment-row-${experimentId}`);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				el.classList.add('highlightSelection');
+				setTimeout(() => el.classList.remove('highlightSelection'), 1500);
+			}
+		} catch (e) { /* noop */ }
+	}
+
+	// NEW: scroll to run row in Runs table; if run isn't visible, open its experiment first
+	scrollToRun(runName) {
+		try {
+			const encoded = encodeURIComponent(runName || '');
+			const id = `run-row-${encoded}`;
+			const el = document.getElementById(id);
+			if (el) {
+				el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				el.classList.add('highlightSelection');
+				setTimeout(() => el.classList.remove('highlightSelection'), 1500);
+				// Also attempt to highlight parent grouping row if present
+				const parentRow = el.closest('tr')?.previousElementSibling;
+				return;
+			}
+
+			// If not found: find run in data, open its experiment, then try again shortly after DOM update
+			const run = (this.state.runData || []).find(r => r.name === runName || r.run_name === runName);
+			if (run) {
+				// open experiment so Runs list renders required rows
+				this.setVisibleWorkloads(run.experimentId);
+				setTimeout(() => {
+					const el2 = document.getElementById(`run-row-${encodeURIComponent(runName)}`);
+					if (el2) {
+						el2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						el2.classList.add('highlightSelection');
+						setTimeout(() => el2.classList.remove('highlightSelection'), 1500);
+					}
+					// ensure experiment table also scrolls to experiment row
+					this.scrollToExperiment(run.experimentId);
+				}, 300);
+			}
+		} catch (e) { /* noop */ }
+	}
+
+	render() {
 		const {
 			experimentData,
-			visibleWorkloads,
 			visibleRuns,
 			activeExperimentId,
-			activeWorkload,
-			selectedWorkloads,
 			selectedRuns,
 		} = this.state;
 
 		return (
-			<div id="dataPickerWrapperBackground" className={this.props.toHide ? null : "hide"}>
-				<div id="dataPickerWrapper">
-					<Experiments
-						data={experimentData}
-						activeExperimentId={activeExperimentId}
-						onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
+			<>
+				{/* render overlay background when picker is visible so underlying UI is visible + blurred
+				{!this.props.toHide && (
+					<div
+						id="dataPickerWrapperBackground"
+						onClick={() => this.props.toggleDataPicker(false)}
+						// keep it presentational only; click closes picker
 					/>
-					<Workloads
-						data={visibleWorkloads}
-						activeWorkload={activeWorkload}
-						selectedWorkloads={selectedWorkloads}
-						onClickSetVisibleRuns={this.setVisibleRuns.bind(this)}
-						onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-					/>
-					<Runs
-						data={visibleRuns}
-						selectedRuns={selectedRuns}
-						onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
-					/>
-					<Selections
-						selectedRuns={selectedRuns}
-						onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
-						bottomOfScrollRef={this.bottomOfScrollRef}
-					/>
-					<button className="clearBtn" onClick={() => this.clearAllSelections()}>
-						Clear All
-					</button>
-					<button className="selectionConfirmBtn" onClick={() => this.props.toggleDataPicker(false)}>
-						Save
-					</button>
-				</div>
-			</div>
+				)} */}
 
+				<div id="dataPickerSlideout" className={this.props.toHide ? "hide" : ""}>
+					<div id="dataPickerContent">
+						<div id="dataPickerHorizontalWrapper">
+							<Experiments
+								data={experimentData}
+								activeExperimentId={activeExperimentId}
+								onClickSetVisibleWorkloads={this.setVisibleWorkloads.bind(this)}
+							/>
+							<Runs
+								data={visibleRuns}
+								selectedRuns={selectedRuns}
+								setSelectedRuns={this.state.setSelectedRuns}
+								onClickToggleRunSelection={this.toggleRunWorkloadSelection.bind(this)}
+							/>
+							<div id="selectionsContainer">
+								<div className="selectionsHeader">
+									<button
+										className="clearBtn"
+										onClick={() => this.clearAllSelections()}
+									>
+										Clear All
+									</button>
+									<button
+										className="toggleSelectionsBtn"
+										onClick={() => this.props.toggleDataPicker(false)}
+									>
+										Explore
+									</button>
+								</div>
+								<Selections
+									selectedRuns={selectedRuns}
+									onClickToggleWorkloadSelection={this.toggleRunWorkloadSelection.bind(this)}
+									bottomOfScrollRef={this.bottomOfScrollRef}
+									// NEW: pass scroll handlers to Selections
+									scrollToRun={this.scrollToRun}
+									scrollToExperiment={this.scrollToExperiment}
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
+			</>
 		);
 
 	}
@@ -239,166 +407,452 @@ class DataPicker extends React.Component {
 
 /* DataPicker functional components */
 function Experiments(props) {
+	// simple search state
+	const [query, setQuery] = React.useState('');
+
+	const filtered = props.data
+		.filter(e => (`${e.id} ${e.name}`).toLowerCase().includes(query.toLowerCase()))
+		.sort((a, b) => a.id - b.id)
+		.map(e => ({ ...e, key: e.id }));
+
+	const columns = [
+		{ title: 'ID', dataIndex: 'id', key: 'id'},
+		{ title: 'Name', dataIndex: 'name', key: 'name' }
+	];
+
 	return (
-		<div id="experimentWrapper">
-			{props.data.sort((a, b) => a.id - b.id).map(experiment => (
-				<button
-					key={experiment.id}
-					className={props.activeExperimentId === experiment.id ? "active" : null}
-					onClick={() => props.onClickSetVisibleWorkloads(experiment.id)}
-				>
-					<span className="text">
-						<span>{experiment.id}</span>
-						{experiment.name}
-					</span>
-				</button>
-			))}
+		<div id="experimentWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+			<Input
+				className="searchInput"
+				placeholder="Search experiments..."
+				value={query}
+				onChange={(e) => setQuery(e.target.value)}
+			/>
+			{/* scroll area must allow flex child to shrink: set minHeight:0 */}
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+				<Table
+					columns={columns}
+					dataSource={filtered}
+					pagination={false}
+					rowClassName={(record) => props.activeExperimentId === record.id ? "active" : ""}
+					onRow={(record) => ({
+						onClick: () => props.onClickSetVisibleWorkloads(record.id),
+						// NEW: stable id per experiment row so other UI can scroll to it
+						id: `experiment-row-${record.id}`
+					})}
+					size="small"
+				/>
+			</div>
 		</div>
 	)
 }
-function Workloads(props) {
 
-	// sort workloads properly
-	function sortWorkloads(a, b) {
-		let x = a.substring(a.indexOf("-") + 1);
-		let y = b.substring(b.indexOf("-") + 1);
-		return x - y;
-	}
 
-	// format workload labels (handles unsorted runs with no workload)
-	function formatWorkloadLabel(workload) {
-		const workloadId = workload.substring(workload.indexOf("-") + 1);
-		if (workloadId === "null") {
-			workload = "Unsorted Runs";
+// add helper to convert hex color to rgba string with alpha
+function hexToRgba(hex, alpha = 1) {
+	// normalize and parse hex (supports #rgb and #rrggbb)
+	const h = hex.replace('#', '');
+	const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+	const bigint = parseInt(full, 16);
+	const r = (bigint >> 16) & 255;
+	const g = (bigint >> 8) & 255;
+	const b = bigint & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function handleSelection(record, selectedRuns, setSelectedRuns) {
+	let newSelectedRuns;
+	if (record.isParent) {
+		const isParentSelected = selectedRuns.findIndex(el => el.name === record.name) > -1;
+		const childSelectedCount = record.childRuns.filter(run => selectedRuns.findIndex(el => el.name === run.name) > -1).length;
+		const allGroupRuns = [record, ...record.childRuns];
+		const isGroupSelected = allGroupRuns.every(run => selectedRuns.findIndex(el => el.name === run.name) > -1);
+		const anyChildSelected = childSelectedCount > 0;
+		const allChildrenSelected = record.childRuns.length > 0 && childSelectedCount === record.childRuns.length;
+
+		// 0: none, 1: only parent, 2: all group
+		let state = 0;
+		if (isGroupSelected) state = 2;
+		else if (isParentSelected && !allChildrenSelected) state = 1;
+
+		if (state === 0) {
+			if (anyChildSelected) {
+				// select all group
+				newSelectedRuns = [
+					...selectedRuns,
+					...record.childRuns.filter(child => selectedRuns.findIndex(el => el.name === child.name) === -1),
+					...(isParentSelected ? [] : [record])
+				];
+			} else {
+				// select parent only
+				newSelectedRuns = [
+					...selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name)),
+					record
+				];
+			}
+		} else if (state === 1) {
+			// select all group
+			newSelectedRuns = [
+				...selectedRuns,
+				...record.childRuns.filter(child => selectedRuns.findIndex(el => el.name === child.name) === -1)
+			];
+		} else {
+			// clear all group
+			newSelectedRuns = selectedRuns.filter(run => !allGroupRuns.some(gr => gr.name === run.name));
 		}
-		else {
-			workload = "Workload " + workload;
-		}
-		return workload;
+	} else {
+		const isSelected = selectedRuns.findIndex(el => el.name === record.name) > -1;
+		newSelectedRuns = isSelected
+			? selectedRuns.filter(run => run.name !== record.name)
+			: [...selectedRuns, record];
 	}
+	setSelectedRuns(newSelectedRuns);
+}
 
-	return (
-		<div id="workloadsWrapper">
-			{props.data.slice().sort((a, b) => sortWorkloads(a, b)).map(workload => (
-				<div
-					key={workload}
-					className={`workload ${props.activeWorkload === workload ? "active" : ""} ${props.selectedWorkloads.includes(workload) ? "highlightSelection" : ""}`}
-					onClick={() => props.onClickSetVisibleRuns(workload)}
-				>
-					<div className="info">
-						{formatWorkloadLabel(workload)}
+function Runs(props) {
+	const [query, setQuery] = React.useState('');
+	const [expandedGroups, setExpandedGroups] = React.useState(new Set());
+
+	const toggleGroup = (parentId) => {
+		setExpandedGroups(prev => {
+			const newSet = new Set(prev);
+			if (newSet.has(parentId)) newSet.delete(parentId);
+			else newSet.add(parentId);
+			return newSet;
+		});
+	};
+
+	const filteredRuns = props.data
+		.slice()
+		.filter(run => {
+			const q = query.toLowerCase();
+			if (!q) return true;
+			const paramsStr = Object.entries(run.params || {}).map(([k, v]) => `${k}:${v}`).join(' ');
+			return (`${run.name || ''} ${run.run_name || ''} ${run.letter || ''} ${run.workload || ''} ${paramsStr}`).toLowerCase().includes(q);
+		})
+		.map(run => ({ ...run, key: run.name }));
+
+	const groupsMap = new Map();
+	filteredRuns.forEach(run => {
+		const parentKey = run.parent || run.name;
+		if (!groupsMap.has(parentKey)) groupsMap.set(parentKey, []);
+		groupsMap.get(parentKey).push(run);
+	});
+
+	const groups = Array.from(groupsMap.entries()).map(([parentKey, runs]) => {
+		const parentRun = runs.find(r => r.name === parentKey);
+		const childRuns = runs.filter(r => r.name !== parentKey);
+		const parent = parentRun || runs[0];
+		const children = parentRun ? childRuns : childRuns.slice(1);
+		return { parentKey, parent, children };
+	});
+
+	groups.sort((a, b) => (b.parent.startTime || 0) - (a.parent.startTime || 0));
+
+	const groupedDataSource = groups.flatMap(group => {
+		const isExpanded = expandedGroups.has(group.parentKey);
+		const rows = [];
+		if (isExpanded && group.children.length > 0) {
+			// Mark parent for top outline
+			rows.push({ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children, outlineTop: true });
+			// Children
+			rows.push(...group.children.map((child, idx) => {
+				// Mark last child for bottom outline
+				if (idx === group.children.length - 1) {
+					return { ...child, isChild: true, parentKey: group.parentKey, outlineBottom: true };
+				}
+				return { ...child, isChild: true, parentKey: group.parentKey };
+			}));
+		} else {
+			rows.push({ ...group.parent, isParent: true, groupKey: group.parentKey, childRuns: group.children });
+		}
+		return rows;
+	});
+
+	const getRowStyle = (record) => {
+		const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+		const baseColor = getStableColorIndex(record.name);
+		const unselectedBg = hexToRgba(baseColor, 0.12);
+		const selectedBg = hexToRgba(baseColor, 0.24);
+		return isSelected
+			? { '--selected-border': baseColor, '--selected-bg': selectedBg }
+			: { backgroundColor: unselectedBg };
+	};
+
+	const columns = [
+		{
+			title: '',
+			dataIndex: 'status',
+			key: 'statusStart',
+			width: 180,
+			render: (_, record) => {
+				const status = record.status;
+				const start = record.startTime;
+				let IconComponent = ClockCircleOutlined;
+				let cls = 'running';
+				if (status === "FINISHED") { IconComponent = CheckCircleOutlined; cls = 'complete'; }
+				else if (status === "FAILED") { IconComponent = CloseCircleOutlined; cls = 'failed'; }
+
+				return (
+					<div style={{
+						display: 'flex',
+						alignItems: 'center',
+						gap: 8,
+						paddingLeft: record.isParent ? 0 : 24 // indent child rows
+					}}>
+						<IconComponent className={cls} style={{ fontSize: 18 }} />
+						<span className="startTime" title={new Date(start).toString()}>{`(${howLongAgo(start)})`}</span>
+						{record.isParent && record.childRuns.length > 0 && (
+							<button
+								onClick={e => { e.stopPropagation(); toggleGroup(record.groupKey); }}
+								style={{
+									background: 'none',
+									border: 'none',
+									cursor: 'pointer',
+									color: '#115785',
+									fontSize: '14px',
+									marginLeft: 'auto'
+								}}
+								tabIndex={-1}
+							>
+								{expandedGroups.has(record.groupKey) ? '−' : '+'}
+							</button>
+						)}
 					</div>
-					<div
-						className={`checkboxWrapper ${formatWorkloadLabel(workload) === "Unsorted Runs" ? "hide" : null}`}
-					>
+				);
+			}
+		},
+		{
+			title: 'Identifier',
+			dataIndex: 'run_name',
+			key: 'run_name',
+			render: (run_name, record) =>
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					{run_name || (record.name ? record.name.substring(0, 6) : '')}
+				</div>
+		},
+		{
+			title: 'Workload',
+			dataIndex: 'workload',
+			key: 'workload',
+			render: (workload, record) =>
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					{workload || 'N/A'}
+				</div>
+		},
+		{
+			title: 'Duration',
+			dataIndex: 'duration',
+			key: 'duration',
+			render: (duration, record) =>
+				<div style={{ paddingLeft: record.isParent ? 0 : 24 }}>
+					<span className={duration === null ? "noDuration" : ""}>{milliToMinsSecs(duration)}</span>
+				</div>
+		},
+		{
+			title: 'Info',
+			dataIndex: 'params',
+			key: 'params',
+			render: (params) => <span className="info" title={Object.entries(params || {}).map(([k, v]) => `${k}: ${v}`).join('\n')}>i</span>
+		},
+		{
+			title: 'Select',
+			key: 'select',
+			width: 70,
+			render: (_, record) => {
+				let label = " ";
+				
+				if (record.isParent) {
+					const isParentSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+					const childSelectedCount = record.childRuns.filter(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1).length;
+					const allGroupRuns = [record, ...record.childRuns];
+					const isGroupSelected = allGroupRuns.every(run => props.selectedRuns.findIndex(el => el.name === run.name) > -1);
+					const anyChildSelected = childSelectedCount > 0;
+					const allChildrenSelected = record.childRuns.length > 0 && childSelectedCount === record.childRuns.length;
+
+					// 0: none, 1: only parent, 2: all group
+					let state = 0;
+					if (isGroupSelected) state = 2;
+					else if (isParentSelected && !allChildrenSelected) state = 1;
+
+				 if (state === 1) label = "R"; // parent only
+				 else if (state === 2) label = "W"; // all group
+				 // else blank for none
+
+					return (
 						<div
 							className="checkbox"
-							onClick={() => props.onClickToggleWorkloadSelection(workload)}
+							title={
+								state === 0 ? (anyChildSelected ? "Select all runs in group" : "Select parent only")
+								: state === 1 ? "Select all runs in group"
+								: "Clear selection"
+							}
+							onClick={e => {
+								e.stopPropagation();
+								let newSelectedRuns;
+								if (state === 0) {
+									if (anyChildSelected) {
+										// select all group
+										newSelectedRuns = [
+											...props.selectedRuns,
+											...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1),
+											...(isParentSelected ? [] : [record])
+										];
+									} else {
+										// select parent only
+										newSelectedRuns = [
+											...props.selectedRuns.filter(run => !record.childRuns.some(child => child.name === run.name)),
+											record
+										];
+									}
+								} else if (state === 1) {
+									// select all group
+									newSelectedRuns = [
+										...props.selectedRuns,
+										...record.childRuns.filter(child => props.selectedRuns.findIndex(el => el.name === child.name) === -1)
+									];
+								} else {
+									// clear all group
+									newSelectedRuns = props.selectedRuns.filter(run => !allGroupRuns.some(gr => gr.name === run.name));
+								}
+								props.setSelectedRuns(newSelectedRuns);
+							}}
 						>
-							{props.selectedWorkloads.includes(workload) ? "✔" : " "}
+							{label}
 						</div>
+					);
+				}
+				console.log("select", props.selectedRuns, record);
+				const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+				if (isSelected) {label = "X";}
+				return (
+					<div
+						className="checkbox"
+						onClick={e => {
+							e.stopPropagation();
+							const newSelectedRuns = isSelected
+								? props.selectedRuns.filter(run => run.name !== record.name)
+								: [...props.selectedRuns, record];
+							props.setSelectedRuns(newSelectedRuns);
+						}}
+					>
+						{label}
 					</div>
-				</div>
-			))}
-		</div>
-	)
-}
-function Runs(props) {
-
-	const checkRunStatus = (status) => {
-		if (status === "FINISHED") {
-			return "complete";
+				);
+			}
 		}
-		else if (status === "RUNNING") {
-			return "running";
-		}
-		else if (status === "FAILED") {
-			return "failed";
-		}
-	}
+	];
 
 	return (
-		<div id="runsWrapper">
-			{props.data.slice().sort((a, b) => b.startTime - a.startTime).map(run => (
-				<button
-					key={run.name}
-					onClick={() => props.onClickToggleRunSelection(run.workload, run)}
-					className={props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "highlightSelection" : null}
-				>
-					<span className={checkRunStatus(run.status)} title={run.status.charAt(0) + run.status.substring(1).toLowerCase()}>•</span>
-					<span className="letter" title="Identifier">{run.name.substring(0, 6) + " - " + (run.letter === null || run.letter === "0" ? "0" : run.letter)}</span>
-					<span className="startTime" title="Start time">({howLongAgo(run.startTime)})</span>
-					<div className="checkbox">{props.selectedRuns.findIndex(el => el.name === run.name) > -1 ? "✔" : " "}</div>
-					<span className="info" title={"𝗠𝗼𝗱𝗲𝗹: " + run.model + "\n𝗦𝗼𝘂𝗿𝗰𝗲: " + run.source + "\n𝗣𝗮𝗿𝗮𝗺𝘀: " + run.params}>i</span>
-					<span className={`duration ${run.duration === null ? "noDuration" : ""}`} title="Duration">{milliToMinsSecs(run.duration)}</span>
-				</button>
-			))}
+		<div id="runsWrapper" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+			<Input
+				className="searchInput"
+				placeholder="Search runs..."
+				value={query}
+				onChange={e => setQuery(e.target.value)}
+			/>
+			<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+				<Table
+					columns={columns}
+					dataSource={groupedDataSource}
+					pagination={false}
+					rowClassName={record => {
+						const isSelected = props.selectedRuns.findIndex(el => el.name === record.name) > -1;
+						if (record.outlineTop) {
+							return isSelected ? "highlightSelection groupExpandedOutlineTop" : "groupExpandedOutlineTop";
+						}
+						if (record.outlineBottom) {
+							return isSelected ? "highlightSelection groupExpandedOutlineBottom" : "groupExpandedOutlineBottom";
+						}
+						return isSelected ? "highlightSelection" : "";
+					}}
+					onRow={record => ({
+						onClick: () => handleSelection(record, props.selectedRuns, props.setSelectedRuns),
+						style: getRowStyle(record),
+						// NEW: stable id per run row (URL-encode to keep id-safe)
+						id: `run-row-${encodeURIComponent(record.name || '')}`
+					})}
+					size="small"
+				/>
+			</div>
 		</div>
 	)
 }
 function Selections(props) {
-	// create new data object to render workloads and runs nicely in Selections
+	// create new data object to render groups and runs nicely in Selections
 	let visibleSelection = [];
-	props.selectedRuns.forEach(run => {
 
-		let workload = run.workload;
-		if (workload.substring(workload.indexOf("-") + 1) === "null") {
-			workload = "null"
-		}
-
-		let workloadIndex = visibleSelection.findIndex(el => el.workload === workload);
-		if (workloadIndex > -1) {
-			let runIndex = visibleSelection[workloadIndex].runs.findIndex(el => el.name === run.name);
-			if (runIndex === -1) {
-				visibleSelection[workloadIndex].runs.push(run);
-			}
-		}
-		else {
-			let runs = [];
-			runs.push(run);
-			visibleSelection.push({
-				workload: workload,
-				runs: runs
-			})
-		}
+	// Group selected runs by parentKey (parent || name)
+	const groupsByParent = {};
+	(props.selectedRuns || []).forEach(run => {
+		const parentKey = run.parent || run.name || 'null';
+		if (!groupsByParent[parentKey]) groupsByParent[parentKey] = [];
+		groupsByParent[parentKey].push(run);
 	});
 
-	function formatWorkloadLabel(workload) {
-		if (workload === "null") {
-			workload = "Unsorted Runs";
+	visibleSelection = Object.keys(groupsByParent).map(parentKey => ({
+		groupKey: parentKey,
+		runs: groupsByParent[parentKey]
+	}));
+
+	function formatGroupLabel(group) {
+		// group: { groupKey, runs }
+		const groupKey = group.groupKey;
+		if (groupKey === "null") {
+			return "Unsorted Runs";
 		}
-		else {
-			workload = "Workload " + workload;
+		// pick a representative parent run to show a friendly name
+		const parentRun = (group.runs || []).find(r => r.name === groupKey) || (group.runs && group.runs[0]);
+		let display = groupKey;
+		if (parentRun) {
+			display = parentRun.run_name || (parentRun.name ? parentRun.name.substring(0, 6) : groupKey);
 		}
-		return workload;
+		return display;
 	}
 
 	return (
 		<div id="selectionsWrapper">
-			{ /* render all workloads */}
-			{visibleSelection.map(visibleWorkload => (
+			{ /* render all groups */ }
+			{visibleSelection.map(group => (
 				<div
-					className='workloadWrapper'
-					key={visibleWorkload.workload}
+					className='groupWrapper'
+					key={group.groupKey}
 				>
-					<div className='workload'>
+					<div className='group'>
 						<button
 							className="removeWorkloadBtn"
-							onClick={() => props.onClickToggleWorkloadSelection(visibleWorkload.workload)}
+							onClick={() => props.onClickToggleWorkloadSelection(group.groupKey)}
 						>
 							X
 						</button>
-						{formatWorkloadLabel(visibleWorkload.workload)}
+
+						{/* NEW: clickable group title pans to run/experiment */}
+						<span
+							className="groupTitleLink"
+							style={{ cursor: 'pointer', marginLeft: 8 }}
+							onClick={() => {
+								if (props.scrollToRun) props.scrollToRun(group.groupKey);
+							}}
+						>
+							{formatGroupLabel(group)}
+						</span>
 					</div>
 					<ul>
-						{ /* render all runs */}
-						{visibleWorkload.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
+						{ /* render all runs */ }
+						{group.runs.sort((a, b) => a.startTime - b.startTime).map(visibleRun => (
 							<li key={visibleRun.name}>
-								{visibleRun.name.substring(0, 6) + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								{/* NEW: clickable run title */}
+								<span
+									className="runTitleLink"
+									style={{ cursor: 'pointer' }}
+									onClick={() => { if (props.scrollToRun) props.scrollToRun(visibleRun.name); }}
+								>
+									{visibleRun.run_name || (visibleRun.name ? visibleRun.name.substring(0, 6) : '') + " - " + (visibleRun.letter === null || visibleRun.letter === "0" ? "0" : visibleRun.letter)}
+								</span>
 
 								<button
 									className="removeBtn"
-									onClick={() => props.onClickToggleWorkloadSelection(visibleWorkload.workload, visibleRun)}
+									onClick={() => props.onClickToggleWorkloadSelection(group.groupKey, visibleRun)}
 								>
 									X
 								</button>
@@ -407,90 +861,64 @@ function Selections(props) {
 					</ul>
 				</div>
 			))}
-			{ /* div ref to scroll to bottom of */}
+			{ /* div ref to scroll to bottom of */ }
 			<div ref={props.bottomOfScrollRef} />
 		</div>
 	);
 }
 
 /* DataPicker helper functions */
-function milliToMinsSecs(ms) {
-	let label;
-	let numOfDays = Math.trunc(ms / 86400000);
-	if (numOfDays > 0) {
-		label = numOfDays + "d " + new Date(ms).toISOString().slice(11, 19);
-	}
-	else {
-		label = new Date(ms).toISOString().slice(11, 19);
-	}
-	return label;
+// unified duration helpers
+
+function _computeUnits(ms) {
+	if (ms == null || !isFinite(ms)) return null;
+	const secs = ms / 1000;
+	const mins = secs / 60;
+	const hrs = mins / 60;
+	const days = hrs / 24;
+	const months = days / 30; // approximate
+	const years = days / 365; // approximate
+	return { years, months, days, hrs, mins, secs };
 }
+
+function _chooseLargestUnit(ms) {
+	const u = _computeUnits(ms);
+	if (!u) return null;
+	if (u.years >= 1) return { value: u.years, shortUnit: 'yrs', longUnit: 'year' };
+	if (u.months >= 1) return { value: u.months, shortUnit: 'mos', longUnit: 'month' };
+	if (u.days >= 1) return { value: u.days, shortUnit: 'days', longUnit: 'day' };
+	if (u.hrs >= 1) return { value: u.hrs, shortUnit: 'hrs', longUnit: 'hour' };
+	if (u.mins >= 1) return { value: u.mins, shortUnit: 'mins', longUnit: 'minute' };
+	return { value: Math.max(u.secs, 0), shortUnit: 'secs', longUnit: 'second' };
+}
+
+function milliToMinsSecs(ms) {
+	// keep original behavior for invalid values
+	if (ms == null || !isFinite(ms)) return "N/A";
+
+	const unit = _chooseLargestUnit(ms);
+	if (!unit) return "N/A";
+
+	// original displayed fractional values with one decimal
+	return `${unit.value.toFixed(1)} ${unit.shortUnit}`;
+}
+
 function howLongAgo(startTime) {
+	// guard invalid start times
+	if (!startTime || !isFinite(startTime)) return "N/A";
 
-	let howLongAgo;
+	const diffTime = Date.now() - startTime;
+	if (diffTime <= 0) return "N/A";
 
-	let diffTime = Date.now() - startTime;
-	let years = diffTime / (365 * 24 * 60 * 60 * 1000);
-	let months = diffTime / (30 * 24 * 60 * 60 * 1000);
-	let days = diffTime / (24 * 60 * 60 * 1000);
-	let hours = (days % 1) * 24;
-	let minutes = (hours % 1) * 60;
-	let secs = (minutes % 1) * 60;
-	[years, months, days, hours, minutes, secs] = [Math.floor(years), Math.floor(months), Math.floor(days), Math.floor(hours), Math.floor(minutes), Math.floor(secs)];
+	const unit = _chooseLargestUnit(diffTime);
+	if (!unit) return "N/A";
 
-	if (years > 0) {
-		if (years === 1) {
-			howLongAgo = years + " year ago";
-		}
-		else {
-			howLongAgo = years + " years ago";
-		}
-	}
-	else if (months > 0) {
-		if (months === 1) {
-			howLongAgo = months + " month ago";
-		}
-		else {
-			howLongAgo = months + " months ago";
-		}
-	}
-	else if (days > 0) {
-		if (days === 1) {
-			howLongAgo = days + " day ago";
-		}
-		else {
-			howLongAgo = days + " days ago";
-		}
-	}
-	else if (hours > 0) {
-		if (hours === 1) {
-			howLongAgo = hours + " hour ago";
-		}
-		else {
-			howLongAgo = hours + " hours ago";
-		}
-	}
-	else if (minutes > 0) {
-		if (minutes === 1) {
-			howLongAgo = minutes + " minute ago";
-		}
-		else {
-			howLongAgo = minutes + " minutes ago";
-		}
-	}
-	else if (secs > 0) {
-		if (secs === 1) {
-			howLongAgo = secs + " second ago";
-		}
-		else {
-			howLongAgo = secs + " seconds ago";
-		}
-	}
-	else {
-		howLongAgo = "N/A";
-	}
+	// original behavior floored all values and returned N/A for zero
+	const intVal = Math.floor(unit.value);
+	if (intVal <= 0) return "N/A";
 
-	return howLongAgo;
+	const unitLabel = intVal === 1 ? unit.longUnit : unit.longUnit + "s";
+	return `${intVal} ${unitLabel} ago`;
 }
 function submitToLocalStorage(workloadData, runData) {
 

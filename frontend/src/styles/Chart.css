@@ -1,17 +1,20 @@
 .chartWrapper {
-    display: block;
+    display: flex;               /* stack chart and controls vertically */
+    flex-direction: column;
     position: relative;
-    width: 77%;
-    max-width: 1500px;
-    margin: auto;
-    padding: 10px 10px 10px 0;
-    margin: 30px auto 30px auto;
-    background-color: white;
-    filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.3));
+    margin: 10px;
+    padding: 10px 10px 10px 0;    /* bottom padding remains 10px as requested */
+    background-color: var(--ml-surface-2);
+    filter: drop-shadow(1px 1px 4px rgba(0,0,0,0.08));
+}
+.chartArea {
+    flex: 1 1 auto;
+    min-height: 0; /* allow proper flex children scrolling/clipping */
+    width: 100%;
 }
 .chart {
     display: block;
-    height: 700px;
+    height: auto;
     width: 100%;
 }
 .highcharts-navigator {
@@ -28,8 +31,8 @@
     top: 10px;
     right: 10px;
     z-index: 99;
-    background-color: #e74c3c;
-    color: white;
+    background-color: var(--ml-danger);
+    color: var(--ml-surface-2);
     width: 25px;
     height: 25px;
     border-radius: 25px;
@@ -40,7 +43,7 @@
     margin: 0;
 }
 .removeChartBtn:hover { 
-    filter: brightness(1.5);
+    filter: brightness(1.2);
 }
 .tooltipStyle {
     font-size: 20px;
@@ -50,32 +53,54 @@
 
 /************************************** SMOOTH SLIDER */
 #smootherWrapper {
-    display: flex;
+    display: inline-flex;
     flex-flow: row;
     align-items: center;
     justify-content: center;
     text-align: center;
-    height: 40px;
-    width: 300px;
-    margin: auto;
+    height: 28px;
+    width: 180px; /* a bit wider to avoid overlap */
+    margin: 0 8px 0 0; /* small right margin */
 }
-#smootherWrapper input {
-    cursor: pointer;
+#smootherWrapper label {
+    margin-right: 6px;
+    font-size: 13px;
+    white-space: nowrap; /* prevent label from wrapping */
+    /* ensure smoother label matches the others */
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 400;
+    color: var(--ml-muted);
+}
+#smootherWrapper input[type="range"] {
+    width: 120px; /* wider range control */
 }
 
 /************************************** TOGGLE RUNS */
 #workloadGroupingControlsWrapper {
-    width: 90%;
-    margin: auto;
-    padding: 10px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 8px 10px;
     cursor: default;
+    flex: 0 0 48px;    /* fixed height so chart fills remainder */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* center the header and workload items */
+    flex-wrap: wrap;         /* allow items to wrap on narrow screens */
+    gap: 8px;                /* spacing between workload items */
 }
 #workloadGroupingControlsWrapper div {
     display: inline-block;
     margin: 5px 15px 5px 15px;
+    /* make the workload text match other control labels */
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ml-muted);
 }
 #workloadGroupingControlsWrapper label {
     margin: 0 0 0 5px;
+    white-space: nowrap;
 }
 .switch {
     position: relative;
@@ -111,10 +136,10 @@
     transition: .4s;
 }
 input:checked + .slider {
-    background-color: #2980b9;
+    background-color: var(--ml-primary);
 }
 input:focus + .slider {
-    box-shadow: 0 0 1px #2980b9;
+    box-shadow: 0 0 1px var(--ml-primary);
 }
 input:checked + .slider:before {
     -webkit-transform: translateX(13px);
@@ -130,40 +155,58 @@ input:checked + .slider:before {
 
 /************************************** EXPORT OPTIONS */
 #exportOptionsWrapper {
-    width: 90%;
+    width: 100%;
     display: flex;
     justify-content: center;
-    padding: 12px;
-    margin: auto;
+    align-items: center;
+    flex-wrap: nowrap;            /* keep controls on single row when possible */
+    padding: 8px 10px;
+    margin: 0 auto;
+    gap: 20px;                   /* larger gap so controls don't sit too close */
+    flex: 0 0 56px;              /* fixed height for controls area */
 }
-#exportOptionsWrapper div {
-    margin: 0 15px 0 15px;
+/* make sure export children remain sized but don't shrink */
+#exportOptionsWrapper > * {
+    margin: 0 12px;
     cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;              /* do not shrink; keep intrinsic width */
+    /* enforce consistent label font across export controls */
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ml-muted);
 }
 #exportOptionsWrapper input:checked + .slider {
-    background-color: #6e6e6e;
+    background-color: var(--ml-muted-dark);
 }
 #exportOptionsWrapper input:focus + .slider {
-    box-shadow: 0 0 1px #6e6e6e;
+    box-shadow: 0 0 1px var(--ml-muted-dark);
 }
 #lineWidthWrapper {
     margin: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 #lineWidthWrapper label {
-    position: relative;
-    top: -3px;
+    margin: 0;
+    font-size: 13px;
+    white-space: nowrap;
+    /* ensure line width label matches the others */
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 400;
+    color: #222;
 }
 #lineWidthWrapper input {
     width: 75px;
-    position: relative;
-    top: -1px;
     cursor: pointer;
 }
 #lineWidthWrapper span {
-    width: 75px;
-    position: relative;
-    top: -3px;
-    left: 3px;
+    margin-left: 4px;
+    white-space: nowrap;
 }
 .frozen {
     pointer-events: none !important;
@@ -181,7 +224,7 @@ input:checked + .slider:before {
     font-size: 12px;
 
     box-sizing: border-box;
-    border: 1px solid red;
+    border: 1px solid var(--ml-danger);
 }
 .seriesMetadata {
     text-align: left;
@@ -189,7 +232,7 @@ input:checked + .slider:before {
     margin: 5px;
 
     box-sizing: border-box;
-    border: 1px solid green;
+    border: 1px solid var(--ml-accent);
 }
 .seriesMetadata .label {
     font-weight: bold;

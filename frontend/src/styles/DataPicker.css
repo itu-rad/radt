@@ -8,7 +8,7 @@
     background-color: rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(3px);
     box-sizing: border-box;
-    z-index: 99;
+    z-index: 390; /* raised above charts (100) and sidebar (200) */
 }
 #dataPickerWrapper {
     display: flex;
@@ -24,51 +24,15 @@
     border: 1px solid #a6a6a6; 
     filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
 }
-.selectionConfirmBtn {
-    position: absolute;
-    display: block;
-    width: 12.5%;
-    height: 50px;
-    bottom: 0;
-    right: 0;
-    background-color: #2f944a;
-    color: white;
-    letter-spacing: 0.5px;
-    font-size: 15px;
-    cursor: pointer;
-    border: none;
-}
-.selectionConfirmBtn:hover { 
-    filter: brightness(1.2);
-}
-.clearBtn {
-    position: absolute;
-    display: block;
-    width: 12.5%;
-    height: 50px;
-    bottom: 0;
-    right: 12.5%;
-    background-color: #e74c3c;
-    color: white;
-    letter-spacing: 0.5px;
-    font-size: 15px;
-    cursor: pointer;
-    border: none;
-}
-.clearBtn:hover { 
-    filter: brightness(1.2);
-}
-.highlightSelection {
-    border: 1px solid #2980b9 !important;
-}
 
 /********************************************** EXPERIMENTS */
 #experimentWrapper {
-    width: 20%;
+    width: 18%;
+    min-width: 225px;
     height: 100%;
     overflow-x: hidden;
     overflow-y: scroll;
-    scrollbar-width: none;  /* Firefox */
+    scrollbar-width: none; /* Firefox */
     box-sizing: border-box;
     text-align: center;
 }
@@ -104,164 +68,39 @@
     height: 25px;
     line-height: 26px;
     border-radius: 25px;
-    background-color: #115785;
+    background-color: var(--ml-primary);
     box-sizing: border-box;
     margin-right: 10px;
     color: white;
     font-weight: bold;
 }
 #experimentWrapper button.active {
-	background-color: #115785;
+	background-color: var(--ml-primary);
     color: white;
-}
-
-/********************************************** WORKLOADS */
-#workloadsWrapper {
-	display: block;
-	float: left;
-	width: 15%;
-    height: 100%;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none;  /* Firefox */
-    box-sizing: border-box;
-    padding-left: 5px;
-}
-#workloadsWrapper::-webkit-scrollbar {
-    /* display: none; */
-}
-#workloadsWrapper .workload {
-    display: flex;
-    width: 90%;
-    height: 60px;
-    cursor: pointer;
-    box-sizing: border-box;
-    background-color: white;
-    font-size: 14px;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-    margin: 10px auto 0 auto;
-}
-#workloadsWrapper .workload.active {
-    background-color: #2980b9;
-    color: white;
-}
-#workloadsWrapper .workload.active:hover {
-    background-color: #2980b9;
-}
-#workloadsWrapper .workload:hover {
-    background-color: #c6e2f5;
-}
-#workloadsWrapper .info {
-    display: flex;
-    width: 80%;
-    height: 100%;
-    align-items: center; 
-    justify-content: left; 
-    padding-left: 15px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-#workloadsWrapper .checkboxWrapper {
-    display: flex;
-    width: 20%;
-    height: 100%;
-    align-items: center; 
-    justify-content: center;
-}
-#workloadsWrapper .checkbox {
-    background-color: white;
-    color: black;
-    width: 20px;
-    height: 20px;
-    line-height: 20px;
-    border: 1px solid #b8b8b8;
-    font-weight: bold;
-    text-align: center;
-}
-#workloadsWrapper .checkbox:hover {
-    border: 1px solid #2980b9;
-    background-color: #99c8e8;
 }
 
 /********************************************** RUNS */
 #runsWrapper {
 	display: block;
-	width: 40%;
-    height: 100%;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none;  /* Firefox */
-    box-sizing: border-box;
-    text-align: center;
+	width: 65%; /* Adjusted to 65% of the width */
+  min-width: 500px;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-width: none; /* Firefox */
+  box-sizing: border-box;
+  text-align: center;
 }
 #runsWrapper::-webkit-scrollbar {
     /* display: none; */
 }
-#runsWrapper button {
-    font-size: 14px;
-    width: 95%;
-    height: 60px;
-    cursor: pointer;
-    border: none;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-    margin: 10px 0 0 3px;
-    background-color: white;
+#runsWrapper table.pickerTable td.workloadId {
+	padding-left: 8px;
+	text-align: left;
 }
-#runsWrapper button span {
-    float: left;
-    line-height: 14px;
-    padding: 5px;
-}
-#runsWrapper button .complete {
-    margin: 0 0 0 5px;
-    font-size: 30px;
-    color: #2980b9;
-}
-#runsWrapper button .running {
-    margin: 0 0 0 5px;
-    font-size: 25px;
-    color: #2980b9;
-    filter: opacity(0.5);
-}
-#runsWrapper button .failed {
-    margin: 0 0 0 5px;
-    font-size: 30px;
-    color: #831515;
-}
-#runsWrapper button .letter {
-    overflow: hidden;
-    white-space: nowrap;
-    display: block;
-    text-overflow: ellipsis;
-    text-align: left;
-    margin-right: 5px;
-}
-#runsWrapper button .duration {
-    margin-right: 10px;
-    padding-top: 2px;
-    float: right;
-}
-#runsWrapper button .startTime {
-    font-style: italic;
-    color: #7f8c8d;
-}
-#runsWrapper button .info {
-    font-family: serif;
-    font-style: italic;
-    font-weight: bold;
-    background-color: #7f8c8d;
-    color: white;
-    border-radius: 10px;
-    width: 10px;
-    height: 10px;
-    line-height: 10px;
-    margin-right: 25px;
-    float: right;
-}
-#runsWrapper button .checkbox {
-    float: right;
-    margin-right: 10px;
+#runsWrapper .checkbox {
+    display: inline-block;
+    margin: 0;
     background-color: white;
     width: 20px;
     height: 20px;
@@ -270,91 +109,596 @@
     font-weight: bold;
     text-align: center;
 }
-#runsWrapper button:hover .checkbox {
+#runsWrapper .checkbox:hover {
     border: 1px solid #2980b9;
     background-color: #99c8e8;
 }
-#runsWrapper button .noDuration {
+#runsWrapper .noDuration {
     color: #a6a6a6;
 }
 
+/* group header row for runs grouped by workload */
+#runsWrapper tr.groupHeader td {
+	background: #eef6fb;
+	border-bottom: 1px solid #d0e7f6;
+	padding: 6px 8px;
+}
+#runsWrapper .groupHeaderInner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+#runsWrapper .groupLabel {
+	font-weight: 600;
+	color: var(--ml-primary);
+	padding-left: 6px;
+}
+#runsWrapper .groupCheckbox {
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	line-height: 20px;
+	border: 1px solid #b8b8b8;
+	text-align: center;
+	margin-right: 6px;
+	background-color: white;
+	cursor: pointer;
+}
+#runsWrapper .groupCheckbox:hover {
+	border-color: #2980b9;
+	background-color: #99c8e8;
+}
+
+/* Expanded group row outlines */
+#runsWrapper .groupExpandedOutlineTop td {
+    box-shadow: 0 -4px 0 0 #fff !important;
+    z-index: 2;
+}
+#runsWrapper .groupExpandedOutlineBottom td {
+    box-shadow: 0 4px 0 0 #fff !important;
+    z-index: 2;
+}
+
 /********************************************** SELECTIONS */
-#selectionsWrapper {
-    width: 25%;
-    height: calc(100% - 50px);
-    position: relative;
-	display: block;
-	float: left;
-    overflow-x: hidden;
-    overflow-y: scroll;
-    scrollbar-width: none;  /* Firefox */
-    box-sizing: border-box;
+#selectionsContainer {
+	position: relative;
+	width: 17%; /* Matches Selections width */
+  min-width: 200px;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+  border-left: 1px solid #b8b8b8;
+}
 
-    border-left: 1px solid #b8b8b8;
-}
-#selectionsWrapper::-webkit-scrollbar {
-    /* display: none; */
-}
-#selectionsWrapper .workloadWrapper {
-    box-sizing: border-box;
-    border: 1px solid black;
-    width: 90%;
-    border: none;
-    margin: 10px auto 10px auto;
-}
-#selectionsWrapper .workloadWrapper .workload {
-    height: 40px;
+/* Reworked Selections header: MLflow-like, sticky, compact controls */
+.selectionsHeader {
     display: flex;
-    align-items: center; 
-    justify-content: left;
-    padding-left: 20px;
-    background-color: #2980b9;
-    color: white;
-    font-size: 15px;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px;
+    background: linear-gradient(180deg, var(--ml-surface-2), var(--ml-surface));
+    border-bottom: 1px solid var(--ml-border);
+    box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 6px rgba(43,123,185,0.03);
 }
-#selectionsWrapper .removeWorkloadBtn {
-    width: 22px;
-    height: 22px;
-    border-radius: 22px;
-    background-color: #e74c3c;
-    border: none;
-    filter: drop-shadow(1px 1px 2px rgba(255,255,255,0.2));
-    color: white;
-    margin-right: 10px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 11px;
-}
-#selectionsWrapper .removeBtn {
-    width: 20px;
-    height: 20px;
-    border-radius: 20px;
-    background-color: #e74c3c;
-    border: none;
-    color: white;
-    margin-left: 10px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 10px;
-}
-#selectionsWrapper button:hover {
-    filter: brightness(1.2);
-}
-#selectionsWrapper .workloadWrapper ul {
-    padding: 5px 0 5px 0;
-    margin: 0;
-    list-style-type: none;
 
-    border: 1px solid #2980b9;
-    box-sizing: border-box;
-    background-color: white;
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3));
-}
-#selectionsWrapper .workloadWrapper ul li {
-    text-align: right;
-    padding: 5px;
-    margin-right: 5px;
-    box-sizing: border-box;
+/* Make the action buttons compact MLflow-style pills - updated to match ChartPicker buttons */
+.selectionsHeader .clearBtn,
+.selectionsHeader .toggleSelectionsBtn {
+    height: 40px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.12);
     border: none;
+    cursor: pointer;
+    min-width: 92px; /* ensure reasonable tap target */
+}
+
+/* Clear (red) button */
+.selectionsHeader .clearBtn {
+    background: var(--ml-danger);
+    color: var(--ml-surface-2);
+}
+.selectionsHeader .clearBtn:hover {
+    filter: brightness(1.08);
+}
+
+/* Explore / toggle button (blue) */
+.selectionsHeader .toggleSelectionsBtn {
+    background: var(--ml-primary);
+    color: var(--ml-surface-2);
+}
+.selectionsHeader .toggleSelectionsBtn:hover {
+    background: var(--ml-primary-dark);
+}
+
+/* Reworked selections list: fills remaining space, scrolls, MLflow card-like items */
+#selectionsWrapper {
+     flex: 1 1 auto;   /* grow to take remaining vertical space */
+     min-height: 0;    /* required so flex child can shrink and scroll properly */
+     overflow-y: auto;
+     overflow-x: hidden;
+     padding: 12px;
+     box-sizing: border-box;
+     background: transparent;
+     -webkit-overflow-scrolling: touch;
+     gap: 8px;
+     display: flex;
+     flex-direction: column;
+}
+
+/* Workload cards inside selections: subtle card, rounded, consistent spacing */
+#selectionsWrapper .groupWrapper {
+     width: 100%;
+     max-width: 100%;
+     margin: 6px 0;
+     border-radius: 8px;
+     background: #ffffff;
+     border: 1px solid rgba(15, 89, 133, 0.06);
+     box-shadow: 0 4px 12px rgba(17,87,133,0.04);
+     overflow: hidden;
+     box-sizing: border-box;
+}
+
+/* Group header area: compact, MLflow-like accent */
+#selectionsWrapper .groupWrapper .group {
+     height: 40px;
+     display: flex;
+     align-items: center;
+     gap: 10px;
+     padding: 0 12px;
+     background: var(--ml-primary-dark);
+     color: var(--ml-surface-2);
+     font-size: 13px;
+     font-weight: 600;
+}
+
+/* Remove buttons refined (used for both group and run remove) */
+#selectionsWrapper .removeWorkloadBtn,
+#selectionsWrapper .removeBtn {
+     background-color: var(--ml-danger);
+     border: none;
+     color: var(--ml-surface-2);
+     width: 24px;
+     height: 24px;
+     border-radius: 16px;
+     font-weight: 700;
+     font-size: 12px;
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     cursor: pointer;
+}
+#selectionsWrapper .removeWorkloadBtn:hover,
+#selectionsWrapper .removeBtn:hover {
+     filter: brightness(1.05);
+}
+
+/* Run list inside card: white surface with subtle divider */
+#selectionsWrapper .groupWrapper ul {
+     margin: 0;
+     padding: 8px 12px;
+     list-style: none;
+     background: #fff;
+     border-top: 1px solid rgba(15,89,133,0.04);
+}
+#selectionsWrapper .groupWrapper ul li {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     padding: 6px 0;
+     font-size: 13px;
+     color: #23313a;
+}
+.toggleSelectionsBtn {
+	width: 48%;
+	height: 40px;
+	background-color: var(--ml-primary);
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.toggleSelectionsBtn:hover {
+	background-color: var(--ml-primary-dark);
+}
+
+.clearBtn {
+	flex: 1; /* Ensure both buttons take equal space */
+	height: 40px;
+	background-color: #e74c3c;
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.clearBtn:hover {
+	filter: brightness(1.2);
+}
+
+/* MLflow-like table styling (overrides for Antd tables used in DataPicker) */
+
+/* Base table look */
+#experimentWrapper .ant-table,
+#runsWrapper .ant-table {
+  background: #fff;
+  border: 1px solid #e6eaee;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: none;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Header */
+#experimentWrapper .ant-table-thead > tr > th,
+#runsWrapper .ant-table-thead > tr > th {
+  background: #f7f9fb;
+  color: #2f4050;
+  font-weight: 600;
+  border-bottom: 1px solid #e6eaee;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+
+/* Table body rows */
+#experimentWrapper .ant-table-tbody > tr > td,
+#runsWrapper .ant-table-tbody > tr > td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f3f5;
+  font-size: 13px;
+  color: #34495e;
+  /* Ensure row height is consistent */
+  height: 44px;
+  box-sizing: border-box;
+}
+
+/* Hover and selected row */
+#experimentWrapper .ant-table-tbody > tr:hover > td,
+#runsWrapper .ant-table-tbody > tr:hover > td {
+  background: #fbfdff;
+}
+#experimentWrapper .ant-table-tbody > tr.ant-table-row-selected > td,
+#runsWrapper .ant-table-tbody > tr.ant-table-row-selected > td,
+#experimentWrapper .highlightSelection,
+#runsWrapper .highlightSelection {
+  background: #eaf6ff !important;
+  border-left: 3px solid var(--ml-primary);
+}
+
+/* Small adjustments for icons / status bullets */
+#runsWrapper .ant-table-tbody > tr > td .complete { color: #277c43; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .running { color: #000000; font-size: 18px; }
+#runsWrapper .ant-table-tbody > tr > td .failed { color: #c82d4c; font-size: 18px; }
+
+/* Group header (for grouped workloads) to match MLflow section headers */
+#runsWrapper .groupHeader td,
+#runsWrapper .ant-table-tbody > tr.groupHeader > td {
+  background: linear-gradient(180deg, var(--ml-surface-2), #f0f7fb); /* subtle surface + tint */
+  border-bottom: 1px solid rgba(15, 89, 133, 0.06);
+  padding: 8px 12px;
+  font-weight: 700;
+  color: var(--ml-primary);
+}
+
+/* Group header inner layout */
+#runsWrapper .groupHeaderInner,
+#runsWrapper .ant-table-tbody > tr.groupHeader .groupHeaderInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Group checkbox style */
+#runsWrapper .groupCheckbox,
+#runsWrapper .ant-table-tbody .groupCheckbox {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border: 1px solid #d7e6f0;
+  text-align: center;
+  background: white;
+  cursor: pointer;
+  border-radius: 2px;
+}
+#runsWrapper .groupCheckbox:hover { border-color: var(--ml-primary-dark); background: #f0f8ff; }
+
+/* Selection checkbox (per-row) */
+#runsWrapper .checkbox,
+#experimentWrapper .checkbox {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border: 1px solid #d7dce0;
+  background: #fff;
+  text-align: center;
+  border-radius: 2px;
+  cursor: pointer;
+  font-weight: 600;
+}
+#runsWrapper .checkbox:hover,
+#experimentWrapper .checkbox:hover {
+  border-color: var(--ml-primary);
+  background: #f0f8ff;
+}
+
+/* Reduce padding for compact look similar to MLflow */
+#experimentWrapper .ant-table-tbody > tr > td:first-child,
+#runsWrapper .ant-table-tbody > tr > td:first-child {
+  padding-left: 12px;
+}
+
+/* Ensure search inputs align with MLflow minimal style */
+#experimentWrapper .searchInput,
+#runsWrapper .searchInput {
+  margin: 8px 12px;
+  padding: 6px 10px;
+  border: 1px solid #dfe7ec;
+  border-radius: 3px;
+  width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+
+/* MLflow closer theming tweaks for runs/experiments tables */
+
+/* Use MLflow font stack and slightly smaller base size for compactness */
+#dataPickerWrapper, 
+#dataPickerWrapper .ant-table {
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+/* Header: subtle border and uppercase-ish label weight */
+#experimentWrapper .ant-table-thead > tr > th,
+#runsWrapper .ant-table-thead > tr > th {
+  background: #f6f8fa;
+  color: #1f2d3d;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* Compact row paddings like MLflow */
+#experimentWrapper .ant-table-tbody > tr > td,
+#runsWrapper .ant-table-tbody > tr > td {
+  padding: 8px 10px;
+}
+
+/* Run name cell: mimic MLflow RunNameCellRenderer */
+#runsWrapper .ant-table-tbody > tr > td .runName,
+#runsWrapper .ant-table-tbody > tr > td .letter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#runsWrapper .ant-table-tbody > tr > td .runIdCircle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  font-size: 12px;
+  border-radius: 50%;
+  background: #0b5fa5; /* mlflow blue-ish */
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+/* Run name link style */
+#runsWrapper .ant-table-tbody > tr > td .runName a {
+  color: var(--ml-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+#runsWrapper .ant-table-tbody > tr > td .runName a:hover {
+  text-decoration: underline;
+}
+
+/* Info chip (i) similar to MLflow */
+#runsWrapper .ant-table-tbody > tr > td .info {
+  display: inline-block;
+  background: var(--ml-muted-dark);
+  color: var(--ml-surface-2);
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 11px;
+  line-height: 12px;
+  margin-left: 8px;
+}
+
+/* Status bullet larger and vertically centered */
+#runsWrapper .ant-table-tbody > tr > td .complete,
+#runsWrapper .ant-table-tbody > tr > td .running,
+#runsWrapper .ant-table-tbody > tr > td .failed {
+  font-size: 16px;
+  line-height: 1;
+  margin-right: 6px;
+}
+
+/* Selected row accent like MLflow: light background + colored left border */
+#runsWrapper .ant-table-tbody > tr.highlightSelection > td,
+#experimentWrapper .ant-table-tbody > tr.highlightSelection > td {
+  background: var(--selected-bg, rgba(17,87,133,0.06)) !important;
+}
+#runsWrapper .ant-table-tbody > tr.highlightSelection > td:first-child,
+#experimentWrapper .ant-table-tbody > tr.highlightSelection > td:first-child {
+  border-left: 3px solid var(--ml-primary);
+  padding-left: 8px;
+}
+
+/* Row hover aligns with MLflow subtle highlight */
+#runsWrapper .ant-table-tbody > tr:hover > td,
+#experimentWrapper .ant-table-tbody > tr:hover > td {
+  background: #fbfdff;
+}
+
+/* Group header polish */
+#runsWrapper .groupHeader td {
+  background: #f0f7fb;
+  color: #0b4f82;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-bottom: 1px solid #dbeffb;
+}
+#runsWrapper .groupHeaderInner .groupLabel {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Checkboxes minimal, matching MLflow small square look */
+#runsWrapper .groupCheckbox,
+#runsWrapper .checkbox,
+#experimentWrapper .checkbox {
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: var(--ml-surface-2);
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  font-weight: 700;
+  color: var(--ml-primary);
+}
+
+/* Search input smaller and aligned like MLflow */
+#experimentWrapper .searchInput,
+#runsWrapper .searchInput {
+  height: 32px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+/* Truncate long cells consistently */
+#dataPickerWrapper .ant-table td,
+#dataPickerWrapper .ant-table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Minor spacing for selection column */
+#dataPickerWrapper .ant-table td .checkbox {
+  margin: 0 auto;
+}
+
+/********************************************** SLIDEOUT DATA PICKER */
+#dataPickerSlideout {
+	position: fixed;
+  display: flex;
+  flex-direction: column;
+	top: 0;
+	left: 0;
+	width: clamp(70%, 90vw, 95%);
+  padding: 10px;
+	height: 100%;
+	background-color: #fafafa;
+	box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+	z-index: 400; /* increased so the picker and its controls are on top of everything */
+	overflow-y: auto;
+	transition: transform 0.3s ease;
+	transform: translateX(0); /* Default visible */
+}
+
+#dataPickerSlideout.hide {
+	transform: translateX(-100%); /* Hidden off-screen */
+}
+
+#dataPickerContent {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	/* padding: 10px; */
+	box-sizing: border-box;
+}
+
+#dataPickerHorizontalWrapper {
+	display: flex;
+	flex-direction: row; /* Align wrappers horizontally */
+	height: calc(100% - 0px); /* Account for buttons at the bottom */
+}
+
+#experimentWrapper,
+#runsWrapper,
+#selectionsWrapper {
+	overflow-y: auto;
+}
+
+.closeBtn {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	background: none;
+	border: none;
+	font-size: 24px;
+	cursor: pointer;
+	color: #333;
+}
+
+.closeBtn:hover {
+	color: #000;
+}
+
+.selectionConfirmBtn,
+.clearBtn {
+	width: 48%;
+	height: 40px;
+	font-size: 14px;
+	cursor: pointer;
+	border: none;
+	border-radius: 4px;
+}
+
+.selectionConfirmBtn {
+	background-color: #2f944a;
+	color: white;
+}
+
+.selectionConfirmBtn:hover {
+	filter: brightness(1.2);
+}
+
+.clearBtn {
+	background-color: #e74c3c;
+	color: white;
+}
+
+.clearBtn:hover {
+	filter: brightness(1.2);
+}
+
+.toggleDataPickerBtn {
+	position: absolute;
+	width: fit-content;
+	height: 40px;
+	background-color: var(--ml-primary);
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.toggleDataPickerBtn:hover {
+	background-color: var(--ml-primary-dark);
 }

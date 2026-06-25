@@ -1,2 +1,0 @@
-Experiment,Workload,Status,Run,Devices,Collocation,File,Listeners,Params
-0,10,,,0,nan,timm_train.py,smi+top+dcgmi,--data-dir /raid/datasets/imagenet --model tf_mobilenetv3_small_075 --epochs 3 --warmup-epochs 0

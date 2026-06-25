@@ -1,7 +1,8 @@
-const url = process.env.REACT_APP_API_URL;
+const rawUrl = process.env.REACT_APP_API_URL;
+const url = rawUrl.endsWith('/') ? rawUrl : rawUrl + '/';
+
 const headers = new Headers();
 headers.append('Content-Type', 'application/json');
-// headers.append('Authorization', 'Bearer ' + process.env.REACT_APP_API_KEY);
 
 const endpoints = {
     experiments: "fe_experiments",
@@ -48,18 +49,19 @@ export const HTTP = {
                     if (data["workload"] === null) {
                         data["workload"] = "null";
                     }
-                    let workloadId = data["experiment_id"] + "-" + data["workload"];
+                    let params = data["params"];
+                    let workloadId = data["experiment_id"] + "-" + params["workload"];
                     parsed.push({
                         "name": data["run_uuid"],
+                        "run_name": data["name"],
+                        "parent": data["parent_run_uuid"],
                         "experimentId": data["experiment_id"],
-                        "duration": data["duration"],
-                        "startTime": data["start_time"],
-                        "source": data["data"],
-                        "letter": data["letter"],
-                        "model": data["model"],
-                        "params": data["params"],
                         "status": data["status"],
-                        "workload": workloadId
+                        "startTime": data["start_time"],
+                        "duration": data["duration"],
+                        "letter": params["letter"],
+                        "workload": workloadId,
+                        "params": params,
                     })
                 })
                 resolve(parsed);
@@ -74,6 +76,7 @@ export const HTTP = {
                 param = param + '"' + run.name + '",';
             });
             param = param.substring(0, param.length - 1) + ")";
+            console.log(param);
             return new Promise((resolve) => {
                 HTTP.fetchData(endpoints.metrics, param).then((json) => {
                     let uniqueMetrics = [];

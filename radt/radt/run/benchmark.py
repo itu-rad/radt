@@ -181,7 +181,9 @@ class RADTBenchmark:
     def __exit__(self, type, value, traceback):
         # Delegate to the singleton so listeners/loggers are actually torn down
         # and the mlflow run is ended. Without this the listener processes are
-        # left running and the interpreter hangs at exit joining them.
+        # left running and the interpreter hangs at exit joining them. Guard on
+        # None so we don't spin up (and immediately tear down) an instance that
+        # was never created.
         if _benchmark_instance is not None:
             return _benchmark_instance.__exit__(type, value, traceback)
 

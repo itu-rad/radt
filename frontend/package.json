@@ -6,10 +6,11 @@
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "antd": "^4.16.8",
     "bootstrap": "^5.2.2",
-    "highcharts": "^10.2.1",
-    "highcharts-export-data": "^0.1.7",
-    "highcharts-react-official": "^3.1.0",
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.4",
+    "pg": "^8.16.3",
     "react": "^18.2.0",
     "react-bootstrap": "^2.5.0",
     "react-dom": "^18.2.0",
@@ -18,7 +19,7 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "concurrently \"npm --prefix server run start\" \"react-scripts start\"",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
@@ -28,6 +29,9 @@
       "react-app",
       "react-app/jest"
     ]
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
   },
   "browserslist": {
     "production": [
