@@ -17,6 +17,54 @@ def dummy(*args, **kwargs):
     return
 
 
+def _install_parent_death_signal():
+    """Ask the kernel to kill THIS (child) process when its parent dies.
+
+    radt's listener/logger children are forked from the workload process. If
+    that process exits via ``os._exit()`` / a crash / ``kill -9`` (i.e. without
+    running ``_RADTBenchmark.__exit__``), the children would otherwise be
+    orphaned, run forever, and keep the parent's stdout pipe open - wedging
+    whatever was reading it. ``PR_SET_PDEATHSIG`` makes the kernel SIGKILL them
+    instead. Linux-only; a no-op elsewhere.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        import ctypes
+        import signal as _signal
+
+        PR_SET_PDEATHSIG = 1
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(
+            PR_SET_PDEATHSIG, _signal.SIGKILL
+        )
+    except Exception:
+        # Best-effort hardening; never block startup on it.
+        pass
+
+
+def _arm_parent_death_signal(process):
+    """Wrap ``process.run`` so the child arms PR_SET_PDEATHSIG before running.
+
+    Must be set on the instance BEFORE ``start()``; with the fork start method
+    the child inherits the override and ``_bootstrap`` calls our wrapper.
+
+    Fork-only: PR_SET_PDEATHSIG is Linux-only, and under spawn the Process is
+    pickled - a closure on ``process.run`` wouldn't pickle and would break
+    startup (e.g. macmon on macOS). Under fork the override is inherited via
+    memory, no pickling involved.
+    """
+    if sys.platform != "linux" or multiprocessing.get_start_method() != "fork":
+        return
+
+    original_run = process.run
+
+    def run_with_pdeathsig():
+        _install_parent_death_signal()
+        return original_run()
+
+    process.run = run_with_pdeathsig
+
+
 def execute_command(cmd: str):
     """Execute a command
 
@@ -276,6 +324,10 @@ class _RADTBenchmark:
                 self.processes.append(inst)
 
         for process in self.processes:
+            # Arm parent-death-signal so these children can't outlive the
+            # workload process even if it exits via os._exit() (which skips
+            # __exit__/terminate). Without this they orphan and hang readers.
+            _arm_parent_death_signal(process)
             process.start()
 
         return self
