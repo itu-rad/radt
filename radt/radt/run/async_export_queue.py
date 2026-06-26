@@ -54,8 +54,17 @@ class AsyncTraceExportQueueV2:
     during the network call.
     """
 
-    def __init__(self, flush_interval=0.2, max_batch_size=100, shutdown_timeout=30.0):
-        self._queue = queue.Queue()
+    def __init__(self, flush_interval=0.2, max_batch_size=100, shutdown_timeout=30.0,
+                 max_queue_size=100_000):
+        # Bounded queue: on a slow link the upload can't keep up with the span
+        # rate on a long (multi-hour) run, so an unbounded queue grows without
+        # limit and OOMs. When full we drop new tasks (and count them) rather
+        # than block the workload thread. 0/negative env value = unbounded.
+        self._max_queue_size = int(_env_float("RADT_TRACE_MAX_QUEUE_SIZE", max_queue_size))
+        self._queue = queue.Queue(
+            maxsize=self._max_queue_size if self._max_queue_size > 0 else 0
+        )
+        self._dropped = 0
         self._flush_interval = _env_float("RADT_TRACE_FLUSH_INTERVAL", flush_interval)
         self._max_batch_size = int(_env_float("RADT_TRACE_MAX_BATCH_SIZE", max_batch_size))
         # Hard upper bound on how long shutdown will wait for the final drain, so
@@ -105,7 +114,20 @@ class AsyncTraceExportQueueV2:
                 return
             self.activate()
 
-        self._queue.put(task)
+        try:
+            # Non-blocking: never stall the workload thread. Drop on overflow.
+            self._queue.put_nowait(task)
+        except queue.Full:
+            self._dropped += 1
+            if self._dropped == 1 or self._dropped % 1000 == 0:
+                print(
+                    f"radt[trace]: queue full ({self._max_queue_size}); dropped "
+                    f"{self._dropped} trace task(s) — uploads can't keep up with the "
+                    f"span rate on this network. Raise RADT_TRACE_MAX_QUEUE_SIZE / "
+                    f"RADT_TRACE_UPLOAD_WORKERS or reduce span volume.",
+                    file=sys.stderr, flush=True,
+                )
+            return
 
         # Wake the flusher early once enough work has accumulated.
         if self._queue.qsize() >= self._max_batch_size:
@@ -153,7 +175,8 @@ class AsyncTraceExportQueueV2:
         print(
             f"radt[trace]: exported {self._stat_tasks} task(s) "
             f"[{self._stat_seconds:.1f}s work across {self._upload_workers} "
-            f"worker(s)]; errors={self._stat_errors}; not-flushed={leftover}",
+            f"worker(s)]; errors={self._stat_errors}; dropped={self._dropped}; "
+            f"not-flushed={leftover}",
             file=sys.stderr, flush=True,
         )
 

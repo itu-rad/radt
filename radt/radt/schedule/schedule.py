@@ -144,6 +144,50 @@ def process_output(popens, log_runs, log, run_ids):
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
 
 
+def log_text_safely(client, run_id, text, artifact_file, max_bytes=900_000):
+    """Upload ``text`` as a run artifact, truncating to stay under the tracking
+    server's body limit and never raising.
+
+    Captured stdout/stderr grows with run length; on multi-hour runs the full
+    log easily exceeds nginx's ``client_max_body_size`` (1 MB by default), which
+    returns HTTP 413. A failed log upload must not abort the whole schedule, so
+    this truncates (keeping head + tail, where the interesting bits are) and
+    swallows any upload error with a warning.
+    """
+    try:
+        encoded = (text or "").encode("utf-8", errors="replace")
+        if len(encoded) > max_bytes:
+            head = max_bytes // 5
+            tail = max_bytes - head
+            notice = (
+                f"\n\n... [radt: log truncated — {len(encoded)} bytes exceeds "
+                f"{max_bytes} limit; kept first {head} + last {tail} bytes] ...\n\n"
+            )
+            text = (
+                encoded[:head].decode("utf-8", errors="replace")
+                + notice
+                + encoded[-tail:].decode("utf-8", errors="replace")
+            )
+        client.log_text(run_id, text, artifact_file)
+    except Exception as e:
+        sysprint(f"Failed to upload {artifact_file} (continuing): {e}")
+
+
+def upload_run_logs(run_ids, log_runs, log):
+    """Best-effort upload of the current run + workload logs (truncated).
+
+    Safe to call repeatedly during a run to give semi-live logs in mlflow:
+    ``log_text`` overwrites the same artifact each time, so each call replaces
+    the file with the latest (truncated) snapshot. Never raises.
+    """
+    client = MlflowClient()
+    for letter, run_id in run_ids.items():
+        if not run_id:
+            continue
+        log_text_safely(client, run_id, "".join(log_runs.get(letter, [])), f"log_{run_id}.txt")
+        log_text_safely(client, run_id, "".join(log), "log_workload.txt")
+
+
 def execute_workload(
     defs: list,
     group_run_id: str | None = None,
@@ -277,6 +321,13 @@ def execute_workload(
                 if (Path(filepath) / "radtlock").is_file():
                     (Path(filepath) / "radtlock").unlink()
 
+            # Push logs to mlflow every N seconds for semi-live output.
+            # RADT_LOG_UPLOAD_INTERVAL=0 disables periodic uploads.
+            log_upload_interval = float(
+                os.environ.get("RADT_LOG_UPLOAD_INTERVAL", "60") or "60"
+            )
+            last_log_upload = time.time()
+
             while True:
 
                 # Stop once all processes have finished
@@ -288,6 +339,14 @@ def execute_workload(
                     break
 
                 process_output(popens, log_runs, log, run_ids)
+
+                if (
+                    log_upload_interval > 0
+                    and time.time() - last_log_upload >= log_upload_interval
+                ):
+                    upload_run_logs(run_ids, log_runs, log)
+                    last_log_upload = time.time()
+
                 time.sleep(poll_interval)
 
         except KeyboardInterrupt:
@@ -334,8 +393,8 @@ def execute_workload(
                         run.info.status,
                     )
                 )
-                client.log_text(run_id, "".join(log_runs[letter]), f"log_{run_id}.txt")
-                client.log_text(run_id, "".join(log), f"log_workload.txt")
+                log_text_safely(client, run_id, "".join(log_runs[letter]), f"log_{run_id}.txt")
+                log_text_safely(client, run_id, "".join(log), "log_workload.txt")
 
                 if row["WorkloadListener"]:
                     try:
