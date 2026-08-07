@@ -16,8 +16,20 @@ dependencies = [
     "pyyaml >= 6.0.0"
 ]
 
+[project.optional-dependencies]
+test = ["pytest >= 7.0", "pytest-timeout >= 2.0"]
+
 [project.urls]
 Home = "https://github.com/Resource-Aware-Data-systems-RAD/radt"
 
 [project.scripts]
 radt = "radt:cli"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The exporter runs in a child process, so a wedged drain would otherwise hang
+# the suite rather than fail it.
+timeout = 300
+markers = [
+    "slow: spawns an exporter process and talks to a real mlflow store",
+]
