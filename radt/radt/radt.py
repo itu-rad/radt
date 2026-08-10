@@ -182,10 +182,52 @@ def cli_run():
     start_run(args, listeners)
 
 
+def cli_export_trace():
+    parser = argparse.ArgumentParser(
+        prog="radt export-trace",
+        description="Convert a run's radT batch trace into a Perfetto .pftrace file. "
+        "Works against any mlflow server, including a stock one.",
+    )
+    parser.add_argument("run_id", type=str, help="mlflow run id")
+    parser.add_argument(
+        "-o", "--output", type=str, default=None, help="output path (default: <run_id>.pftrace)"
+    )
+    parser.add_argument(
+        "--tracking-uri", type=str, default=None, help="mlflow tracking uri (default: ambient)"
+    )
+    parser.add_argument(
+        "--no-metrics", action="store_true", help="omit metrics as Perfetto counter tracks"
+    )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="also store the trace as a run artifact, so the radT mlflow UI sees it as converted",
+    )
+    args = parser.parse_args(sys.argv[2:])
+
+    from .run.trace_export import TraceExportError, export_trace
+
+    try:
+        output = export_trace(
+            args.run_id,
+            output_path=args.output,
+            tracking_uri=args.tracking_uri,
+            include_metrics=not args.no_metrics,
+            upload=args.upload,
+        )
+    except TraceExportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    print(output)
+
+
 def cli():
-    """Entrypoint for `radt` and `radt run`"""
-    if len(sys.argv) > 1 and sys.argv[1].strip() == "run":
+    """Entrypoint for `radt`, `radt run` and `radt export-trace`"""
+    subcommand = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+    if subcommand == "run":
         cli_run()
+    elif subcommand == "export-trace":
+        cli_export_trace()
     else:
         cli_schedule()
 

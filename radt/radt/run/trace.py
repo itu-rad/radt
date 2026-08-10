@@ -59,6 +59,8 @@ _MAX_QUEUE = int(os.getenv("RADT_TRACE_PROC_QUEUE_SIZE", "200000"))
 
 #: Run-relative artifact directory holding the span batches and their manifest.
 ARTIFACT_DIR = "radt-trace"
+#: Written last, so its presence marks a complete upload.
+MANIFEST_NAME = "manifest.json"
 #: Bumped when the on-disk record layout changes; readers must refuse unknown versions.
 SCHEMA_VERSION = 1
 _BACKENDS = ("radt", "mlflow")
@@ -448,7 +450,7 @@ class _RadtBatchExporter(multiprocessing.Process):
                 "e": ["phase", "span_id", "end_ns"],
             },
         }
-        path = os.path.join(spool_dir, "manifest.json")
+        path = os.path.join(spool_dir, MANIFEST_NAME)
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(manifest, f, indent=2)

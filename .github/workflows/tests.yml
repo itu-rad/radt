@@ -1,0 +1,48 @@
+name: tests
+
+# Push-only (plus manual): the team commits straight to feature branches, and a
+# `pull_request` trigger would just double up on every same-repo PR.
+on:
+  push:
+    paths:
+      - "radt/**"
+      - ".github/workflows/tests.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    # The exporter runs in a child process; pytest-timeout catches a wedged
+    # drain, this catches anything that gets past it.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor is mlflow 3.x's minimum; the upper end catches breakage early.
+        python-version: ["3.10", "3.12"]
+
+    defaults:
+      run:
+        working-directory: radt
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: radt/pyproject.toml
+
+      - name: Install radt with test extras
+        run: uv pip install --system -e ".[test]"
+
+      - name: Run tests
+        run: pytest -q --timeout=300

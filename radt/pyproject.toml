@@ -17,7 +17,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest >= 7.0", "pytest-timeout >= 2.0"]
+# Client-side Perfetto conversion (`radt export-trace`). Optional so workloads
+# that only record traces don't pull it in.
+export = ["perfetto"]
+test = ["pytest >= 7.0", "pytest-timeout >= 2.0", "perfetto"]
 
 [project.urls]
 Home = "https://github.com/Resource-Aware-Data-systems-RAD/radt"

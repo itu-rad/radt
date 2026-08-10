@@ -9,7 +9,9 @@ from .run import (
     listeners,
     shutdown,
     trace,
+    trace_export,
     _patch_mlflow_async_export_queue,
 )
+from .run.trace_export import export_trace
 
 _patch_mlflow_async_export_queue()
