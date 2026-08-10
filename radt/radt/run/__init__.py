@@ -4,3 +4,4 @@ from .listeners import listeners
 from .async_export_queue import _patch_mlflow_async_export_queue
 from . import trace
 from . import trace_export
+from . import mlflow_capture

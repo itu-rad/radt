@@ -71,6 +71,9 @@ _BACKENDS = ("radt", "mlflow")
 
 _queue = None  # multiprocessing.Queue to the exporter
 _proc = None  # _RadtBatchExporter or _TraceExporter
+#: Backend resolved by the last :func:`start`. Read by ``mlflow_capture`` so an
+#: explicit choice here also governs whether mlflow spans are diverted.
+_backend = None
 _experiment_id = None
 _enabled = False
 _dropped = 0
@@ -176,12 +179,13 @@ def start(experiment_id=None, backend=None):
             ``RADT_TRACE_BACKEND``, then to probing the tracking server -- see
             :func:`_detect_backend`.
     """
-    global _queue, _proc, _enabled, _experiment_id
+    global _queue, _proc, _enabled, _experiment_id, _backend
     if _proc is not None:
         return
     backend = (backend or os.getenv("RADT_TRACE_BACKEND") or _detect_backend()).lower()
     if backend not in _BACKENDS:
         raise ValueError(f"backend must be one of {_BACKENDS}, got {backend!r}")
+    _backend = backend
     _experiment_id = (
         str(experiment_id) if experiment_id not in (None, "", 0, "0") else None
     )
@@ -346,6 +350,170 @@ def _encode(item):
     return ["e", sid, ts]
 
 
+class _BatchSpool:
+    """Gzipped JSONL batches of span records, uploaded as run artifacts.
+
+    Shared by both capture paths -- radt's own :func:`span` (via a child
+    process) and intercepted ``mlflow.start_span`` calls (in-process) -- so the
+    on-disk format has exactly one implementation.
+
+    Records are written as they arrive, so a hard kill leaves everything up to
+    the last roll on disk. The manifest is written last: its presence is what
+    tells a reader the upload finished.
+    """
+
+    def __init__(self, experiment_id=None, client=None):
+        self._experiment_id = experiment_id
+        self._client = client
+        self._dir = tempfile.mkdtemp(prefix="radt-trace-")
+        self._max_events = int(os.getenv("RADT_TRACE_BATCH_EVENTS", "200000"))
+        self._max_seconds = float(os.getenv("RADT_TRACE_BATCH_SECONDS", "60"))
+        # zlib's balanced default rather than gzip.open's 9, which costs CPU
+        # here for a few percent of size.
+        self._compresslevel = int(os.getenv("RADT_TRACE_COMPRESSLEVEL", "6"))
+
+        self._lock = threading.Lock()
+        self._run_id = None
+        self._pending = []  # closed batches with nowhere to go yet
+        self._batches = []  # uploaded artifact names, in order
+        self._fh = None
+        self._path = None
+        self._seq = 0
+        self._in_batch = 0
+        self.total = 0
+        self._opened_at = time.time()
+        self._closed = False
+        self._open()
+
+    # -- internals (call with the lock held) --
+
+    def _mlflow_client(self):
+        if self._client is None:
+            from mlflow.tracking import MlflowClient
+
+            self._client = MlflowClient()
+        return self._client
+
+    def _open(self):
+        self._seq += 1
+        self._path = os.path.join(self._dir, f"spans-{self._seq:06d}.jsonl.gz")
+        self._fh = gzip.open(
+            self._path, "wt", encoding="utf-8", compresslevel=self._compresslevel
+        )
+        self._in_batch = 0
+        self._opened_at = time.time()
+
+    def _upload(self, path):
+        self._mlflow_client().log_artifact(self._run_id, path, artifact_path=ARTIFACT_DIR)
+        self._batches.append(os.path.basename(path))
+        os.unlink(path)
+
+    def _close_batch(self):
+        self._fh.close()
+        self._fh = None
+        if self._in_batch == 0:
+            os.unlink(self._path)  # never publish an empty batch
+            return
+        if self._run_id is None:
+            self._pending.append(self._path)
+        else:
+            self._upload(self._path)
+
+    def _drain_pending(self):
+        for path in self._pending:
+            try:
+                self._upload(path)
+            except Exception:  # noqa: BLE001
+                _logger.exception("radt[batch-trace]: upload failed for %s", path)
+        self._pending.clear()
+
+    # -- public --
+
+    def set_run(self, run_id):
+        """Name the run to upload to; releases anything spooled before now."""
+        with self._lock:
+            if not run_id or self._closed:
+                return
+            self._run_id = run_id
+            self._drain_pending()
+
+    def add(self, record):
+        with self._lock:
+            if self._closed:
+                return
+            self._fh.write(json.dumps(record, separators=(",", ":")))
+            self._fh.write("\n")
+            self._in_batch += 1
+            self.total += 1
+            if self._in_batch >= self._max_events:
+                self._close_batch()
+                self._open()
+
+    def maybe_roll(self):
+        """Time-based roll, so a long quiet run doesn't strand everything in one file."""
+        with self._lock:
+            if self._closed or not self._in_batch:
+                return
+            if (time.time() - self._opened_at) >= self._max_seconds:
+                self._close_batch()
+                self._open()
+
+    def close(self):
+        """Final flush, upload, and manifest. Idempotent."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            if self._fh is not None:
+                self._close_batch()
+
+            if self._run_id is None:
+                if self.total == 0:
+                    shutil.rmtree(self._dir, ignore_errors=True)
+                    return
+                # Spans with nowhere to go: keep the spool rather than silently
+                # discarding a run's worth of tracing.
+                _logger.error(
+                    "radt[batch-trace]: no run was ever set — %d event(s) left in %s",
+                    self.total,
+                    self._dir,
+                )
+                return
+
+            self._drain_pending()
+            self._write_manifest()
+            shutil.rmtree(self._dir, ignore_errors=True)
+
+    def _write_manifest(self):
+        manifest = {
+            "schema_version": SCHEMA_VERSION,
+            "experiment_id": self._experiment_id,
+            "run_id": self._run_id,
+            "event_count": self.total,
+            "batches": self._batches,
+            # Positional record layouts, so a reader need not hardcode them.
+            "record_formats": {
+                "s": [
+                    "phase",
+                    "span_id",
+                    "parent_id",
+                    "trace_id",
+                    "name",
+                    "attributes",
+                    "start_ns",
+                ],
+                "e": ["phase", "span_id", "end_ns"],
+            },
+        }
+        path = os.path.join(self._dir, MANIFEST_NAME)
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle, indent=2)
+            self._mlflow_client().log_artifact(self._run_id, path, artifact_path=ARTIFACT_DIR)
+        except Exception:  # noqa: BLE001
+            _logger.exception("radt[batch-trace]: failed to write manifest")
+
+
 class _RadtBatchExporter(multiprocessing.Process):
     """Radt-owned process that spools span events and uploads them as artifacts.
 
@@ -361,56 +529,9 @@ class _RadtBatchExporter(multiprocessing.Process):
         self._q = event_queue
         self._experiment_id = experiment_id
         self._stop_event = multiprocessing.Event()
-        self._max_events = int(os.getenv("RADT_TRACE_BATCH_EVENTS", "200000"))
-        self._max_seconds = float(os.getenv("RADT_TRACE_BATCH_SECONDS", "60"))
-        # zlib's balanced default rather than gzip.open's 9, which costs CPU in
-        # this process for a few percent of size. Raise it if artifact storage
-        # matters more than the exporter's CPU share.
-        self._compresslevel = int(os.getenv("RADT_TRACE_COMPRESSLEVEL", "6"))
 
     def run(self):
-        from mlflow.tracking import MlflowClient
-
-        client = MlflowClient()
-        spool_dir = tempfile.mkdtemp(prefix="radt-trace-")
-        run_id = None
-        pending = []  # closed batches not yet uploadable (run_id unknown)
-        batches = []  # artifact file names, in order
-        fh = None
-        seq = 0
-        in_batch = 0
-        total = 0
-        opened_at = time.time()
-
-        def open_batch():
-            nonlocal fh, seq, in_batch, opened_at
-            seq += 1
-            path = os.path.join(spool_dir, f"spans-{seq:06d}.jsonl.gz")
-            fh = gzip.open(
-                path, "wt", encoding="utf-8", compresslevel=self._compresslevel
-            )
-            in_batch = 0
-            opened_at = time.time()
-            return path
-
-        def upload(path):
-            client.log_artifact(run_id, path, artifact_path=ARTIFACT_DIR)
-            batches.append(os.path.basename(path))
-            os.unlink(path)
-
-        def close_batch(path):
-            nonlocal fh
-            fh.close()
-            fh = None
-            if in_batch == 0:
-                os.unlink(path)  # nothing buffered; don't publish an empty batch
-                return
-            if run_id is None:
-                pending.append(path)
-            else:
-                upload(path)
-
-        current = open_batch()
+        spool = _BatchSpool(self._experiment_id)
         errors = 0
         while True:
             try:
@@ -418,11 +539,7 @@ class _RadtBatchExporter(multiprocessing.Process):
             except queue.Empty:
                 if self._stop_event.is_set():
                     break
-                # Time-based roll keeps a long, quiet run from holding everything
-                # in a single spool that a crash would strand.
-                if in_batch and (time.time() - opened_at) >= self._max_seconds:
-                    close_batch(current)
-                    current = open_batch()
+                spool.maybe_roll()
                 continue
 
             phase = item[0]
@@ -430,83 +547,20 @@ class _RadtBatchExporter(multiprocessing.Process):
                 self._stop_event.set()
                 continue
             if phase == "set_run":
-                run_id = item[1]
-                for path in pending:
-                    try:
-                        upload(path)
-                    except Exception:  # noqa: BLE001
-                        _logger.exception("radt[batch-trace]: upload failed for %s", path)
-                pending.clear()
+                spool.set_run(item[1])
                 continue
 
             try:
-                fh.write(json.dumps(_encode(item), separators=(",", ":")))
-                fh.write("\n")
-                in_batch += 1
-                total += 1
+                spool.add(_encode(item))
             except Exception:  # noqa: BLE001
                 errors += 1
                 if errors <= 5:
                     _logger.exception("radt[batch-trace]: failed to encode event")
-                continue
 
-            if in_batch >= self._max_events:
-                close_batch(current)
-                current = open_batch()
-
-        if fh is not None:
-            close_batch(current)
-
-        if run_id is None:
-            if total == 0:
-                shutil.rmtree(spool_dir, ignore_errors=True)
-                return
-            # Spans with nowhere to go: keep the spool rather than silently
-            # discarding a run's worth of tracing.
-            _logger.error(
-                "radt[batch-trace]: no run was ever set — %d event(s) left in %s",
-                total,
-                spool_dir,
-            )
-            return
-
-        for path in pending:  # a stop that raced the set_run event
-            try:
-                upload(path)
-            except Exception:  # noqa: BLE001
-                _logger.exception("radt[batch-trace]: upload failed for %s", path)
-        pending.clear()
-
-        self._write_manifest(client, run_id, spool_dir, batches, total)
-        shutil.rmtree(spool_dir, ignore_errors=True)
+        spool.close()
         _logger.info(
-            "radt[batch-trace]: exporter done — events=%s batches=%s errors=%s",
-            total,
-            len(batches),
-            errors,
+            "radt[batch-trace]: exporter done — events=%s errors=%s", spool.total, errors
         )
-
-    def _write_manifest(self, client, run_id, spool_dir, batches, total):
-        """Written last: its presence is how a reader knows the upload finished."""
-        manifest = {
-            "schema_version": SCHEMA_VERSION,
-            "experiment_id": self._experiment_id,
-            "run_id": run_id,
-            "event_count": total,
-            "batches": batches,
-            # Positional record layouts, so a reader need not hardcode them.
-            "record_formats": {
-                "s": ["phase", "span_id", "parent_id", "trace_id", "name", "attributes", "start_ns"],
-                "e": ["phase", "span_id", "end_ns"],
-            },
-        }
-        path = os.path.join(spool_dir, MANIFEST_NAME)
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2)
-            client.log_artifact(run_id, path, artifact_path=ARTIFACT_DIR)
-        except Exception:  # noqa: BLE001
-            _logger.exception("radt[batch-trace]: failed to write manifest")
 
     def terminate(self, timeout=30.0):
         # Bounded join; daemonic, so an overrun is abandoned at interpreter exit.
@@ -529,6 +583,13 @@ class _TraceExporter(multiprocessing.Process):
 
     def run(self):
         import radt  # noqa: F401  — applies the V2 async-upload patch in THIS process
+
+        from . import mlflow_capture
+
+        # Importing radt above also installed the span-capture hooks. Under spawn
+        # this is a fresh interpreter that would re-probe and divert spans into
+        # artifacts -- exactly what this process exists NOT to do.
+        mlflow_capture.disable()
 
         # Capture the actual V2 uploader instance mlflow constructs (via radt's
         # patch), so the drain can watch its real progress. mlflow keeps its own

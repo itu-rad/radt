@@ -48,6 +48,14 @@ def trace(tmp_path):
     trace_module._enabled = False
     trace_module._dropped = 0
     trace_module._experiment_id = None
+    trace_module._backend = None
+
+    # ``import radt`` installs the mlflow-span capture hooks, and its decision is
+    # cached process-wide -- so without this a backend chosen by one test leaks
+    # into every later one.
+    from radt.run import mlflow_capture
+
+    mlflow_capture._capturing = None
 
 
 def _trace_dir(tmp_path, run_id, artifact_dir):
