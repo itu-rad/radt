@@ -74,19 +74,76 @@ def test_unknown_backend_is_rejected(trace):
 @pytest.mark.parametrize(
     ("env", "argument", "expected"),
     [
-        (None, None, "_RadtBatchExporter"),
         ("mlflow", None, "_TraceExporter"),
         ("radt", None, "_RadtBatchExporter"),
         ("mlflow", "radt", "_RadtBatchExporter"),
+        ("radt", "mlflow", "_TraceExporter"),
     ],
 )
-def test_backend_selection(trace, tracking, monkeypatch, env, argument, expected):
+def test_explicit_backend_beats_detection(trace, tracking, monkeypatch, env, argument, expected):
+    """An explicit choice must win, so detection can never override an operator."""
     _, experiment_id = tracking
-    monkeypatch.delenv("RADT_TRACE_BACKEND", raising=False)
-    if env:
-        monkeypatch.setenv("RADT_TRACE_BACKEND", env)
+    monkeypatch.setattr(trace, "_detect_backend", lambda: "radt" if env == "mlflow" else "mlflow")
+    monkeypatch.setenv("RADT_TRACE_BACKEND", env)
     trace.start(experiment_id=experiment_id, backend=argument)
     assert type(trace._proc).__name__ == expected
+
+
+@pytest.mark.slow
+def test_detection_decides_when_nothing_is_specified(trace, tracking, monkeypatch):
+    _, experiment_id = tracking
+    monkeypatch.delenv("RADT_TRACE_BACKEND", raising=False)
+    monkeypatch.setattr(trace, "_detect_backend", lambda: "mlflow")
+    trace.start(experiment_id=experiment_id)
+    assert type(trace._proc).__name__ == "_TraceExporter"
+
+
+# --- server detection -----------------------------------------------------
+
+
+def test_local_store_needs_no_probe(trace, tracking):
+    """A sqlite/file store has no server to ask, and artifacts work regardless."""
+    assert trace._detect_backend() == "radt"
+
+
+def test_stock_server_is_identified_by_a_missing_endpoint(trace, monkeypatch):
+    _patch_probe(trace, monkeypatch, status=404)
+    assert trace._detect_backend() == "mlflow"
+
+
+def test_radt_server_keeps_batch_tracing(trace, monkeypatch):
+    _patch_probe(trace, monkeypatch, status=200)
+    assert trace._detect_backend() == "radt"
+
+
+@pytest.mark.parametrize("status", [401, 403, 500, 502])
+def test_ambiguous_responses_keep_the_default(trace, monkeypatch, status):
+    """Only a definite 404 switches away; anything else leaves batch tracing on."""
+    _patch_probe(trace, monkeypatch, status=status)
+    assert trace._detect_backend() == "radt"
+
+
+def test_unreachable_server_keeps_the_default(trace, monkeypatch):
+    _patch_probe(trace, monkeypatch, raises=OSError("connection refused"))
+    assert trace._detect_backend() == "radt"
+
+
+def _patch_probe(trace, monkeypatch, status=None, raises=None):
+    """Fakes an http tracking store and its probe response."""
+    import types
+
+    def fake_client():
+        store = types.SimpleNamespace(get_host_creds=lambda: object())
+        return types.SimpleNamespace(_tracking_client=types.SimpleNamespace(store=store))
+
+    monkeypatch.setattr("mlflow.tracking.MlflowClient", fake_client)
+
+    def fake_request(*args, **kwargs):
+        if raises:
+            raise raises
+        return types.SimpleNamespace(status_code=status)
+
+    monkeypatch.setattr("mlflow.utils.rest_utils.http_request", fake_request)
 
 
 # --- radt backend ---------------------------------------------------------

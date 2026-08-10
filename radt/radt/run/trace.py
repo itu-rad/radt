@@ -57,6 +57,10 @@ _span_stack: "contextvars.ContextVar[tuple]" = contextvars.ContextVar(
 _STOP = "__radt_trace_stop__"
 _MAX_QUEUE = int(os.getenv("RADT_TRACE_PROC_QUEUE_SIZE", "200000"))
 
+#: Present only on a radT mlflow server; its absence is what identifies a stock one.
+_PROBE_ENDPOINT = "/ajax-api/2.0/mlflow/radt-config"
+_PROBE_TIMEOUT = float(os.getenv("RADT_TRACE_PROBE_TIMEOUT", "5"))
+
 #: Run-relative artifact directory holding the span batches and their manifest.
 ARTIFACT_DIR = "radt-trace"
 #: Written last, so its presence marks a complete upload.
@@ -116,20 +120,66 @@ def span(name, attributes=None):
         _emit(("e", sid, None, None, None, None, time.time_ns()))
 
 
+def _detect_backend():
+    """Choose a backend from what the tracking server can actually do.
+
+    A radT server renders and exports the batched artifacts, so batch tracing is
+    both cheaper and fully featured there. A stock server has no way to show
+    them, so spans go through mlflow tracing instead and appear in its own trace
+    UI.
+
+    Only a positive identification of a stock server switches away from batch
+    tracing: an unreachable or unrecognised server leaves the default alone,
+    because batch artifacts work anywhere and convert client-side via
+    ``radt export-trace``.
+    """
+    try:
+        from mlflow.tracking import MlflowClient
+
+        store = getattr(MlflowClient()._tracking_client, "store", None)
+        get_host_creds = getattr(store, "get_host_creds", None)
+        if get_host_creds is None:
+            # A local store (sqlite/file) has no server to ask; artifacts work.
+            return "radt"
+
+        from mlflow.utils.rest_utils import http_request
+
+        response = http_request(
+            get_host_creds(),
+            _PROBE_ENDPOINT,
+            "GET",
+            timeout=_PROBE_TIMEOUT,
+            max_retries=0,
+            raise_on_status=False,
+        )
+    except Exception:
+        _logger.debug("radt[trace]: backend probe failed", exc_info=True)
+        return "radt"
+
+    if response.status_code == 404:
+        _logger.info(
+            "radt[trace]: tracking server has no radT support; using mlflow tracing "
+            "so spans remain visible in its trace UI"
+        )
+        return "mlflow"
+    return "radt"
+
+
 def start(experiment_id=None, backend=None):
     """Create the queue + exporter process. Call ONCE from the main thread, before
     any pipeline thread or CUDA init. Idempotent.
 
     Args:
         experiment_id: mlflow experiment the traces belong to.
-        backend: ``"radt"`` (default) to batch spans into run artifacts, or
-            ``"mlflow"`` to export them through the mlflow tracing API. Falls
-            back to ``RADT_TRACE_BACKEND`` when not given.
+        backend: ``"radt"`` to batch spans into run artifacts, or ``"mlflow"``
+            to export them through the mlflow tracing API. Falls back to
+            ``RADT_TRACE_BACKEND``, then to probing the tracking server -- see
+            :func:`_detect_backend`.
     """
     global _queue, _proc, _enabled, _experiment_id
     if _proc is not None:
         return
-    backend = (backend or os.getenv("RADT_TRACE_BACKEND") or "radt").lower()
+    backend = (backend or os.getenv("RADT_TRACE_BACKEND") or _detect_backend()).lower()
     if backend not in _BACKENDS:
         raise ValueError(f"backend must be one of {_BACKENDS}, got {backend!r}")
     _experiment_id = (
