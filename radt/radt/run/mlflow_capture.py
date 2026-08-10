@@ -1,19 +1,13 @@
 """Divert ``mlflow.start_span`` spans into radT's artifact batches.
 
-Workloads instrumented with plain ``mlflow.start_span`` -- rather than
-:func:`radt.run.trace.span` -- otherwise stream every span to the tracking
-server over OTLP. Against a radT server that traffic is pure overhead: the
-server can read the batched artifacts and convert them to Perfetto itself.
+Patches ``MlflowV3SpanExporter.export`` -- the point every completed span
+passes through -- so workloads instrumented with plain mlflow tracing produce
+the same batches :mod:`radt.run.trace` writes, without streaming each span to
+the server. Requires no changes to the workload.
 
-This patches ``MlflowV3SpanExporter.export``, the single point every completed
-span passes through, and writes the same on-disk format
-:mod:`radt.run.trace` produces. The workload needs no changes.
-
-Flushing is the subtle part. Callers commonly finish with ``os._exit(0)`` to
-skip a slow interpreter teardown, which also skips ``atexit`` and background
-threads -- so anything still spooled would vanish silently. ``mlflow``'s own
-``flush_trace_async_logging`` is patched to drain and upload first, because
-that is what such callers already invoke on the way out.
+``mlflow.flush_trace_async_logging`` is patched too: callers finish with
+``os._exit(0)``, which skips atexit and background threads, so the upload has
+to complete inside the flush they already call.
 """
 
 import logging
@@ -37,12 +31,14 @@ _run_id = None
 
 
 def _ensure_spool():
-    """Created on first capture, so a process that never traces spools nothing."""
+    """Locked: the export queue runs several workers, and an unguarded lazy init
+    lets the loser of the race write to a spool nobody uploads."""
     global _spool
 
-    if _spool is None:
-        _spool = _BatchSpool(_experiment_id)
-    return _spool
+    with _lock:
+        if _spool is None:
+            _spool = _BatchSpool(_experiment_id)
+        return _spool
 
 
 def _span_records(span, trace_id, run_id):
@@ -82,31 +78,38 @@ def _resolve_run_id(otel_trace_id):
         return None
 
 
-def _capture(spans):
+def _records_for(spans):
+    """Runs on the workload's thread, so it stays to dict copies and integer
+    reads. Run attribution happens here because it reads mlflow's in-memory
+    trace manager, which no longer holds the trace by the time a worker runs."""
     global _run_id
 
+    records = []
     for span in spans:
         try:
             otel_trace_id = span.context.trace_id
             if _run_id is None:
                 if resolved := _resolve_run_id(otel_trace_id):
                     _run_id = resolved
-                    _spool.set_run(resolved)
-            start, end = _span_records(span, otel_trace_id, _run_id)
-            _spool.add(start)
-            _spool.add(end)
+            records.extend(_span_records(span, otel_trace_id, _run_id))
         except Exception:  # noqa: BLE001 - never break the workload over tracing
-            _logger.debug("radt[mlflow-capture]: failed to capture a span", exc_info=True)
-    _spool.maybe_roll()
+            _logger.debug("radt[mlflow-capture]: failed to convert a span", exc_info=True)
+    return records
+
+
+def _write_records(records, run_id):
+    """Spool and upload. Runs on the async queue's worker, never the ML thread."""
+    spool = _ensure_spool()
+    if run_id:
+        spool.set_run(run_id)
+    for record in records:
+        spool.add(record)
+    spool.maybe_roll()  # may upload a rolled batch -- worker thread, not the workload
 
 
 def _should_capture():
-    """Whether to divert spans, decided once on the first exported span.
-
-    Deferred rather than decided at import: the answer needs a probe of the
-    tracking server, and paying for that on ``import radt`` would slow every
-    process whether or not it traces anything.
-    """
+    """Decided once, on the first exported span: the answer needs a server probe,
+    which would otherwise slow every ``import radt`` whether it traces or not."""
     global _capturing
 
     if _capturing is None:
@@ -132,9 +135,9 @@ def _should_capture():
 def enable(experiment_id=None):
     """Route ``mlflow.start_span`` spans into artifact batches instead of OTLP.
 
-    Installs the hooks only; whether spans are actually diverted is decided on
-    the first export (see :func:`_should_capture`), so a stock server keeps its
-    normal tracing. Idempotent, and safe before mlflow tracing is initialised.
+    Installs the hooks only; :func:`_should_capture` decides on the first export
+    whether to divert, so a stock server keeps its normal tracing. Idempotent,
+    and safe to call before mlflow tracing is initialised.
     """
     global _spool, _patched, _original_export, _original_flush, _experiment_id
 
@@ -142,6 +145,7 @@ def enable(experiment_id=None):
         if _patched:
             return
         import mlflow
+        from mlflow.tracing.export.async_export_queue import Task
         from mlflow.tracing.export.mlflow_v3 import MlflowV3SpanExporter
 
         _experiment_id = experiment_id
@@ -151,18 +155,33 @@ def enable(experiment_id=None):
         def export(self, spans):
             if not _should_capture():
                 return _original_export(self, spans)
-            _ensure_spool()
-            _capture(spans)  # deliberately not calling through: no OTLP traffic
+
+            # export() runs on the span's own thread, so compression and upload
+            # are handed to mlflow's async queue -- already radt's own uploader.
+            records = _records_for(spans)
+            if not records:
+                return
+            queue = getattr(self, "_async_queue", None)
+            if queue is None:
+                _write_records(records, _run_id)  # sync export: nothing to hand off to
+                return
+            queue.put(
+                Task(
+                    handler=_write_records,
+                    args=(records, _run_id),
+                    error_msg="Failed to spool radT span batch.",
+                )
+            )
 
         def flush_trace_async_logging(terminate=False):
-            # Callers invoke this immediately before os._exit(0), so this is the
-            # last chance to get spans off the machine.
-            try:
-                _original_flush(terminate=terminate)
-            except Exception:  # noqa: BLE001
-                _logger.debug("radt[mlflow-capture]: upstream flush failed", exc_info=True)
-            if terminate:
-                shutdown()
+            # Called immediately before os._exit(0): the last chance to upload.
+            if not terminate:
+                try:
+                    _original_flush(terminate=False)
+                except Exception:  # noqa: BLE001
+                    _logger.debug("radt[mlflow-capture]: upstream flush failed", exc_info=True)
+                return
+            shutdown()
 
         MlflowV3SpanExporter.export = export
         mlflow.flush_trace_async_logging = flush_trace_async_logging
@@ -181,17 +200,20 @@ def set_run(run_id):
         _spool.set_run(run_id)
 
 
-def shutdown():
-    """Flush and upload everything spooled. Idempotent.
-
-    Drains mlflow's own span queue first: spans it is still holding would
-    otherwise arrive after the spool is closed and be dropped.
-    """
-    if _original_flush is not None:
+def _drain_upstream():
+    """Twice, and the order matters: mlflow flushes its span processors before
+    its export queue, so the first pass hands us spans that enqueue new write
+    tasks. Terminating on that pass would strand exactly those."""
+    if _original_flush is None:
+        return
+    for terminate in (False, True):
         try:
-            _original_flush(terminate=True)
+            _original_flush(terminate=terminate)
         except Exception:  # noqa: BLE001
             _logger.debug("radt[mlflow-capture]: upstream flush failed", exc_info=True)
+
+
+def _close_spool():
     with _lock:
         if _spool is None:
             return
@@ -199,12 +221,18 @@ def shutdown():
         _logger.info("radt[mlflow-capture]: uploaded %s span event(s)", _spool.total)
 
 
-def disable():
-    """Leave mlflow tracing alone in this process, whatever a probe would say.
+def shutdown():
+    """Drain mlflow, then flush and upload everything spooled. Idempotent."""
+    _drain_upstream()
+    _close_spool()
 
-    Used by the mlflow-backend exporter process, whose entire purpose is to push
-    spans through mlflow tracing -- a fresh interpreter (spawn) would otherwise
-    re-decide on its own and divert them.
+
+def disable():
+    """Leave mlflow tracing alone here, whatever a probe would say.
+
+    The mlflow-backend exporter process needs this: under spawn it is a fresh
+    interpreter that would otherwise re-decide and divert the spans it exists
+    to export.
     """
     global _capturing
 

@@ -8,18 +8,16 @@ expensive machinery lives in the child, off the workload's critical path.
 
 Two exporter backends consume the same event stream:
 
-``radt`` (default)
+``radt``
     :class:`_RadtBatchExporter` spools events to gzipped JSONL and uploads them
-    as run artifacts in batches. One upload per batch rather than one export per
-    span, which is the point: it collapses per-span network traffic. Nothing is
-    reconstructed here -- the events are already the flat records a Perfetto
-    conversion needs, so the mlflow -> database -> read-back round trip is skipped
-    entirely.
+    as run artifacts, one upload per batch instead of one export per span. The
+    events are already the flat records a Perfetto conversion needs, so the
+    mlflow -> database -> read-back round trip is skipped.
 
 ``mlflow``
-    :class:`_TraceExporter` reconstructs real mlflow spans and exports them
-    through the tracing API, so traces show up in the mlflow trace UI. Costs a
-    network round trip per span batch and requires the async-upload patch.
+    :class:`_TraceExporter` reconstructs mlflow spans and exports them through
+    the tracing API, so they appear in the mlflow trace UI, at the cost of a
+    network round trip per batch.
 
 Public API:
     start(experiment_id, backend)  create the queue + exporter process (MAIN THREAD,
@@ -124,17 +122,11 @@ def span(name, attributes=None):
 
 
 def _detect_backend():
-    """Choose a backend from what the tracking server can actually do.
+    """Batch tracing unless the server is identified as stock mlflow, which has
+    no way to display the batched artifacts.
 
-    A radT server renders and exports the batched artifacts, so batch tracing is
-    both cheaper and fully featured there. A stock server has no way to show
-    them, so spans go through mlflow tracing instead and appear in its own trace
-    UI.
-
-    Only a positive identification of a stock server switches away from batch
-    tracing: an unreachable or unrecognised server leaves the default alone,
-    because batch artifacts work anywhere and convert client-side via
-    ``radt export-trace``.
+    Only a definite 404 switches away; an unreachable or unrecognised server
+    keeps batching, since the artifacts work anywhere and convert client-side.
     """
     try:
         from mlflow.tracking import MlflowClient
@@ -353,12 +345,9 @@ def _encode(item):
 class _BatchSpool:
     """Gzipped JSONL batches of span records, uploaded as run artifacts.
 
-    Shared by both capture paths -- radt's own :func:`span` (via a child
-    process) and intercepted ``mlflow.start_span`` calls (in-process) -- so the
-    on-disk format has exactly one implementation.
-
-    Records are written as they arrive, so a hard kill leaves everything up to
-    the last roll on disk. The manifest is written last: its presence is what
+    Shared by both capture paths so the on-disk format has one implementation.
+    Records are written as they arrive, so a hard kill still leaves everything
+    up to the last roll on disk. The manifest is written last, which is what
     tells a reader the upload finished.
     """
 

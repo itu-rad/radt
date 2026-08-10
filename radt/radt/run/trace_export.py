@@ -261,6 +261,92 @@ def build_pftrace(spans, metrics):
     return builder.serialize()
 
 
+def verify_trace(run_id, tracking_uri=None):
+    """Check that a run's span batches uploaded completely.
+
+    Returns a report dict, with ``ok`` False and a populated ``problems`` list
+    if anything is missing or inconsistent.
+    """
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=tracking_uri)
+    report = {"run_id": run_id, "problems": []}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            local = Path(client.download_artifacts(run_id, ARTIFACT_DIR, tmp))
+        except Exception as exc:
+            report["problems"].append(f"no {ARTIFACT_DIR}/ artifacts: {exc}")
+            report["ok"] = False
+            return report
+
+        manifest_path = local / MANIFEST_NAME
+        if not manifest_path.exists():
+            report["problems"].append(
+                f"{MANIFEST_NAME} missing -- radt writes it last, so the upload did not finish"
+            )
+            report["ok"] = False
+            return report
+
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        report["schema_version"] = manifest.get("schema_version")
+        report["declared_events"] = manifest.get("event_count")
+        listed = manifest.get("batches", [])
+        report["batches"] = len(listed)
+
+        present = {p.name for p in local.iterdir()}
+        if missing := [name for name in listed if name not in present]:
+            report["problems"].append(f"{len(missing)} batch file(s) missing: {missing[:3]}")
+
+        starts, ends, unreadable = {}, {}, []
+        for name in listed:
+            path = local / name
+            if not path.exists():
+                continue
+            try:
+                with gzip.open(path, "rt", encoding="utf-8") as handle:
+                    for line in handle:
+                        record = json.loads(line)
+                        if record[0] == "s":
+                            starts[record[1]] = record
+                        elif record[0] == "e":
+                            ends[record[1]] = record
+            except Exception as exc:
+                unreadable.append(f"{name}: {exc}")
+
+    if unreadable:
+        report["problems"].append(f"unreadable batch(es): {unreadable[:3]}")
+
+    report["spans"] = len(starts)
+    report["events"] = len(starts) + len(ends)
+    if report["declared_events"] != report["events"]:
+        report["problems"].append(
+            f"manifest declares {report['declared_events']} events, found {report['events']}"
+        )
+
+    # A start with no end means the workload died mid-span (or a batch was lost).
+    unclosed = set(starts) - set(ends)
+    orphans = set(ends) - set(starts)
+    report["unclosed_spans"] = len(unclosed)
+    report["orphan_ends"] = len(orphans)
+    if unclosed:
+        report["problems"].append(f"{len(unclosed)} span(s) never closed")
+    if orphans:
+        report["problems"].append(f"{len(orphans)} end record(s) with no matching start")
+
+    if starts:
+        begin = min(r[6] for r in starts.values())
+        finish = max(ends[k][2] for k in ends) if ends else begin
+        report["duration_s"] = round((finish - begin) / 1e9, 3)
+        names = {}
+        for record in starts.values():
+            names[record[4]] = names.get(record[4], 0) + 1
+        report["top_span_names"] = sorted(names.items(), key=lambda kv: -kv[1])[:5]
+
+    report["ok"] = not report["problems"]
+    return report
+
+
 def export_trace(run_id, output_path=None, tracking_uri=None, include_metrics=True, upload=False):
     """Convert a run's radT batch trace into a Perfetto ``.pftrace``.
 
