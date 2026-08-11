@@ -100,41 +100,67 @@ def _flow_id(value):
         return None
 
 
-def _read_spans(directory):
-    manifest_path = directory / MANIFEST_NAME
-    if not manifest_path.exists():
-        raise TraceExportError(
-            f"No {MANIFEST_NAME} in this run's {ARTIFACT_DIR}/ artifacts. Either the run "
-            "did not use radT batch tracing, or its upload did not finish."
-        )
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+def _batch_names(directory):
+    """Batches to read, and whether the trace is known to be complete.
 
-    version = manifest.get("schema_version")
-    if version not in SUPPORTED_SCHEMA_VERSIONS:
+    Prefers the manifest's list. Without one -- a run killed before it was
+    uploaded -- falls back to the batches on disk: radt names them with a
+    zero-padded sequence, so sorting restores upload order and each is
+    independently readable. Partial beats nothing.
+    """
+    manifest_path = directory / MANIFEST_NAME
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        version = manifest.get("schema_version")
+        if version not in SUPPORTED_SCHEMA_VERSIONS:
+            raise TraceExportError(
+                f"radT trace schema version {version} is not supported "
+                f"(supported: {sorted(SUPPORTED_SCHEMA_VERSIONS)}). Upgrade radt."
+            )
+        return manifest.get("batches", []), True
+
+    salvaged = sorted(
+        p.name
+        for p in directory.iterdir()
+        if p.name.startswith("spans-") and p.name.endswith(".jsonl.gz")
+    )
+    if not salvaged:
         raise TraceExportError(
-            f"radT trace schema version {version} is not supported "
-            f"(supported: {sorted(SUPPORTED_SCHEMA_VERSIONS)}). Upgrade radt."
+            f"No span batches in this run's {ARTIFACT_DIR}/ artifacts -- it did not "
+            "use radT batch tracing."
         )
+    _logger.warning(
+        "radt[export]: no %s; salvaging %d batch(es) from an unfinished upload",
+        MANIFEST_NAME,
+        len(salvaged),
+    )
+    return salvaged, False
+
+
+def _read_spans(directory):
+    batch_names, _complete = _batch_names(directory)
 
     starts = {}
     ends = {}
     trace_ids = {}
-    for name in manifest.get("batches", []):
+    for name in batch_names:
         batch = directory / name
         if not batch.exists():
-            # The manifest is written last, so a listed-but-missing batch means
-            # the artifact store lost it rather than the run being incomplete.
             _logger.warning("radt[export]: batch %s listed in the manifest is missing", name)
             continue
-        with gzip.open(batch, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                record = json.loads(line)
-                if record[0] == "s":
-                    _, span_id, _parent, trace_id, span_name, attrs, ts = record
-                    starts[span_id] = (span_name, attrs or {}, ts)
-                    trace_ids[span_id] = trace_id
-                elif record[0] == "e":
-                    ends[record[1]] = record[2]
+        try:
+            with gzip.open(batch, "rt", encoding="utf-8") as handle:
+                for line in handle:
+                    record = json.loads(line)
+                    if record[0] == "s":
+                        _, span_id, _parent, trace_id, span_name, attrs, ts = record
+                        starts[span_id] = (span_name, attrs or {}, ts)
+                        trace_ids[span_id] = trace_id
+                    elif record[0] == "e":
+                        ends[record[1]] = record[2]
+        except Exception:
+            # Truncated by the kill that lost the manifest, most likely.
+            _logger.warning("radt[export]: batch %s is unreadable, skipping", name)
 
     spans = []
     for span_id, (name, attrs, start_ns) in starts.items():
@@ -281,17 +307,24 @@ def verify_trace(run_id, tracking_uri=None):
             return report
 
         manifest_path = local / MANIFEST_NAME
-        if not manifest_path.exists():
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            report["schema_version"] = manifest.get("schema_version")
+            report["declared_events"] = manifest.get("event_count")
+            listed = manifest.get("batches", [])
+            report["complete"] = True
+        else:
+            # Keep going: the batches are independently readable, so report how
+            # much survived rather than only that the upload was cut short.
             report["problems"].append(
                 f"{MANIFEST_NAME} missing -- radt writes it last, so the upload did not finish"
             )
-            report["ok"] = False
-            return report
-
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        report["schema_version"] = manifest.get("schema_version")
-        report["declared_events"] = manifest.get("event_count")
-        listed = manifest.get("batches", [])
+            report["complete"] = False
+            listed = sorted(
+                p.name
+                for p in local.iterdir()
+                if p.name.startswith("spans-") and p.name.endswith(".jsonl.gz")
+            )
         report["batches"] = len(listed)
 
         present = {p.name for p in local.iterdir()}
@@ -319,17 +352,19 @@ def verify_trace(run_id, tracking_uri=None):
 
     report["spans"] = len(starts)
     report["events"] = len(starts) + len(ends)
-    if report["declared_events"] != report["events"]:
+    declared = report.get("declared_events")
+    if declared is not None and declared != report["events"]:
         report["problems"].append(
-            f"manifest declares {report['declared_events']} events, found {report['events']}"
+            f"manifest declares {declared} events, found {report['events']}"
         )
 
-    # A start with no end means the workload died mid-span (or a batch was lost).
     unclosed = set(starts) - set(ends)
     orphans = set(ends) - set(starts)
     report["unclosed_spans"] = len(unclosed)
     report["orphan_ends"] = len(orphans)
-    if unclosed:
+    # Expected in a salvaged trace -- the run died mid-span -- so only a problem
+    # when the upload claimed to be complete.
+    if unclosed and report.get("complete"):
         report["problems"].append(f"{len(unclosed)} span(s) never closed")
     if orphans:
         report["problems"].append(f"{len(orphans)} end record(s) with no matching start")

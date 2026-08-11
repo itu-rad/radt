@@ -70,9 +70,37 @@ def test_unknown_schema_version_is_refused(tmp_path):
         _read_spans(tmp_path)
 
 
-def test_missing_manifest_is_reported_clearly(tmp_path):
+def test_no_batches_at_all_is_reported_clearly(tmp_path):
     with pytest.raises(TraceExportError, match="did not use radT batch tracing"):
         _read_spans(tmp_path)
+
+
+# radt writes the manifest last, so a kill leaves readable batches behind.
+def test_batches_are_salvaged_without_a_manifest(tmp_path):
+    write_batch(tmp_path, [["s", 1, None, 1, "work", {"thread_id": 0}, 100], ["e", 1, 900]])
+    (tmp_path / trace.MANIFEST_NAME).unlink()
+
+    spans = _read_spans(tmp_path)
+    assert [s.name for s in spans] == ["work"]
+
+
+def test_salvaged_batches_are_read_in_upload_order(tmp_path):
+    """Sorting the zero-padded names restores the order radt wrote them in."""
+    for seq, name in ((1, "first"), (2, "second"), (10, "tenth")):
+        with gzip.open(tmp_path / f"spans-{seq:06d}.jsonl.gz", "wt") as handle:
+            handle.write(json.dumps(["s", seq, None, 1, name, {}, seq]) + "\n")
+            handle.write(json.dumps(["e", seq, seq + 1]) + "\n")
+
+    spans = sorted(_read_spans(tmp_path), key=lambda s: s.start_ns)
+    assert [s.name for s in spans] == ["first", "second", "tenth"]
+
+
+def test_an_unreadable_batch_does_not_lose_the_others(tmp_path):
+    write_batch(tmp_path, [["s", 1, None, 1, "kept", {}, 100], ["e", 1, 900]])
+    (tmp_path / trace.MANIFEST_NAME).unlink()
+    (tmp_path / "spans-000002.jsonl.gz").write_bytes(b"not gzip at all")
+
+    assert [s.name for s in _read_spans(tmp_path)] == ["kept"]
 
 
 def test_batch_missing_from_disk_is_skipped_not_fatal(tmp_path):
