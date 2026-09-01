@@ -27,6 +27,30 @@ docker compose up -d
 
 Make port **80** public in the **PORTS** tab and you have a live tracking server you can point clients at. Full walkthrough in [examples/codespaces.md](examples/codespaces.md).
 
+### Which MLflow server?
+
+The stack runs upstream MLflow by default. radT also maintains a
+[fork](https://github.com/itu-rad/mlflow) that adds trace exploration on top of
+the same server: an *open trace* button on the run page that turns logged spans
+into a [Perfetto](https://perfetto.dev/) trace, and a radT tab that embeds the
+dashboard next to your runs. Everything else -- runs, metrics, artifacts, the
+API the radT client talks to -- is identical, so you can switch either way at
+any time without touching the database.
+
+To use the fork, copy the example environment file and uncomment its image:
+
+```bash
+cp .env.example .env
+$EDITOR .env
+docker compose up -d
+```
+
+Or, for a one-off:
+
+```bash
+MLFLOW_IMAGE=ghcr.io/itu-rad/mlflow:latest docker compose up -d
+```
+
 ## Install the client
 
 ```sh
