@@ -1,0 +1,27 @@
+# Overrides for a public-facing host: nginx is the only service that should be
+# reachable from outside, and it already proxies the rest over the compose
+# network.
+#
+# Binding to the loopback is what actually closes these ports. Docker inserts
+# its own iptables rules ahead of ufw's, so a published port stays reachable
+# from the internet no matter what the firewall reports.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
+
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+
+  minio:
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+
+  mlflow:
+    ports: !override
+      - "127.0.0.1:5000:5000"
+
+  visual:
+    ports: !override
+      - "127.0.0.1:4000:80"

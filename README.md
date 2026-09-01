@@ -51,6 +51,23 @@ Or, for a one-off:
 MLFLOW_IMAGE=ghcr.io/itu-rad/mlflow:latest docker compose up -d
 ```
 
+### Deploying on a server
+
+The default compose file publishes Postgres, MinIO and the MLflow server on all
+interfaces, which is convenient on a laptop or in a Codespace and wrong on a
+host with a public IP -- their credentials are the ones committed here. Add the
+server override so nginx on port 80 is the only thing reachable:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
+```
+
+Note that a host firewall is not a substitute: Docker installs its own iptables
+rules ahead of ufw's, so a published port stays open regardless of what ufw
+reports. Also replace the committed `.htpasswd` credentials (`htpasswd -c
+.htpasswd <user>`), and put TLS in front of nginx before sending real
+credentials over the network.
+
 ## Install the client
 
 ```sh

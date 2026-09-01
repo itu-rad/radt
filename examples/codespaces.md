@@ -57,13 +57,13 @@ The following endpoints are served behind the same URL:
 | `/radt/` | radT frontend |
 | `/minio/` | MinIO console |
 
-For artifact uploads (log files, Nsight traces), clients must also point their S3 client at the public MinIO endpoint, because MLflow returns `s3://` URIs that clients resolve directly:
-
-```bash
-export MLFLOW_S3_ENDPOINT_URL=https://<your-url>/minio/
-```
-
-Scalar metric logging works without this setting.
+Artifacts (log files, Nsight traces) need no extra client configuration. The
+server runs with `--artifacts-destination`, so runs get `mlflow-artifacts:` URIs
+and uploads are proxied through the tracking server on their way to MinIO --
+clients never address the object store directly, and `MLFLOW_S3_ENDPOINT_URL` is
+not needed. The `/minio/` route above is the MinIO **console**, for browsing
+stored objects in a browser; it is not an S3 API endpoint and pointing an S3
+client at it will not work.
 
 ## 5. Replace the default credentials
 
