@@ -17,6 +17,54 @@ def dummy(*args, **kwargs):
     return
 
 
+def _install_parent_death_signal():
+    """Ask the kernel to kill THIS (child) process when its parent dies.
+
+    radt's listener/logger children are forked from the workload process. If
+    that process exits via ``os._exit()`` / a crash / ``kill -9`` (i.e. without
+    running ``_RADTBenchmark.__exit__``), the children would otherwise be
+    orphaned, run forever, and keep the parent's stdout pipe open - wedging
+    whatever was reading it. ``PR_SET_PDEATHSIG`` makes the kernel SIGKILL them
+    instead. Linux-only; a no-op elsewhere.
+    """
+    if sys.platform != "linux":
+        return
+    try:
+        import ctypes
+        import signal as _signal
+
+        PR_SET_PDEATHSIG = 1
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(
+            PR_SET_PDEATHSIG, _signal.SIGKILL
+        )
+    except Exception:
+        # Best-effort hardening; never block startup on it.
+        pass
+
+
+def _arm_parent_death_signal(process):
+    """Wrap ``process.run`` so the child arms PR_SET_PDEATHSIG before running.
+
+    Must be set on the instance BEFORE ``start()``; with the fork start method
+    the child inherits the override and ``_bootstrap`` calls our wrapper.
+
+    Fork-only: PR_SET_PDEATHSIG is Linux-only, and under spawn the Process is
+    pickled - a closure on ``process.run`` wouldn't pickle and would break
+    startup (e.g. macmon on macOS). Under fork the override is inherited via
+    memory, no pickling involved.
+    """
+    if sys.platform != "linux" or multiprocessing.get_start_method() != "fork":
+        return
+
+    original_run = process.run
+
+    def run_with_pdeathsig():
+        _install_parent_death_signal()
+        return original_run()
+
+    process.run = run_with_pdeathsig
+
+
 def execute_command(cmd: str):
     """Execute a command
 
@@ -136,9 +184,12 @@ class _MLFlowLogger(multiprocessing.Process):
                     pass
             raise
 
-    def terminate(self):
+    def terminate(self, timeout=30.0):
+        # Bounded join: the final metric flush sends over the (possibly slow)
+        # network. The process is daemonic, so if it overruns we let it be
+        # abandoned at interpreter exit rather than blocking shutdown forever.
         self._stop_event.set()
-        self.join()
+        self.join(timeout=timeout)
 
 
 _benchmark_instance = None
@@ -169,6 +220,28 @@ def log_metrics(metrics, epoch=0):
     instance.log_metrics(metrics, epoch)
 
 
+def shutdown():
+    """Cleanly tear down radt tracking before a hard exit.
+
+    Terminates the listener/logger child processes (so they can't orphan) and
+    marks the active mlflow run FINISHED. Intended to be called right before
+    ``os._exit()`` in workloads that hard-exit to skip slow interpreter
+    shutdown - ``os._exit`` otherwise skips ``_RADTBenchmark.__exit__``, leaving
+    the run stuck RUNNING and the children orphaned.
+
+    Order matters and is handled by ``_RADTBenchmark.__exit__``: listeners are
+    terminated before the loggers do their final flush and the run is ended, so
+    no in-flight metric writes land on an already-closed run. Idempotent.
+    """
+    global _benchmark_instance
+    if "RADT_PRESENT" not in os.environ:
+        return
+    instance = _benchmark_instance
+    _benchmark_instance = None
+    if instance is not None:
+        instance.__exit__(None, None, None)
+
+
 class RADTBenchmark:
     """Context manager wrapper that returns the singleton"""
 
@@ -176,7 +249,13 @@ class RADTBenchmark:
         return _get_benchmark_instance()
 
     def __exit__(self, type, value, traceback):
-        return _get_benchmark_instance().__exit__(type, value, traceback)
+        # Delegate to the singleton so listeners/loggers are actually torn down
+        # and the mlflow run is ended. Without this the listener processes are
+        # left running and the interpreter hangs at exit joining them. Guard on
+        # None so we don't spin up (and immediately tear down) an instance that
+        # was never created.
+        if _benchmark_instance is not None:
+            return _benchmark_instance.__exit__(type, value, traceback)
 
 
 class _RADTBenchmark:
@@ -258,9 +337,19 @@ class _RADTBenchmark:
             if os.getenv(listener_env_key) == "True":
                 os.environ[listener_env_key] = "False"
                 inst = listener_class(self.run_id, self._buffer_listeners)
+                # Listeners run unbounded read loops over a subprocess (e.g.
+                # `nvidia-smi -l 1`) that never return on their own. Mark them
+                # daemonic so the interpreter terminates them at exit instead of
+                # blocking forever in multiprocessing's atexit join() if __exit__
+                # was bypassed (exception, manual mode, etc.).
+                inst.daemon = True
                 self.processes.append(inst)
 
         for process in self.processes:
+            # Arm parent-death-signal so these children can't outlive the
+            # workload process even if it exits via os._exit() (which skips
+            # __exit__/terminate). Without this they orphan and hang readers.
+            _arm_parent_death_signal(process)
             process.start()
 
         return self

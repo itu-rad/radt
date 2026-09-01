@@ -5,6 +5,7 @@ import sys
 import time
 import yaml
 from argparse import Namespace
+from collections import deque
 from contextlib import ExitStack
 from itertools import product
 from pathlib import Path
@@ -141,7 +142,126 @@ def process_output(popens, log_runs, log, run_ids):
                     run_ids[letter] = (
                         l.split("in run with ID '")[-1].split("'")[0].strip()
                     )
+                    # Now that we know the run id, name this stream's chunk parts.
+                    if getattr(log_runs[letter], "base", None) is None:
+                        log_runs[letter].base = f"log_{run_ids[letter]}"
                     print(runformat(colour, letter, f"MAPPED TO {run_ids[letter]}"))
+
+
+def log_text_safely(client, run_id, text, artifact_file, max_bytes=900_000):
+    """Upload ``text`` as a run artifact, truncating to stay under the tracking
+    server's body limit and never raising.
+
+    Captured stdout/stderr grows with run length; on multi-hour runs the full
+    log easily exceeds nginx's ``client_max_body_size`` (1 MB by default), which
+    returns HTTP 413. A failed log upload must not abort the whole schedule, so
+    this truncates (keeping head + tail, where the interesting bits are) and
+    swallows any upload error with a warning.
+    """
+    try:
+        encoded = (text or "").encode("utf-8", errors="replace")
+        if len(encoded) > max_bytes:
+            head = max_bytes // 5
+            tail = max_bytes - head
+            notice = (
+                f"\n\n... [radt: log truncated — {len(encoded)} bytes exceeds "
+                f"{max_bytes} limit; kept first {head} + last {tail} bytes] ...\n\n"
+            )
+            text = (
+                encoded[:head].decode("utf-8", errors="replace")
+                + notice
+                + encoded[-tail:].decode("utf-8", errors="replace")
+            )
+        client.log_text(run_id, text, artifact_file)
+    except Exception as e:
+        sysprint(f"Failed to upload {artifact_file} (continuing): {e}")
+
+
+class LiveLog:
+    """One log stream, kept two ways at once:
+
+    * a bounded rolling **tail** (deque) for the ``*.live.txt`` snapshot uploaded
+      periodically during the run, and
+    * an accumulating **chunk** buffer flushed to numbered part artifacts
+      (``base.1.txt``, ``base.2.txt`` …) once it reaches ``chunk_bytes`` — so the
+      COMPLETE log is preserved without any single upload exceeding the server's
+      body limit. A stream that fits in one part is uploaded unnumbered as
+      ``base.txt`` (matching the historical single-file artifact).
+
+    ``append()`` feeds both, so ``process_output`` keeps calling ``.append`` as
+    before. ``base`` may be set after construction (per-run streams only learn
+    their run id mid-stream).
+    """
+
+    def __init__(self, base, tail_lines, chunk_bytes):
+        self.base = base
+        self._tail = deque(maxlen=tail_lines if tail_lines > 0 else None)
+        self._chunk = []
+        self._chunk_bytes = 0
+        self._limit = chunk_bytes
+        self._part = 0
+
+    def append(self, line):
+        self._tail.append(line)
+        self._chunk.append(line)
+        self._chunk_bytes += len(line)
+
+    def tail_text(self):
+        return "".join(self._tail)
+
+    def maybe_flush(self, client, run_ids):
+        """Flush a numbered part if the chunk buffer has reached the limit."""
+        if self._limit > 0 and self._chunk_bytes >= self._limit:
+            self._flush(client, run_ids, numbered=True)
+
+    def finalize(self, client, run_ids):
+        """Flush whatever remains: unnumbered base.txt if never chunked, else the
+        trailing numbered part."""
+        self._flush(client, run_ids, numbered=(self._part > 0))
+
+    def _flush(self, client, run_ids, numbered):
+        if not self._chunk or not self.base:
+            return
+        if not isinstance(run_ids, (list, tuple, set)):
+            run_ids = [run_ids]
+        rids = [r for r in run_ids if r]
+        if not rids:
+            return  # no run to attach to yet; keep buffering
+        text = "".join(self._chunk)
+        if numbered:
+            self._part += 1
+            name = f"{self.base}.{self._part}.txt"
+        else:
+            name = f"{self.base}.txt"
+        for rid in rids:
+            try:
+                # Full chunk, NOT truncated — that's the whole point. Sized below
+                # the server limit by RADT_LOG_CHUNK_BYTES; if it still 413s the
+                # chunk is lost (warned) rather than crashing the run.
+                client.log_text(rid, text, name)
+            except Exception as e:
+                sysprint(
+                    f"Failed to upload {name} (continuing; raise nginx "
+                    f"client_max_body_size or lower RADT_LOG_CHUNK_BYTES): {e}"
+                )
+        self._chunk = []
+        self._chunk_bytes = 0
+
+
+def upload_live_logs(client, run_ids, log_runs, log):
+    """Periodic best-effort upload of the LIVE tail snapshot during a run.
+
+    Writes ``*.live.txt`` artifacts (overwritten each interval, byte-capped) so
+    mlflow shows semi-live output, separate from the canonical chunked logs.
+    Never raises.
+    """
+    for letter, run_id in run_ids.items():
+        if not run_id:
+            continue
+        stream = log_runs.get(letter)
+        if stream is not None:
+            log_text_safely(client, run_id, stream.tail_text(), f"log_{run_id}.live.txt")
+        log_text_safely(client, run_id, log.tail_text(), "log_workload.live.txt")
 
 
 def execute_workload(
@@ -162,7 +282,16 @@ def execute_workload(
 
     terminate = False
 
-    log = []
+    # Log buffers are LiveLog streams: a bounded rolling tail (for the live
+    # snapshot) plus a chunk buffer flushed to numbered part artifacts. This keeps
+    # RAM flat on multi-hour runs (tail is capped; chunk drains on each flush) AND
+    # preserves the complete log across parts. RADT_LOG_MAX_LINES=0 = unbounded
+    # tail; RADT_LOG_CHUNK_BYTES bounds each full-log part (keep <= the server's
+    # nginx client_max_body_size, default ~1 MB).
+    log_max_lines = int(os.environ.get("RADT_LOG_MAX_LINES", "50000") or "50000")
+    log_chunk_bytes = int(os.environ.get("RADT_LOG_CHUNK_BYTES", "900000") or "900000")
+
+    log = LiveLog("log_workload", log_max_lines, log_chunk_bytes)
     log_runs = {}
     popens = []
     returncodes = {}
@@ -221,7 +350,8 @@ def execute_workload(
                 t.start()
 
                 popens.append((colour, letter, p, q, t))
-                log_runs[letter] = []
+                # base set later, once the run id is parsed from the run's output.
+                log_runs[letter] = LiveLog(None, log_max_lines, log_chunk_bytes)
                 run_ids[letter] = False
 
                 time.sleep(3)
@@ -277,6 +407,14 @@ def execute_workload(
                 if (Path(filepath) / "radtlock").is_file():
                     (Path(filepath) / "radtlock").unlink()
 
+            # Push logs to mlflow every N seconds for semi-live output.
+            # RADT_LOG_UPLOAD_INTERVAL=0 disables periodic live uploads.
+            log_upload_interval = float(
+                os.environ.get("RADT_LOG_UPLOAD_INTERVAL", "60") or "60"
+            )
+            last_log_upload = time.time()
+            log_client = MlflowClient()
+
             while True:
 
                 # Stop once all processes have finished
@@ -288,6 +426,22 @@ def execute_workload(
                     break
 
                 process_output(popens, log_runs, log, run_ids)
+
+                # Flush a full-log part as soon as a stream's chunk fills up, so
+                # the complete log lands progressively (and RAM stays bounded).
+                active_run_ids = [r for r in run_ids.values() if r]
+                log.maybe_flush(log_client, active_run_ids)
+                for letter, run_id in run_ids.items():
+                    if run_id and letter in log_runs:
+                        log_runs[letter].maybe_flush(log_client, run_id)
+
+                if (
+                    log_upload_interval > 0
+                    and time.time() - last_log_upload >= log_upload_interval
+                ):
+                    upload_live_logs(log_client, run_ids, log_runs, log)
+                    last_log_upload = time.time()
+
                 time.sleep(poll_interval)
 
         except KeyboardInterrupt:
@@ -320,9 +474,9 @@ def execute_workload(
     sysprint("Sending logs to server.")
     results = []
 
+    client = MlflowClient()
     for id, _, letter, _, _, _, _, filepath, row in defs:
         if run_id := run_ids[letter]:
-            client = MlflowClient()
             if run := client.get_run(run_id):
                 results.append(
                     (
@@ -334,8 +488,9 @@ def execute_workload(
                         run.info.status,
                     )
                 )
-                client.log_text(run_id, "".join(log_runs[letter]), f"log_{run_id}.txt")
-                client.log_text(run_id, "".join(log), f"log_workload.txt")
+                # Final part of this run's complete (chunked) log.
+                if letter in log_runs:
+                    log_runs[letter].finalize(client, run_id)
 
                 if row["WorkloadListener"]:
                     try:
@@ -346,6 +501,10 @@ def execute_workload(
                             file.unlink()
                     except IndexError:
                         pass
+
+    # The workload log is shared across all runs: finalize it once and attach the
+    # final part to every run (matching the historical per-run log_workload.txt).
+    log.finalize(client, [r for r in run_ids.values() if r])
 
     if terminate:
         sys.exit()

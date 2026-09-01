@@ -79,7 +79,7 @@ def schedule_parser():
         type=str,
         dest="listeners",
         default="smi+top+dcgmi+iostat+free",
-        help=f"Metric collectors separated by +, available: {' '.join(constants.RUN_LISTENERS + list(constants.WORKLOAD_LISTENERS.keys()))}",
+        help=f"Metric collectors separated by +, available: {' '.join(constants.RUN_LISTENERS + list(constants.WORKLOAD_LISTENERS.keys()))}",  # TODO: remove RUN_LISTENERS from here
     )
     parser.add_argument(
         "-r",
@@ -182,10 +182,89 @@ def cli_run():
     start_run(args, listeners)
 
 
+def cli_export_trace():
+    parser = argparse.ArgumentParser(
+        prog="radt export-trace",
+        description="Convert a run's radT batch trace into a Perfetto .pftrace file. "
+        "Works against any mlflow server, including a stock one.",
+    )
+    parser.add_argument("run_id", type=str, help="mlflow run id")
+    parser.add_argument(
+        "-o", "--output", type=str, default=None, help="output path (default: <run_id>.pftrace)"
+    )
+    parser.add_argument(
+        "--tracking-uri", type=str, default=None, help="mlflow tracking uri (default: ambient)"
+    )
+    parser.add_argument(
+        "--no-metrics", action="store_true", help="omit metrics as Perfetto counter tracks"
+    )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="also store the trace as a run artifact, so the radT mlflow UI sees it as converted",
+    )
+    args = parser.parse_args(sys.argv[2:])
+
+    from .run.trace_export import TraceExportError, export_trace
+
+    try:
+        output = export_trace(
+            args.run_id,
+            output_path=args.output,
+            tracking_uri=args.tracking_uri,
+            include_metrics=not args.no_metrics,
+            upload=args.upload,
+        )
+    except TraceExportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    print(output)
+
+
+def cli_verify_trace():
+    parser = argparse.ArgumentParser(
+        prog="radt verify-trace",
+        description="Check that a run's radT span batches uploaded completely.",
+    )
+    parser.add_argument("run_id", type=str, help="mlflow run id")
+    parser.add_argument("--tracking-uri", type=str, default=None)
+    args = parser.parse_args(sys.argv[2:])
+
+    from .run.trace_export import verify_trace
+
+    report = verify_trace(args.run_id, tracking_uri=args.tracking_uri)
+    for key in (
+        "spans",
+        "events",
+        "declared_events",
+        "batches",
+        "schema_version",
+        "unclosed_spans",
+        "orphan_ends",
+        "duration_s",
+    ):
+        if key in report:
+            print(f"  {key:16} {report[key]}")
+    for name, count in report.get("top_span_names", []):
+        print(f"  {'':16} {count:>8}  {name}")
+    if report["ok"]:
+        print("\nOK: every span accounted for")
+        return
+    print("\nPROBLEMS:")
+    for problem in report["problems"]:
+        print(f"  - {problem}")
+    raise SystemExit(1)
+
+
 def cli():
-    """Entrypoint for `radt` and `radt run`"""
-    if len(sys.argv) > 1 and sys.argv[1].strip() == "run":
+    """Entrypoint for `radt`, `radt run`, `radt export-trace` and `radt verify-trace`"""
+    subcommand = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+    if subcommand == "run":
         cli_run()
+    elif subcommand == "export-trace":
+        cli_export_trace()
+    elif subcommand == "verify-trace":
+        cli_verify_trace()
     else:
         cli_schedule()
 

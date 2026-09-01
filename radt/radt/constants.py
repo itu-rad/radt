@@ -26,7 +26,15 @@ COMMAND = (
     '-P params="-" '
 )
 
-RUN_LISTENERS = ["ps", "smi", "dcgmi", "top", "iostat", "free", "macmon"]
+RUN_LISTENERS = [
+    "ps",
+    "smi",
+    "dcgmi",
+    "top",
+    "iostat",
+    "free",
+    "macmon",
+]  # TODO: remove RUN_LISTENERS from here
 
 WORKLOAD_LISTENERS = {
     "nsys": "nsys profile --capture-range nvtx --nvtx-capture profile --cuda-memory-usage=true --capture-range-end repeat -o nsys_{Experiment}_{Workload}_{Letter} -f true -w true -x true -t cuda,nvtx ",
@@ -54,10 +62,8 @@ entry_points:
       <REPLACE_COMMAND>
 """
 
-MLFLOW_COMMAND = (
-    '''{WorkloadListener}{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
-)
+MLFLOW_COMMAND = '''{WorkloadListener}{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
 
 DIRECT_COMMAND = (
-  '''{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
+    '''{PythonCommand} -m radt run -l {Listeners} -c {File} -p "{Params}"'''
 )
