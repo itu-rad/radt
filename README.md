@@ -64,9 +64,38 @@ docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
 
 Note that a host firewall is not a substitute: Docker installs its own iptables
 rules ahead of ufw's, so a published port stays open regardless of what ufw
-reports. Also replace the committed `.htpasswd` credentials (`htpasswd -c
-.htpasswd <user>`), and put TLS in front of nginx before sending real
-credentials over the network.
+reports. Also replace the committed `.htpasswd` credentials (`htpasswd -Bc
+.htpasswd <user>`).
+
+### HTTPS
+
+Without TLS the basic-auth credentials and everything the clients log cross the
+network in the clear. Certificates come from certbot on the host; the stack only
+consumes them.
+
+```bash
+sudo apt install -y certbot
+sudo certbot certonly --standalone -d radt.example.itu.dk    # port 80 must be free
+sudo mkdir -p /var/lib/radt/certbot
+
+RADT_DOMAIN=radt.example.itu.dk docker compose \
+  -f docker-compose.yml -f docker-compose.server.yml -f docker-compose.tls.yml up -d
+```
+
+nginx then serves 443 and answers plain HTTP with a 301, so there is no
+unencrypted way in. `RADT_DOMAIN` must match the name on the certificate, and
+`LETSENCRYPT_DIR` overrides where certbot's output is read from if it is not
+`/etc/letsencrypt`.
+
+Renewal does not need downtime -- port 80 keeps serving the ACME challenge path
+from the webroot, unauthenticated and without redirecting:
+
+```bash
+sudo certbot renew --webroot -w /var/lib/radt/certbot
+docker compose ... restart nginx     # nginx reads the certificate at start
+```
+
+Clients then use the https URL: `MLFLOW_TRACKING_URI=https://radt.example.itu.dk/mlflow/`.
 
 ## Install the client
 

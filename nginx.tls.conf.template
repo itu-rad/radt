@@ -1,0 +1,34 @@
+# Certificates are obtained and renewed with certbot on the host; nothing here
+# talks to an ACME server. ${RADT_DOMAIN} is substituted from the environment
+# by the nginx image's template mechanism at container start.
+
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+
+	# Left reachable so `certbot renew --webroot` works without stopping nginx.
+	location /.well-known/acme-challenge/ {
+		root /var/www/certbot;
+	}
+
+	location / {
+		return 301 https://$host$request_uri;
+	}
+}
+
+server {
+	listen 443 ssl default_server;
+	listen [::]:443 ssl default_server;
+	http2 on;
+
+	server_name ${RADT_DOMAIN};
+
+	ssl_certificate     /etc/letsencrypt/live/${RADT_DOMAIN}/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/${RADT_DOMAIN}/privkey.pem;
+	ssl_protocols       TLSv1.2 TLSv1.3;
+	ssl_prefer_server_ciphers off;
+	ssl_session_cache   shared:SSL:10m;
+	ssl_session_timeout 1d;
+
+	include /etc/nginx/locations.conf;
+}
