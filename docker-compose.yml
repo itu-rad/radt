@@ -71,7 +71,7 @@ services:
     image: node:25-alpine
     container_name: visual
     working_dir: /app
-    command: sh -c "npm install && REACT_APP_API_URL=/api PUBLIC_URL=/radt npm run build && npx serve -s build -l 80"
+    command: sh -c "npm install && REACT_APP_API_URL=/radt/api PUBLIC_URL=/radt npm run build && npx serve -s build -l 80"
     ports:
       - "4000:80"
     volumes:
