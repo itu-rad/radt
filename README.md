@@ -53,62 +53,10 @@ MLFLOW_IMAGE=ghcr.io/itu-rad/mlflow:latest docker compose up -d
 
 ### Deploying on a server
 
-The default compose file publishes Postgres, MinIO and the MLflow server on all
-interfaces, which is convenient on a laptop or in a Codespace and wrong on a
-host with a public IP -- their credentials are the ones committed here. Add the
-server override so nginx on port 80 is the only thing reachable:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
-```
-
-Set real credentials too. `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` in
-`.env` default to the values committed in this repository, which are public:
-
-```bash
-printf 'POSTGRES_PASSWORD=%s\nMINIO_ROOT_PASSWORD=%s\n' \
-  "$(openssl rand -base64 24 | tr -d '/+=')" \
-  "$(openssl rand -base64 24 | tr -d '/+=')" >> .env
-```
-
-Do this before the first `docker compose up`: Postgres and MinIO set their
-credentials when their volume is initialised, so changing the values later
-leaves the old ones in place until the volumes are recreated.
-
-Note that a host firewall is not a substitute: Docker installs its own iptables
-rules ahead of ufw's, so a published port stays open regardless of what ufw
-reports. Also replace the committed `.htpasswd` credentials (`htpasswd -Bc
-.htpasswd <user>`).
-
-### HTTPS
-
-Without TLS the basic-auth credentials and everything the clients log cross the
-network in the clear. Certificates come from certbot on the host; the stack only
-consumes them.
-
-```bash
-sudo apt install -y certbot
-sudo certbot certonly --standalone -d radt.example.itu.dk    # port 80 must be free
-sudo mkdir -p /var/lib/radt/certbot
-
-RADT_DOMAIN=radt.example.itu.dk docker compose \
-  -f docker-compose.yml -f docker-compose.server.yml -f docker-compose.tls.yml up -d
-```
-
-nginx then serves 443 and answers plain HTTP with a 301, so there is no
-unencrypted way in. `RADT_DOMAIN` must match the name on the certificate, and
-`LETSENCRYPT_DIR` overrides where certbot's output is read from if it is not
-`/etc/letsencrypt`.
-
-Renewal does not need downtime -- port 80 keeps serving the ACME challenge path
-from the webroot, unauthenticated and without redirecting:
-
-```bash
-sudo certbot renew --webroot -w /var/lib/radt/certbot
-docker compose ... restart nginx     # nginx reads the certificate at start
-```
-
-Clients then use the https URL: `MLFLOW_TRACKING_URI=https://radt.example.itu.dk/mlflow/`.
+Running this where other people can reach it needs TLS, credentials of your own,
+and the port bindings closed down. [examples/server.md](examples/server.md) is
+the runbook for that; the defaults committed here suit a laptop or a Codespace,
+and are public.
 
 ## Install the client
 
