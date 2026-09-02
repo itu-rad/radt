@@ -1,0 +1,31 @@
+# Serves the stack over HTTPS and refuses plain HTTP, using certificates you
+# obtain yourself with certbot -- nothing here contacts an ACME server.
+#
+#   sudo certbot certonly --standalone -d radt.example.itu.dk   # once, port 80 free
+#   RADT_DOMAIN=radt.example.itu.dk \
+#     docker compose -f docker-compose.yml -f docker-compose.server.yml \
+#                    -f docker-compose.tls.yml up -d
+#
+# Renewal keeps working while the stack runs, because port 80 still serves
+# /.well-known/acme-challenge from the acme_challenge volume:
+#
+#   sudo certbot renew --webroot -w /var/lib/radt/certbot
+#
+# LETSENCRYPT_DIR is where certbot writes on this host, and RADT_DOMAIN must
+# match the name in that certificate.
+
+services:
+  nginx:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      RADT_DOMAIN: ${RADT_DOMAIN:?set RADT_DOMAIN to the name on the certificate}
+    volumes: !override
+      # A template rather than a config: the image runs envsubst over it at
+      # start, which is how ${RADT_DOMAIN} reaches the certificate paths.
+      - ./nginx.tls.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./locations.conf:/etc/nginx/locations.conf:ro
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      - ${CERTBOT_WEBROOT:-/var/lib/radt/certbot}:/var/www/certbot:ro
