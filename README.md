@@ -62,6 +62,19 @@ server override so nginx on port 80 is the only thing reachable:
 docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
 ```
 
+Set real credentials too. `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` in
+`.env` default to the values committed in this repository, which are public:
+
+```bash
+printf 'POSTGRES_PASSWORD=%s\nMINIO_ROOT_PASSWORD=%s\n' \
+  "$(openssl rand -base64 24 | tr -d '/+=')" \
+  "$(openssl rand -base64 24 | tr -d '/+=')" >> .env
+```
+
+Do this before the first `docker compose up`: Postgres and MinIO set their
+credentials when their volume is initialised, so changing the values later
+leaves the old ones in place until the volumes are recreated.
+
 Note that a host firewall is not a substitute: Docker installs its own iptables
 rules ahead of ufw's, so a published port stays open regardless of what ufw
 reports. Also replace the committed `.htpasswd` credentials (`htpasswd -c
