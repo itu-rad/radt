@@ -129,8 +129,19 @@ export MLFLOW_TRACKING_PASSWORD=<pass>
 radt -e demo train.py
 ```
 
-Artifacts need nothing further: the server proxies them, so clients never
-address the object store directly.
+Artifacts need nothing further for ordinary sizes: the server proxies them, so
+clients never address the object store directly.
+
+Files of roughly 500 MB and up are the exception. The client asks the server for
+presigned URLs and uploads to the object store itself, and those URLs name MinIO
+as the server sees it -- `http://minio:9000`, deliberately unreachable from
+anywhere else -- so a large model checkpoint fails partway through with a name
+resolution error. Anyone logging files that large should route them through the
+tracking server:
+
+```bash
+export MLFLOW_ENABLE_PROXY_MULTIPART_UPLOAD=false
+```
 
 ## Running it
 
